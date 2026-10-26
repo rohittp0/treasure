@@ -1,0 +1,266 @@
+[
+  {
+    "id": "JPN",
+    "country": "Japan",
+    "iso2": "JP",
+    "clues": [
+      "Spring paints a moving trail of pink across these islands as cherry blossoms open from south to north.",
+      "Look off the eastern coast of Asia: a long island chain where bullet trains zip past volcanic mountains.",
+      "Mount Fuji watches over this island nation. Think sushi, shinkansen and a red circle on a white flag."
+    ],
+    "fact": "Cherry blossom season travels north through Japan, so different regions bloom at different times."
+  },
+  {
+    "id": "AUS",
+    "country": "Australia",
+    "iso2": "AU",
+    "clues": [
+      "A giant red rock rises from the desert here, while an astonishing coral world waits off the northeast coast.",
+      "Head south of Indonesia to a huge landmass between the Indian and Pacific oceans. Kangaroos call it home.",
+      "The Great Barrier Reef and Sydney's sail-shaped Opera House belong to this country. X marks the land Down Under."
+    ],
+    "fact": "Sydney Opera House's famous roofs are groups of interlocking vaulted shells, designed by Jørn Utzon."
+  },
+  {
+    "id": "NZL",
+    "country": "New Zealand",
+    "iso2": "NZ",
+    "clues": [
+      "Pack your binoculars: an alpine parrot called the kea lives among this country's mountains and glacial valleys.",
+      "Search the southwest Pacific, southeast of Australia, for two large islands with fjords and snowy peaks.",
+      "Aotearoa is another name for this country. Its famous kiwi is a flightless bird, not just a fruit."
+    ],
+    "fact": "The kiwi has hair-like feathers, strong legs and no tail, and is a cherished national symbol."
+  },
+  {
+    "id": "PER",
+    "country": "Peru",
+    "iso2": "PE",
+    "clues": [
+      "Your treasure trail climbs from Pacific shores into the Andes, where ancient stone settlements cling to the heights.",
+      "This South American country was the heart of the Inca Empire. It shares Lake Titicaca with Bolivia.",
+      "Follow the Inca Trail to Machu Picchu. Which country holds this mountaintop treasure?"
+    ],
+    "fact": "The Machu Picchu sanctuary protects cloud forests as well as the Inca archaeological site."
+  },
+  {
+    "id": "BRA",
+    "country": "Brazil",
+    "iso2": "BR",
+    "clues": [
+      "A thunderous waterfall frontier is one treasure here; another is a coastal city tucked between mountains and sea.",
+      "Find the largest country in South America. Portuguese is spoken here, and much of the Amazon lies within it.",
+      "Christ the Redeemer spreads its arms above Rio de Janeiro in this country, home to Copacabana beach."
+    ],
+    "fact": "Rio's World Heritage landscape includes mountains, botanical gardens and the sweeping shore of Copacabana."
+  },
+  {
+    "id": "MEX",
+    "country": "Mexico",
+    "iso2": "MX",
+    "clues": [
+      "Some forests here are made of towering cacti, and ancient cities hold stone temples and underground water wells.",
+      "Look in North America, directly south of the United States, with Pacific and Caribbean shores.",
+      "The Maya city of Chichén Itzá and its stepped pyramid, El Castillo, are waiting in this country's Yucatán Peninsula."
+    ],
+    "fact": "Chichén Itzá grew near natural wells called cenotes, which gave its residents access to underground water."
+  },
+  {
+    "id": "CAN",
+    "country": "Canada",
+    "iso2": "CA",
+    "clues": [
+      "An unexpected treasure hides in these Rocky Mountains: fossils of sea creatures that lived over 500 million years ago.",
+      "Find the vast North American country above the United States, stretching from the Atlantic to the Pacific.",
+      "Its flag has a red maple leaf. Banff's mountain lakes and Québec's old streets are both in this country."
+    ],
+    "fact": "The Burgess Shale preserves remarkable fossils of ancient marine animals, high in the Rocky Mountains."
+  },
+  {
+    "id": "USA",
+    "country": "United States",
+    "iso2": "US",
+    "clues": [
+      "A treasure of bubbling springs and erupting geysers was protected here as a national park back in 1872.",
+      "Look between Canada and Mexico for a country whose mainland reaches both the Atlantic and Pacific oceans.",
+      "The Grand Canyon, Yellowstone and the Statue of Liberty all belong to this country of 50 states."
+    ],
+    "fact": "Yellowstone National Park was established in 1872 and lies mostly in the state of Wyoming."
+  },
+  {
+    "id": "ITA",
+    "country": "Italy",
+    "iso2": "IT",
+    "clues": [
+      "A volcano buried Roman towns here in AD 79, leaving an extraordinary time capsule for future treasure hunters.",
+      "One of its cities spreads across a lagoon on small islands, with canals threading between palaces.",
+      "Find the boot kicking into the Mediterranean. Venice, Pompeii and the Leaning Tower of Pisa are all here."
+    ],
+    "fact": "Venice grew across 118 small islands in a lagoon, linked by its network of waterways."
+  },
+  {
+    "id": "FRA",
+    "country": "France",
+    "iso2": "FR",
+    "clues": [
+      "A medieval abbey crowns a rocky islet here, surrounded by sandbanks that powerful tides can cover.",
+      "This western European country has Atlantic and Mediterranean coasts; the Louvre guards some of its art treasures.",
+      "The Eiffel Tower is your final beacon. Find its country, across the Channel from the United Kingdom."
+    ],
+    "fact": "Mont-Saint-Michel's abbey was built over centuries on a rocky islet between Normandy and Brittany."
+  },
+  {
+    "id": "GRC",
+    "country": "Greece",
+    "iso2": "GR",
+    "clues": [
+      "Ancient temples here told stories of gods and goddesses, and carved stone columns still stand above a busy city.",
+      "Search southeastern Europe, where a jagged peninsula reaches into the Mediterranean beside the Aegean Sea.",
+      "The Parthenon, Mount Olympus and the islands of Crete and Santorini point to this country."
+    ],
+    "fact": "The Parthenon is part of the Acropolis complex, whose major monuments were built in the fifth century BC."
+  },
+  {
+    "id": "NOR",
+    "country": "Norway",
+    "iso2": "NO",
+    "clues": [
+      "Sail between cliffs that rise like giant castle walls: glaciers carved deep sea inlets into this coastline.",
+      "Look along the western side of Scandinavia, beside Sweden, with a long coastline reaching far into the Arctic.",
+      "This is the country of Geirangerfjord and Nærøyfjord. Its flag is red with a blue cross outlined in white."
+    ],
+    "fact": "The West Norwegian Fjords have steep rock walls, waterfalls and landscapes shaped by glaciers."
+  },
+  {
+    "id": "ISL",
+    "country": "Iceland",
+    "iso2": "IS",
+    "clues": [
+      "Long before modern parliament buildings, people gathered outdoors here to make laws at an assembly founded in 930.",
+      "Find a volcanic island in the North Atlantic, east of Greenland, where glaciers share the landscape with hot springs.",
+      "The land of fire and ice has geysers, black-sand beaches and the Blue Lagoon. Look just below the Arctic Circle."
+    ],
+    "fact": "The Althing assembly began meeting at Þingvellir in 930 and met there for centuries."
+  },
+  {
+    "id": "EGY",
+    "country": "Egypt",
+    "iso2": "EG",
+    "clues": [
+      "Ancient rulers built enormous stone tombs here, turning their desert resting places into landmarks for the ages.",
+      "Trace the Nile through northeastern Africa to the Mediterranean. This country also touches the Red Sea.",
+      "The pyramids of Giza and the Great Sphinx guard your final clue. Which country is their home?"
+    ],
+    "fact": "The pyramid fields from Giza to Dahshur form part of a World Heritage site linked to ancient Memphis."
+  },
+  {
+    "id": "MAR",
+    "country": "Morocco",
+    "iso2": "MA",
+    "clues": [
+      "One mountain town here is famous for blue-painted lanes, while old walled cities hide gardens and bustling squares.",
+      "Look in northwest Africa, across the Strait of Gibraltar from Spain, with both Atlantic and Mediterranean shores.",
+      "Marrakesh, Casablanca and the blue town of Chefchaouen are all in this country beside the Atlas Mountains."
+    ],
+    "fact": "Marrakesh's medina contains monumental gateways, gardens and the open-air square of Jamaâ El Fna."
+  },
+  {
+    "id": "KEN",
+    "country": "Kenya",
+    "iso2": "KE",
+    "clues": [
+      "Here is a safari surprise: a national park has wild animals roaming with a modern city's skyline behind them.",
+      "Look in East Africa, on the equator and the Indian Ocean, directly north of Tanzania.",
+      "The Maasai Mara's big cats and wildebeest are a famous treasure here. Find Tanzania's neighbor to the northeast."
+    ],
+    "fact": "Nairobi National Park protects wildlife habitat close enough to the city for skyscrapers to frame the view."
+  },
+  {
+    "id": "TZA",
+    "country": "Tanzania",
+    "iso2": "TZ",
+    "clues": [
+      "Vast herds of wildebeest and zebras follow the rains across these grasslands, with hungry predators on their trail.",
+      "Head to East Africa, south of Kenya. This country has Indian Ocean shores and the islands of Zanzibar.",
+      "Mount Kilimanjaro and Serengeti National Park are both here. Find the country holding Africa's highest summit."
+    ],
+    "fact": "The Serengeti's great migration includes wildebeest, zebras and gazelles moving in search of water and grazing."
+  },
+  {
+    "id": "MDG",
+    "country": "Madagascar",
+    "iso2": "MG",
+    "clues": [
+      "Not every forest has leaves: this country's tsingy landscapes contain a maze of sharp limestone pinnacles.",
+      "Look for a large island in the Indian Ocean, off southeastern Africa and across the water from Mozambique.",
+      "Lemurs and towering baobab trees are the stars of this island country, just east of mainland Africa."
+    ],
+    "fact": "The Andrefana Dry Forests protect limestone landscapes, baobabs and habitats for rare lemurs."
+  },
+  {
+    "id": "IND",
+    "country": "India",
+    "iso2": "IN",
+    "clues": [
+      "Even fetching water could mean descending into a work of art: a carved stepwell here was designed like an inverted temple.",
+      "Search South Asia for a broad peninsula, with the Himalayas to its north and Sri Lanka just off its southern tip.",
+      "The white marble Taj Mahal in Agra is the final treasure on your trail. Which country is it in?"
+    ],
+    "fact": "Rani-ki-Vav, the Queen's Stepwell, has seven levels of stairs decorated with intricate sculptural panels."
+  },
+  {
+    "id": "NPL",
+    "country": "Nepal",
+    "iso2": "NP",
+    "clues": [
+      "Snow leopards and red pandas share this country's mountain wilderness with glaciers and deep Himalayan valleys.",
+      "This landlocked South Asian country sits between India and China; Sherpa communities live in its high mountains.",
+      "Everest climbers take the southern approach through this country. Find the narrow Himalayan neighbor north of India."
+    ],
+    "fact": "Sagarmatha National Park protects Himalayan landscapes and wildlife on the southern side of Mount Everest."
+  },
+  {
+    "id": "CHN",
+    "country": "China",
+    "iso2": "CN",
+    "clues": [
+      "A defensive treasure snakes across hills here: rulers linked older fortifications, then later dynasties kept building.",
+      "Find a vast East Asian country south of Mongolia, with a Pacific coastline and giant pandas among its native wildlife.",
+      "The Great Wall is your unmistakable landmark. Which country built this sprawling system of ancient defenses?"
+    ],
+    "fact": "The Great Wall was built and rebuilt over many centuries, with major construction continuing under the Ming dynasty."
+  },
+  {
+    "id": "KHM",
+    "country": "Cambodia",
+    "iso2": "KH",
+    "clues": [
+      "An ancient empire left a treasure trail of reservoirs, canals and stone temples hidden among forests here.",
+      "Look in mainland Southeast Asia, between Thailand and Vietnam, for the historic heartland of the Khmer Empire.",
+      "The towers of Angkor Wat are your final beacon. Find the country that holds this famous temple complex."
+    ],
+    "fact": "The Angkor area includes not only temples but reservoirs, dykes, canals and roads from the Khmer Empire."
+  },
+  {
+    "id": "IDN",
+    "country": "Indonesia",
+    "iso2": "ID",
+    "clues": [
+      "A huge ancient Buddhist temple rises here in tiers of stone, with dozens of bell-shaped stupas circling its upper levels.",
+      "Follow the islands of Sumatra and Java across the equator, between mainland Southeast Asia and Australia.",
+      "Bali, Java and the Komodo dragons' islands all belong to this sprawling island country."
+    ],
+    "fact": "Borobudur in central Java has 72 openwork stupas around its circular platforms, each containing a Buddha statue."
+  },
+  {
+    "id": "VNM",
+    "country": "Vietnam",
+    "iso2": "VN",
+    "clues": [
+      "Your boat could weave between limestone towers rising from the sea in one of this country's spectacular bays.",
+      "Find a long, narrow country on mainland Southeast Asia's eastern coast, beside Laos and Cambodia and south of China.",
+      "Ha Long Bay lies in its north and the Mekong Delta in its south. Look for the S-shaped country on the coast."
+    ],
+    "fact": "Ha Long Bay and the Cat Ba Archipelago contain a dramatic seascape of limestone islands and islets."
+  }
+]

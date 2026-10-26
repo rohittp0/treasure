@@ -1,0 +1,42 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /puzzles/{puzzleId} {
+      allow read: if resource.data.active == true;
+      allow write: if false;
+    }
+
+    match /leaderboard/{userId} {
+      function validEntry() {
+        return request.auth != null
+          && request.auth.uid == userId
+          && request.resource.data.keys().hasOnly(['uid', 'name', 'country', 'puzzleId', 'score', 'completedAt'])
+          && request.resource.data.uid == userId
+          && request.resource.data.name is string
+          && request.resource.data.name.size() <= 32
+          && request.resource.data.country is string
+          && request.resource.data.country.size() <= 80
+          && request.resource.data.puzzleId is string
+          && request.resource.data.puzzleId.matches('[A-Z]{3}')
+          && request.resource.data.score is int
+          && request.resource.data.score > 0
+          && request.resource.data.score <= 120
+          && request.resource.data.completedAt is timestamp;
+      }
+      allow read: if true;
+      allow create: if validEntry();
+      allow update: if validEntry() && request.resource.data.score > resource.data.score;
+      allow delete: if false;
+    }
+
+    match /users/{userId} {
+      allow read, create, update: if request.auth != null && request.auth.uid == userId;
+      allow delete: if false;
+
+      match /hunts/{huntId} {
+        allow read, create: if request.auth != null && request.auth.uid == userId;
+        allow update, delete: if false;
+      }
+    }
+  }
+}

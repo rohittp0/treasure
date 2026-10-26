@@ -15,6 +15,7 @@ const app = initializeApp({
 const auth = getAuth(app);
 const db = getFirestore(app);
 const provider = new GoogleAuthProvider();
+const publicWebPushKey = 'BOzlGqFf6AfP-pq_3HdJmFMBecQdMdDi74U44jBl3YNgXRdaVLBbst7geU1vD1GF2dnUaSU_WFh4eX_pET8KT0U';
 let pushRegistration = null;
 
 export function watchUser(callback) {
@@ -87,7 +88,7 @@ export async function markChallengeRead(user, code) {
 }
 
 export async function registerChallengePush(user) {
-  const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
+  const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY || publicWebPushKey;
   if (!vapidKey || !('serviceWorker' in navigator) || Notification.permission !== 'granted') return false;
   const { getMessaging, getToken, isSupported } = await import('firebase/messaging');
   if (!await isSupported()) return false;

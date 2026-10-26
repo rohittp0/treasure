@@ -14,3 +14,51 @@
 @media(max-width:700px){.home-screen{top:calc(50% + 30px);max-height:calc(100dvh - 78px);overflow-y:auto}.home-start{min-width:0;width:100%}.multiplayer-button{width:100%}.home-screen:has(.multiplayer-button) .home-rule{margin-top:23px}}
 .result-screen{max-height:calc(100dvh - 90px);overflow-y:auto;scrollbar-width:thin}.leaderboard{margin:19px 0 18px;padding:14px 15px 12px;border:1px solid #bda273;background:#fcf4df;text-align:left;border-radius:5px}.leaderboard-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;color:#9f714c;font-weight:700;font-size:9px;letter-spacing:1.1px}.leaderboard-heading small{color:#8f8b72;font-size:8px;letter-spacing:.4px;text-align:right}.leaderboard-rows{margin-top:12px;color:#526965;font-size:12px}.leaderboard-row{display:flex;align-items:center;gap:10px;border-top:1px solid #ccb99372;padding:8px 0}.leaderboard-rank{font:600 18px Fraunces,serif;color:#ad7549;width:25px}.leaderboard-player{flex:1;min-width:0}.leaderboard-player strong{display:block;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.leaderboard-player small{display:block;color:#8a8e7b;font-size:9px;margin-top:2px}.leaderboard-score{font:600 17px Fraunces,serif;color:#a26740}.leaderboard-empty{margin:0;padding:10px 0;font-style:italic;font-size:11px}.leaderboard-sign-in{display:flex;align-items:center;justify-content:space-between;width:100%;min-height:39px;margin-top:11px;padding:0 12px;background:#1e4345;color:#f9ecd2;border:0;border-radius:4px;font-size:11px;font-weight:700}.leaderboard-sign-in:hover{background:#2b5859}.leaderboard-sign-in span{font-size:16px}.leaderboard-note{color:#758277!important;font-size:10px!important;line-height:1.45!important;margin:9px 0 0!important}.result-fact{margin-top:18px!important}
 @media(max-width:700px){.result-screen{top:calc(50% + 20px);max-height:calc(100dvh - 78px)}.leaderboard{padding:12px}.leaderboard-heading{font-size:8px}.leaderboard-heading small{font-size:7px}}
+
+/* During a hunt, the map remains full screen and the notes sit over it. */
+.in-game .topbar{display:none}
+.in-game .map-stage{inset:0}
+.in-game .map-controls{top:16px}
+.game-hud{position:absolute;z-index:7;top:16px;left:22px;width:184px;margin:0;padding:10px 15px 12px;display:block;border:1px solid #f7e7bd38;box-shadow:0 10px 24px #061e27a6}
+.game-hud .timer-label{font-size:8px}
+.game-hud strong{font-size:30px;line-height:1.2}
+.game-hud .timer-track{margin-top:5px}
+.in-game{--sheet-height:min(70dvh,620px)}
+.in-game.sheet-collapsed{--sheet-height:94px}
+.in-game .game-panel{top:auto;bottom:22px;left:22px;width:min(380px,calc(100vw - 44px));height:var(--sheet-height);display:flex;flex-direction:column;overflow:hidden;border-radius:14px;box-shadow:0 14px 40px #061f28b5;transition:height .24s ease}
+.in-game .game-panel:before{inset:7px;border-radius:9px}
+.sheet-topline{position:relative;z-index:2;display:flex;align-items:stretch;flex:none;min-height:94px;padding:0 12px 0 10px;border-bottom:1px solid #b5a27966}
+.sheet-toggle{display:block;flex:1;min-width:0;padding:7px 8px 9px;border:0;background:transparent;color:#17383a;text-align:left}
+.sheet-grip{display:block;width:36px;height:4px;margin:0 auto 12px;border-radius:5px;background:#ab9771}
+.sheet-row{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0}
+.sheet-row .kicker{white-space:nowrap}
+.sheet-row .kicker span{margin-left:5px;color:#697a70;font-size:9px;letter-spacing:.5px}
+.sheet-toggle-action{color:#8d633f;font-size:11px;font-weight:700;white-space:nowrap}
+.sheet-peek-clue{display:block;margin-top:7px;color:#405b59;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sheet-leave{align-self:center;flex:none;width:44px;height:44px;margin:12px 0 0 5px;border:1px solid #bba881;border-radius:50%;background:#f9efd8;color:#765e48;font-size:23px;line-height:1}
+.sheet-content{position:relative;z-index:1;min-height:0;flex:1;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;padding-top:2px}
+.sheet-collapsed .sheet-content{display:none}
+.in-game .hunt-heading{padding-top:17px}
+.in-game .selection-card{left:calc(50% + 195px);bottom:32px;width:min(415px,calc(100vw - 430px))}
+.in-game .toast{bottom:calc(var(--sheet-height) + 36px)}
+@media(max-width:700px){
+  .in-game{--sheet-height:min(54dvh,450px)}
+  .in-game.sheet-collapsed{--sheet-height:90px}
+  .game-hud{top:calc(12px + env(safe-area-inset-top));left:14px;width:157px;padding:8px 12px 10px}
+  .game-hud>div:first-child{display:flex;align-items:center;gap:7px}
+  .game-hud .timer-label{max-width:65px;font-size:8px;line-height:1.2}
+  .game-hud strong{font-size:27px}
+  .game-hud .timer-track{position:absolute;bottom:0;left:0;right:0;margin:0;height:3px}
+  .in-game .map-controls{top:calc(13px + env(safe-area-inset-top));right:14px}
+  .in-game .game-panel{left:0;bottom:0;width:100%;height:var(--sheet-height);border-radius:17px 17px 0 0;padding-bottom:env(safe-area-inset-bottom)}
+  .in-game .game-panel:before{border-radius:12px 12px 0 0}
+  .sheet-topline{min-height:90px;padding-left:14px;padding-right:11px}
+  .sheet-toggle{padding-left:5px}
+  .sheet-row .kicker{font-size:9px;letter-spacing:1.2px}
+  .sheet-toggle-action{font-size:10px}
+  .in-game .hunt-heading{padding-top:13px}
+  .in-game .selection-card{left:50%;bottom:calc(var(--sheet-height) + 10px);width:calc(100vw - 25px)}
+  .in-game .toast{bottom:calc(var(--sheet-height) + 83px)}
+}
+@media(max-width:390px){.in-game{--sheet-height:54dvh}.in-game.sheet-collapsed{--sheet-height:90px}}
+@media(prefers-reduced-motion:reduce){.in-game .game-panel{transition:none}}

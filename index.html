@@ -35,6 +35,11 @@
         </div>
       </header>
 
+      <div id="game-hud" class="game-hud timer-card hidden" role="timer" aria-label="Time remaining">
+        <div><span class="timer-label">TIME REMAINING</span><strong id="timer-value" aria-live="off">2:00</strong></div>
+        <div class="timer-track"><span id="timer-progress"></span></div>
+      </div>
+
       <main>
         <section id="home-screen" class="home-screen" aria-labelledby="home-title">
           <div class="home-eyebrow"><span class="eyebrow-line"></span> A LITTLE WORLD ADVENTURE <span class="eyebrow-line"></span></div>
@@ -48,15 +53,23 @@
         </section>
 
         <section id="game-panel" class="game-panel hidden" aria-label="Current treasure hunt">
-          <div class="panel-topline"><span class="kicker">✦ &nbsp; SOLO EXPEDITION</span><button id="leave-button" class="text-button" type="button">Leave hunt ×</button></div>
-          <div class="hunt-heading"><div><div class="chapter">A COUNTRY, SOMEWHERE ON EARTH</div><h2>Follow your<br /><em>hunch.</em></h2></div><div class="compass-rose" aria-hidden="true"><span>N</span>✦<span>S</span></div></div>
-          <div class="timer-card"><div><span class="timer-label">TIME REMAINING</span><strong id="timer-value" aria-live="off">2:00</strong></div><div class="timer-symbol" aria-hidden="true">⌛</div><div class="timer-track"><span id="timer-progress"></span></div></div>
-          <div class="clue-heading"><span>YOUR FIELD NOTES</span><span id="clue-count">01 / 03</span></div>
-          <div id="clue-list" class="clue-list"></div>
-          <button id="unlock-button" class="secondary-button" type="button">Unlock next clue <span>−20 sec</span></button>
-          <button id="reveal-button" class="secondary-button reveal-button hidden" type="button">Reveal country name <span>−50 sec</span></button>
-          <div id="reveal-note" class="reveal-note hidden"></div>
-          <p class="game-tip">Tap a country on the map, then confirm your guess. A wrong guess costs 5 seconds.</p>
+          <div class="sheet-topline">
+            <button id="sheet-toggle" class="sheet-toggle" type="button" aria-expanded="true" aria-controls="sheet-content" aria-label="Minimise clues">
+              <span class="sheet-grip" aria-hidden="true"></span>
+              <span class="sheet-row"><span class="kicker">✦ &nbsp; FIELD NOTES <span id="sheet-peek-count">01 / 03</span></span><span id="sheet-toggle-action" class="sheet-toggle-action">Minimise ↓</span></span>
+              <span id="sheet-peek-clue" class="sheet-peek-clue">Your first clue is ready.</span>
+            </button>
+            <button id="leave-button" class="sheet-leave" type="button" aria-label="Leave hunt">×</button>
+          </div>
+          <div id="sheet-content" class="sheet-content">
+            <div class="hunt-heading"><div><div class="chapter">A COUNTRY, SOMEWHERE ON EARTH</div><h2>Follow your<br /><em>hunch.</em></h2></div><div class="compass-rose" aria-hidden="true"><span>N</span>✦<span>S</span></div></div>
+            <div class="clue-heading"><span>YOUR FIELD NOTES</span><span id="clue-count">01 / 03</span></div>
+            <div id="clue-list" class="clue-list"></div>
+            <button id="unlock-button" class="secondary-button" type="button">Unlock next clue <span>−20 sec</span></button>
+            <button id="reveal-button" class="secondary-button reveal-button hidden" type="button">Reveal country name <span>−50 sec</span></button>
+            <div id="reveal-note" class="reveal-note hidden"></div>
+            <p class="game-tip">Tap a country on the map, then confirm your guess. A wrong guess costs 5 seconds.</p>
+          </div>
         </section>
 
         <div id="selection-card" class="selection-card hidden" role="status"><div class="selection-symbol">✦</div><div class="selection-copy"><span>YOUR PIN IS ON</span><strong id="selection-name">Country</strong></div><button id="cancel-button" class="selection-cancel" type="button" aria-label="Cancel selection">×</button><button id="guess-button" class="selection-guess" type="button">Guess this country <span>→</span></button></div>

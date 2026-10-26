@@ -12,8 +12,10 @@ const $ = selector => document.querySelector(selector);
 const elements = {
   home: $('#home-screen'), game: $('#game-panel'), result: $('#result-screen'),
   homeStatus: $('#home-status'), mapLoading: $('#map-loading'),
-  timer: $('#timer-value'), progress: $('#timer-progress'), clueList: $('#clue-list'),
+  hud: $('#game-hud'), timer: $('#timer-value'), progress: $('#timer-progress'), clueList: $('#clue-list'),
   clueCount: $('#clue-count'), unlock: $('#unlock-button'), reveal: $('#reveal-button'),
+  sheetToggle: $('#sheet-toggle'), sheetAction: $('#sheet-toggle-action'),
+  sheetCount: $('#sheet-peek-count'), sheetClue: $('#sheet-peek-clue'),
   revealNote: $('#reveal-note'), selection: $('#selection-card'), selectionName: $('#selection-name'),
   toast: $('#toast'), accountButton: $('#account-button'), accountDialog: $('#account-dialog'),
   accountContent: $('#account-content'), saveStatus: $('#save-status'),
@@ -50,6 +52,17 @@ function showToast(message) {
 function clearMapSelection() {
   selectedMapId = '';
   if (map?.getLayer('selected-country')) map.setFilter('selected-country', ['==', ['get', 'id'], '']);
+}
+
+function setSheetCollapsed(collapsed) {
+  document.body.classList.toggle('sheet-collapsed', collapsed);
+  elements.sheetToggle.setAttribute('aria-expanded', String(!collapsed));
+  elements.sheetToggle.setAttribute('aria-label', collapsed ? 'Show clues' : 'Minimise clues');
+  elements.sheetAction.textContent = collapsed ? 'Show clues ↑' : 'Minimise ↓';
+}
+
+function collapseSheetForMap() {
+  if (game?.snapshot().status === 'playing') setSheetCollapsed(true);
 }
 
 function selectMapCountry(country) {
@@ -99,6 +112,9 @@ async function loadMap() {
       map.on('mouseleave', 'land', () => { map.getCanvas().style.cursor = ''; });
       elements.mapLoading.classList.add('hidden');
     });
+    map.on('click', collapseSheetForMap);
+    map.on('dragstart', collapseSheetForMap);
+    map.on('zoomstart', collapseSheetForMap);
     map.on('error', error => console.warn('Map detail could not render:', error.error || error));
   } catch (error) {
     console.error(error);
@@ -130,8 +146,12 @@ function renderGame() {
   const seconds = state.remaining % 60;
   elements.timer.textContent = `${minutes}:${String(seconds).padStart(2, '0')}`;
   elements.progress.style.width = `${(state.remaining / 120) * 100}%`;
-  elements.timer.parentElement.parentElement.classList.toggle('timer-urgent', state.remaining <= 30);
+  elements.hud.classList.toggle('timer-urgent', state.remaining <= 30);
   elements.clueCount.textContent = `${String(state.cluesVisible).padStart(2, '0')} / 03`;
+  elements.sheetCount.textContent = elements.clueCount.textContent;
+  elements.sheetClue.textContent = state.revealedCountry
+    ? `Treasure location: ${state.puzzle.country}`
+    : state.puzzle.clues[state.cluesVisible - 1];
   elements.clueList.innerHTML = state.puzzle.clues.map((clue, index) => {
     const open = index < state.cluesVisible;
     return `<div class="clue-card ${open ? 'clue-open' : 'clue-locked'}"><span class="clue-index">${String(index + 1).padStart(2, '0')}</span><div class="clue-body"><small>${index === 0 ? 'THE FIRST WHISPER' : index === 1 ? 'A CLOSER LOOK' : 'THE FINAL PIECE'}</small><p>${open ? escapeHTML(clue) : 'This clue is still waiting to be uncovered.'}</p></div><span class="clue-state">${open ? '✦' : '⌁'}</span></div>`;
@@ -158,7 +178,9 @@ function startHunt() {
   elements.home.classList.add('hidden');
   elements.result.classList.add('hidden');
   elements.game.classList.remove('hidden');
+  elements.hud.classList.remove('hidden');
   document.body.classList.add('in-game');
+  setSheetCollapsed(false);
   clearInterval(ticker);
   ticker = setInterval(renderGame, 200);
   renderGame();
@@ -252,6 +274,8 @@ function finish(state) {
   lastResult = state;
   clearMapSelection();
   document.body.classList.remove('in-game');
+  setSheetCollapsed(false);
+  elements.hud.classList.add('hidden');
   elements.home.classList.add('hidden');
   elements.game.classList.add('hidden');
   elements.result.classList.remove('hidden');
@@ -278,6 +302,8 @@ function leaveHunt() {
   game = null;
   clearMapSelection();
   document.body.classList.remove('in-game');
+  setSheetCollapsed(false);
+  elements.hud.classList.add('hidden');
   elements.game.classList.add('hidden');
   elements.selection.classList.add('hidden');
   elements.home.classList.remove('hidden');
@@ -339,6 +365,7 @@ elements.leaderboardSignIn.addEventListener('click', async () => {
 });
 $('#play-again-button').addEventListener('click', startHunt);
 $('#leave-button').addEventListener('click', leaveHunt);
+elements.sheetToggle.addEventListener('click', () => setSheetCollapsed(!document.body.classList.contains('sheet-collapsed')));
 $('#unlock-button').addEventListener('click', () => { game?.unlock(); renderGame(); });
 $('#reveal-button').addEventListener('click', () => { game?.reveal(); renderGame(); });
 $('#cancel-button').addEventListener('click', () => { game?.cancel(); clearMapSelection(); renderGame(); });

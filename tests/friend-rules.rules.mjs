@@ -100,6 +100,19 @@ try {
   await assertFails(getDoc(doc(stranger, 'profiles/hider')));
   await assertSucceeds(getDoc(doc(stranger, 'usernames/mapfinder')));
 
+  const leader = doc(seeker, 'leaderboard/seeker');
+  const leaderboardEntry = { uid: 'seeker', country: 'Italy', puzzleId: 'ITA', score: 92, completedAt: serverTimestamp() };
+  await assertFails(setDoc(leader, { ...leaderboardEntry, name: 'Impostor' }));
+  await assertSucceeds(setDoc(leader, { ...leaderboardEntry, name: 'mapfinder' }));
+  await assertFails(updateDoc(leader, { name: 'Impostor' }));
+  await assertSucceeds(updateDoc(leader, { score: 95 }));
+  await environment.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'leaderboard/hider'), {
+      uid: 'hider', name: 'Explorer HIDE', country: 'Italy', puzzleId: 'ITA', score: 80, completedAt: Timestamp.now(),
+    });
+  });
+  await assertSucceeds(updateDoc(doc(hider, 'leaderboard/hider'), { name: 'mapmaker' }));
+
   await assertFails(setDoc(doc(hider, 'friendHunts/QRSTUVWX23'), {
     hiderUid: 'hider', hiderName: 'Hider', targetUid: 'seeker', targetUsername: 'mapfinder', seekerUid: null, seekerName: null,
     clues: ['First clue', 'Second clue', 'Third clue'], status: 'waiting', createdAt: serverTimestamp(),

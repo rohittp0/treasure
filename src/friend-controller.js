@@ -20,6 +20,8 @@ export function createFriendController({ getUser, getUsername, getMap, getCountr
   let timeoutPending = false;
   let pendingLobby = false;
   let pendingHidePlace = null;
+  let suppressSearchZoom = false;
+  let searchZoomTimeout;
   let animatedWinCode = '';
   let pendingInvite = normaliseHuntCode(new URLSearchParams(location.search).get('hunt'));
   let inviteHandled = false;
@@ -28,12 +30,14 @@ export function createFriendController({ getUser, getUsername, getMap, getCountr
     const openingGame = selector === '#game-panel' && $('#game-panel').classList.contains('hidden');
     $('#home-screen').classList.toggle('hidden', selector !== '#home-screen');
     $('#result-screen').classList.add('hidden');
+    $('#leaderboard-screen').classList.add('hidden');
     $('#game-panel').classList.toggle('hidden', selector !== '#game-panel');
     $('#game-hud').classList.toggle('hidden', selector !== '#game-panel');
     for (const screen of friendScreens) $(screen).classList.toggle('hidden', selector !== screen);
     document.body.classList.toggle('in-game', selector === '#game-panel');
     document.body.classList.remove('solo-game');
     $('#end-level-button').classList.add('hidden');
+    $('#cancel-setup-button').classList.toggle('hidden', selector !== '#friend-hide');
     document.body.classList.toggle('in-hide', selector === '#friend-hide');
     if (selector !== '#friend-hide') document.body.classList.remove('hide-collapsed');
     if (openingGame) {
@@ -69,6 +73,18 @@ export function createFriendController({ getUser, getUsername, getMap, getCountr
     setMapCountry(place.id);
     marker?.remove();
     marker = new maplibregl.Marker({ color: '#c87948' }).setLngLat([place.lng, place.lat]).addTo(getMap());
+  }
+
+  function focusSearchPlace(feature) {
+    const { labelX, labelY } = feature.properties;
+    setHiddenPlace({ id: feature.properties.id, country: feature.properties.name, lng: labelX, lat: labelY });
+    const map = getMap();
+    map.stop();
+    suppressSearchZoom = true;
+    clearTimeout(searchZoomTimeout);
+    map.once('moveend', () => { suppressSearchZoom = false; clearTimeout(searchZoomTimeout); });
+    searchZoomTimeout = setTimeout(() => { suppressSearchZoom = false; }, 1500);
+    map.flyTo({ center: [labelX, labelY], zoom: Math.max(map.getZoom(), 3) });
   }
 
   function mapCountry(feature, lngLat) {
@@ -122,6 +138,8 @@ export function createFriendController({ getUser, getUsername, getMap, getCountr
     code = '';
     busy = false;
     timeoutPending = false;
+    suppressSearchZoom = false;
+    clearTimeout(searchZoomTimeout);
   }
 
   function home() {
@@ -169,11 +187,7 @@ export function createFriendController({ getUser, getUsername, getMap, getCountr
     if (!getUsername()) { requestUsername(); return; }
     openHide();
     const feature = getCountries()?.features.find(item => item.properties.id === pendingHidePlace?.id);
-    if (feature) {
-      const { labelX, labelY } = feature.properties;
-      setHiddenPlace({ id: feature.properties.id, country: feature.properties.name, lng: labelX, lat: labelY });
-      getMap().flyTo({ center: [labelX, labelY], zoom: Math.max(getMap().getZoom(), 3) });
-    }
+    if (feature) focusSearchPlace(feature);
     pendingHidePlace = null;
   }
 
@@ -437,16 +451,14 @@ export function createFriendController({ getUser, getUsername, getMap, getCountr
 
   $('#friend-hide-button').addEventListener('click', openHide);
   $('#friend-hide-toggle').addEventListener('click', () => setHideCollapsed(!document.body.classList.contains('hide-collapsed')));
-  $('#friend-hide-close').addEventListener('click', home);
+  $('#cancel-setup-button').addEventListener('click', home);
   $('#friend-country-search').addEventListener('input', searchCountries);
   $('#friend-search-results').addEventListener('click', event => {
     const button = event.target.closest('button[data-id]');
     if (!button) return;
     const feature = getCountries()?.features.find(item => item.properties.id === button.dataset.id);
     if (!feature) return;
-    const { labelX, labelY } = feature.properties;
-    setHiddenPlace({ id: feature.properties.id, country: feature.properties.name, lng: labelX, lat: labelY });
-    getMap().flyTo({ center: [labelX, labelY], zoom: Math.max(getMap().getZoom(), 3) });
+    focusSearchPlace(feature);
   });
   $('#friend-hide-form').addEventListener('submit', create);
   $('#friend-join-form').addEventListener('submit', async event => {
@@ -478,6 +490,7 @@ export function createFriendController({ getUser, getUsername, getMap, getCountr
 
   return {
     get mode() { return mode; },
+    get suppressSearchZoom() { return suppressSearchZoom; },
     mapCountry,
     openLobby,
     challengeFriend,

@@ -21,6 +21,7 @@
           <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
           <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
           <button id="end-level-button" class="hidden" type="button">End level</button>
+          <button id="cancel-setup-button" class="hidden" type="button">Cancel setup</button>
         </div>
         <div id="map-loading" class="map-loading">Charting the world…</div>
       </div>
@@ -47,8 +48,10 @@
           <div class="home-ornament" aria-hidden="true">✦</div>
           <h1 id="home-title">Every place<br />has a <em>story.</em></h1>
           <p class="home-copy">Three clues. One hidden country. Follow your hunch and find the treasure before the clock runs out.</p>
+          <p id="home-username" class="home-username hidden"></p>
           <button id="start-button" class="primary-button home-start" type="button">Start a solo hunt <span aria-hidden="true">↗</span></button>
           <button id="multiplayer-button" class="multiplayer-button" type="button"><span><strong>Play with a friend</strong><small id="multiplayer-hint">Sign in required</small></span><span aria-hidden="true">↗</span></button>
+          <button id="home-leaderboard-button" class="home-leaderboard-button" type="button">View leaderboard <span aria-hidden="true">↗</span></button>
           <div class="home-rule"><span>01 <b>READ THE CLUE</b></span><i></i><span>02 <b>EXPLORE THE MAP</b></span><i></i><span>03 <b>FIND THE COUNTRY</b></span></div>
           <p id="home-status" class="home-status" role="status">Loading your adventures…</p>
         </section>
@@ -74,7 +77,6 @@
               <span class="sheet-row"><span class="kicker">✦ &nbsp; THE HIDING PLAYER</span><span id="friend-hide-toggle-action" class="sheet-toggle-action">Minimise ↓</span></span>
               <span id="friend-hide-peek" class="sheet-peek-clue">Tap the map or search for a country.</span>
             </button>
-            <button id="friend-hide-close" class="sheet-leave" type="button" aria-label="Leave hunt setup">×</button>
           </div>
           <div id="friend-hide-content" class="hide-sheet-content">
             <h2 id="friend-hide-title">Set the <em>trail.</em></h2>
@@ -149,14 +151,22 @@
 
         <div id="selection-card" class="selection-card hidden" role="status"><div class="selection-symbol">✦</div><div class="selection-copy"><span>YOUR PIN IS ON</span><strong id="selection-name">Country</strong></div><button id="cancel-button" class="selection-cancel" type="button" aria-label="Cancel selection">×</button><button id="guess-button" class="selection-guess" type="button">Guess this country <span>→</span></button></div>
 
-        <section id="result-screen" class="result-screen hidden" aria-labelledby="result-title"><div id="result-art" class="result-art">✦</div><p id="result-eyebrow" class="result-eyebrow">TREASURE FOUND</p><h2 id="result-title">Beautifully found.</h2><p id="result-copy"></p><div id="result-stats" class="result-stats"></div><div class="leaderboard"><div class="leaderboard-heading"><span>✦ &nbsp; EXPLORER LEADERBOARD</span><small>BEST FIND PER PLAYER</small></div><div id="leaderboard-rows" class="leaderboard-rows" role="status">Loading the leaderboard…</div><button id="leaderboard-sign-in" class="leaderboard-sign-in hidden" type="button">Sign in to enter the leaderboard <span>↗</span></button><p id="leaderboard-note" class="leaderboard-note"></p></div><p id="result-fact" class="result-fact"></p><button id="challenge-after-win" class="primary-button result-challenge hidden" type="button">Challenge a friend <span>↗</span></button><button id="play-again-button" class="result-replay" type="button">Hunt again <span>↗</span></button><p id="save-status" class="save-status" role="status"></p></section>
+        <section id="result-screen" class="result-screen hidden" aria-labelledby="result-title"><div id="result-art" class="result-art">✦</div><p id="result-eyebrow" class="result-eyebrow">TREASURE FOUND</p><h2 id="result-title">Beautifully found.</h2><p id="result-copy"></p><div id="result-stats" class="result-stats"></div><div class="result-leaderboard"><button id="result-leaderboard-button" class="leaderboard-entry-button hidden" type="button">View leaderboard <span aria-hidden="true">↗</span></button><button id="leaderboard-sign-in" class="leaderboard-sign-in hidden" type="button">Sign in to enter the leaderboard <span>↗</span></button><p id="leaderboard-note" class="leaderboard-note"></p></div><p id="result-fact" class="result-fact"></p><button id="challenge-after-win" class="primary-button result-challenge hidden" type="button">Challenge a friend <span>↗</span></button><button id="play-again-button" class="result-replay" type="button">Hunt again <span>↗</span></button><p id="save-status" class="save-status" role="status"></p></section>
+
+        <section id="leaderboard-screen" class="friend-card leaderboard-screen hidden" aria-labelledby="leaderboard-title">
+          <p class="kicker">✦ &nbsp; THE EXPLORERS' HALL</p>
+          <h2 id="leaderboard-title">World <em>leaderboard.</em></h2>
+          <p>Each explorer's best solo find, ranked by seconds left on the clock.</p>
+          <div class="leaderboard"><div class="leaderboard-heading"><span>✦ &nbsp; TOP EXPLORERS</span><small>BEST FIND PER PLAYER</small></div><div id="leaderboard-rows" class="leaderboard-rows" role="status">Loading the leaderboard…</div></div>
+          <button id="leaderboard-back-button" class="text-button" type="button">← Back</button>
+        </section>
 
         <div id="victory-effects" class="victory-effects" aria-hidden="true"></div>
         <div id="toast" class="toast hidden" role="status"></div>
       </main>
 
       <dialog id="account-dialog" class="account-dialog"><div class="dialog-top"><span id="account-dialog-kicker" class="kicker">✦ &nbsp; YOUR EXPLORER LOG</span><button id="close-account" class="icon-button" type="button" aria-label="Close account">×</button></div><div id="account-content"></div><section id="account-challenges" class="account-challenges hidden" aria-labelledby="challenge-inbox-heading"><div class="challenge-inbox-title"><strong id="challenge-inbox-heading">INCOMING CHALLENGES</strong><span id="challenge-inbox-count">0</span></div><div id="challenge-list" class="challenge-list">No challenges yet. Ask a friend to find you by username.</div><p id="account-challenge-status" class="friend-status" role="status"></p></section></dialog>
-      <dialog id="welcome-dialog" class="account-dialog welcome-dialog"><div class="dialog-top"><span class="kicker">✦ &nbsp; YOUR EXPLORER NAME</span><button id="close-welcome" class="icon-button" type="button" aria-label="Close">×</button></div><h2>Choose your <em>name.</em></h2><p>Friends can challenge you using a unique username. You can also get a heads-up when a new challenge arrives.</p><form id="welcome-form"><label for="welcome-username">Your username</label><input id="welcome-username" minlength="3" maxlength="20" autocapitalize="none" autocomplete="off" spellcheck="false" placeholder="mapfinder" required /><p id="welcome-status" class="friend-status" role="status"></p><button id="welcome-notifications" class="secondary-button" type="button">Enable browser notifications</button><p id="notification-status" class="notification-status"></p><button id="welcome-save" class="primary-button" type="submit">Save and continue ↗</button></form></dialog>
+      <dialog id="welcome-dialog" class="account-dialog welcome-dialog"><div class="dialog-top"><span class="kicker">✦ &nbsp; YOUR EXPLORER NAME</span><button id="close-welcome" class="icon-button" type="button" aria-label="Close">×</button></div><h2>Choose your <em>name.</em></h2><p>Friends can challenge you using a unique username. You can also get a heads-up when a new challenge arrives.</p><form id="welcome-form"><label for="welcome-username">Your username</label><input id="welcome-username" minlength="3" maxlength="20" autocapitalize="none" autocomplete="off" spellcheck="false" placeholder="mapfinder" required /><p id="welcome-status" class="friend-status" role="status" aria-live="polite"></p><button id="welcome-notifications" class="secondary-button" type="button">Enable browser notifications</button><p id="notification-status" class="notification-status"></p><button id="welcome-save" class="primary-button" type="submit">Save and continue ↗</button></form></dialog>
     </div>
     <script type="module" src="/src/main.js"></script>
   </body>

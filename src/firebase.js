@@ -70,6 +70,12 @@ export async function claimUsername(user, username) {
   return handle;
 }
 
+export async function isUsernameAvailable(username) {
+  const handle = username.trim().toLowerCase();
+  if (!/^[a-z][a-z0-9_]{2,19}$/.test(handle)) return false;
+  return !(await getDoc(usernameRef(handle))).exists();
+}
+
 export async function findUsername(username) {
   const handle = username.trim().replace(/^@/, '').toLowerCase();
   if (!/^[a-z][a-z0-9_]{2,19}$/.test(handle)) throw new Error('Enter a valid username, like @mapfinder.');
@@ -132,7 +138,7 @@ export async function loadHunts(user) {
 }
 
 export async function loadLeaderboard() {
-  const result = await getDocs(query(collection(db, 'leaderboard'), orderBy('score', 'desc'), limit(5)));
+  const result = await getDocs(query(collection(db, 'leaderboard'), orderBy('score', 'desc'), limit(50)));
   return result.docs.map(snapshot => snapshot.data());
 }
 
@@ -140,11 +146,17 @@ export async function enterLeaderboard(user, hunt) {
   if (!user || hunt.result !== 'won' || hunt.timeLeft <= 0) return false;
   const reference = doc(db, 'leaderboard', user.uid);
   return runTransaction(db, async transaction => {
+    const profile = await transaction.get(profileRef(user.uid));
+    if (!profile.exists()) throw new Error('Choose a username before entering the leaderboard.');
+    const username = profile.data().username;
     const previous = await transaction.get(reference);
-    if (previous.exists() && previous.data().score >= hunt.timeLeft) return false;
+    if (previous.exists() && previous.data().score >= hunt.timeLeft) {
+      if (previous.data().name !== username) transaction.update(reference, { name: username });
+      return false;
+    }
     transaction.set(reference, {
       uid: user.uid,
-      name: `Explorer ${user.uid.slice(0, 4).toUpperCase()}`,
+      name: username,
       country: hunt.country,
       puzzleId: hunt.puzzleId,
       score: hunt.timeLeft,

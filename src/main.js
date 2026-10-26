@@ -4,7 +4,7 @@ import mapWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import './style.css';
 import fallbackPuzzles from '../data/countries.json';
 import { choosePuzzle, createGame, difficultyForLevel, CLUE_COST, REVEAL_COST } from './game.js';
-import { watchUser, login, logout, loadPuzzles, saveHunt, loadHunts, loadLeaderboard, enterLeaderboard, loadProfile, claimUsername, watchChallenges, markChallengeRead, registerChallengePush } from './firebase.js';
+import { watchUser, login, logout, loadPuzzles, saveHunt, loadHunts, loadLeaderboard, enterLeaderboard, loadProfile, claimUsername, isUsernameAvailable, watchChallenges, markChallengeRead, registerChallengePush } from './firebase.js';
 import { createFriendController } from './friend-controller.js';
 
 maplibregl.setWorkerUrl(mapWorkerUrl);
@@ -12,7 +12,7 @@ maplibregl.setWorkerUrl(mapWorkerUrl);
 const $ = selector => document.querySelector(selector);
 const elements = {
   home: $('#home-screen'), game: $('#game-panel'), result: $('#result-screen'),
-  homeStatus: $('#home-status'), mapLoading: $('#map-loading'),
+  homeStatus: $('#home-status'), homeUsername: $('#home-username'), mapLoading: $('#map-loading'),
   hud: $('#game-hud'), timer: $('#timer-value'), progress: $('#timer-progress'), clueList: $('#clue-list'),
   clueCount: $('#clue-count'), unlock: $('#unlock-button'), reveal: $('#reveal-button'),
   sheetToggle: $('#sheet-toggle'), sheetAction: $('#sheet-toggle-action'),
@@ -20,7 +20,7 @@ const elements = {
   revealNote: $('#reveal-note'), selection: $('#selection-card'), selectionName: $('#selection-name'),
   toast: $('#toast'), accountButton: $('#account-button'), accountDialog: $('#account-dialog'),
   accountContent: $('#account-content'), saveStatus: $('#save-status'),
-  leaderboardRows: $('#leaderboard-rows'), leaderboardSignIn: $('#leaderboard-sign-in'),
+  leaderboardScreen: $('#leaderboard-screen'), leaderboardRows: $('#leaderboard-rows'), leaderboardSignIn: $('#leaderboard-sign-in'),
   leaderboardNote: $('#leaderboard-note'),
 };
 
@@ -40,6 +40,11 @@ let victoryTimeout;
 let countryData;
 let lastResult = null;
 let pendingEntryPromise = null;
+let leaderboardReturn = 'home';
+let leaderboardOpenedHere = false;
+let leaderboardLoadVersion = 0;
+let usernameCheckVersion = 0;
+let usernameCheckTimer;
 const PROGRESS_KEY = 'treasurehunch:solo-wins';
 const PENDING_ENTRY_KEY = 'treasurehunch:pending-leaderboard';
 const RESUME_RESULT_KEY = 'treasurehunch:resume-result';
@@ -63,6 +68,11 @@ function updateHomeStatus() {
   const nextLevel = completedWins + 1;
   const difficulty = difficultyForLevel(nextLevel);
   elements.homeStatus.textContent = `${puzzles.length} places to discover · Level ${String(nextLevel).padStart(2, '0')} · ${difficulty[0].toUpperCase()}${difficulty.slice(1)}`;
+}
+
+function renderUsername() {
+  elements.homeUsername.classList.toggle('hidden', !username);
+  elements.homeUsername.textContent = username ? `✦ EXPLORING AS @${username}` : '';
 }
 
 function escapeHTML(value) {
@@ -116,12 +126,19 @@ function browserNotificationsAvailable() {
 
 function showWelcome(player, existingUsername = '') {
   welcomeFor = player;
+  clearTimeout(usernameCheckTimer);
+  usernameCheckVersion += 1;
   const input = $('#welcome-username');
   input.value = existingUsername;
   input.readOnly = !!existingUsername;
   input.required = !existingUsername;
-  $('#welcome-save').textContent = existingUsername ? 'Continue to TreasureHunch ↗' : 'Save and continue ↗';
-  $('#welcome-status').textContent = '';
+  const saveButton = $('#welcome-save');
+  saveButton.textContent = existingUsername ? 'Continue to TreasureHunch ↗' : 'Save and continue ↗';
+  saveButton.disabled = !existingUsername;
+  $('#welcome-status').textContent = existingUsername
+    ? `Your username is @${existingUsername}.`
+    : 'Enter a username to check if it is available.';
+  $('#welcome-status').dataset.state = existingUsername ? 'available' : 'idle';
   const notificationButton = $('#welcome-notifications');
   const notificationStatus = $('#notification-status');
   notificationButton.classList.toggle('hidden', !browserNotificationsAvailable() || Notification.permission !== 'default');
@@ -232,7 +249,10 @@ async function loadMap() {
     });
     map.on('click', collapseSheetForMap);
     map.on('dragstart', collapseSheetForMap);
-    map.on('zoomstart', collapseSheetForMap);
+    map.on('zoomstart', () => {
+      if (friend.mode === 'hiding' && friend.suppressSearchZoom) return;
+      collapseSheetForMap();
+    });
     map.on('error', error => console.warn('Map detail could not render:', error.error || error));
   } catch (error) {
     console.error(error);
@@ -333,28 +353,62 @@ function renderLeaderboardGate() {
   if (!lastResult) return;
   const won = lastResult.status === 'won';
   const pending = !!sessionStorage.getItem(PENDING_ENTRY_KEY);
-  elements.leaderboardSignIn.classList.toggle('hidden', !!user && !pending);
-  elements.leaderboardSignIn.innerHTML = user
-    ? 'Retry leaderboard entry <span>↗</span>'
+  elements.leaderboardSignIn.classList.toggle('hidden', !!user && !!username && !pending);
+  elements.leaderboardSignIn.innerHTML = user && !username
+    ? 'Choose your username <span>↗</span>'
+    : user ? 'Retry leaderboard entry <span>↗</span>'
     : won ? 'Sign in to enter this find <span>↗</span>' : 'Sign in for future finds <span>↗</span>';
   elements.leaderboardNote.textContent = won
-    ? user ? pending ? 'Your find is waiting to be posted.' : 'Your best winning hunt is entered automatically.' : 'Your find is waiting. Sign in to put it on the board.'
+    ? user ? !username ? 'Choose an available username to enter this find.' : pending ? 'Your find is waiting to be posted.' : 'Your best winning hunt is entered automatically.' : 'Your find is waiting. Sign in to put it on the board.'
     : 'Winning hunts are ranked by seconds remaining. Sign in to enter your next find.';
 }
 
 async function refreshLeaderboard() {
-  if (!lastResult) return;
-  const forResult = lastResult;
+  if (elements.leaderboardScreen.classList.contains('hidden')) return;
+  const version = ++leaderboardLoadVersion;
   elements.leaderboardRows.textContent = 'Loading the leaderboard…';
   try {
     const leaders = await loadLeaderboard();
-    if (lastResult !== forResult) return;
+    if (version !== leaderboardLoadVersion) return;
     elements.leaderboardRows.innerHTML = leaders.length
-      ? leaders.map((entry, index) => `<div class="leaderboard-row"><span class="leaderboard-rank">${String(index + 1).padStart(2, '0')}</span><span class="leaderboard-player"><strong>${escapeHTML(entry.name)}</strong><small>${escapeHTML(entry.country)}</small></span><strong class="leaderboard-score">${Number(entry.score)}s</strong></div>`).join('')
+      ? leaders.map((entry, index) => `<div class="leaderboard-row"><span class="leaderboard-rank">${String(index + 1).padStart(2, '0')}</span><span class="leaderboard-player"><strong>@${escapeHTML(entry.name)}</strong><small>${escapeHTML(entry.country)}</small></span><strong class="leaderboard-score">${Number(entry.score)}s</strong></div>`).join('')
       : '<p class="leaderboard-empty">No finds yet. The first place is yours to claim.</p>';
   } catch (error) {
+    if (version !== leaderboardLoadVersion) return;
     console.error(error);
     elements.leaderboardRows.textContent = 'The leaderboard is temporarily unavailable.';
+  }
+}
+
+function showLeaderboard() {
+  if (!elements.leaderboardScreen.classList.contains('hidden')) return;
+  clearVictory();
+  elements.home.classList.add('hidden');
+  elements.result.classList.add('hidden');
+  elements.leaderboardScreen.classList.remove('hidden');
+  refreshLeaderboard();
+}
+
+function restoreFromLeaderboard() {
+  elements.leaderboardScreen.classList.add('hidden');
+  const returnToResult = leaderboardReturn === 'result' && !!lastResult;
+  elements.home.classList.toggle('hidden', returnToResult);
+  elements.result.classList.toggle('hidden', !returnToResult);
+}
+
+function openLeaderboard() {
+  leaderboardReturn = elements.result.classList.contains('hidden') ? 'home' : 'result';
+  leaderboardOpenedHere = true;
+  location.hash = 'leaderboard';
+  showLeaderboard();
+}
+
+function closeLeaderboard() {
+  if (leaderboardOpenedHere) {
+    history.back();
+  } else {
+    history.replaceState({}, '', `${location.pathname}${location.search}`);
+    restoreFromLeaderboard();
   }
 }
 
@@ -417,9 +471,11 @@ function finish(state) {
   elements.hud.classList.add('hidden');
   elements.home.classList.add('hidden');
   elements.game.classList.add('hidden');
+  elements.leaderboardScreen.classList.add('hidden');
   elements.result.classList.remove('hidden');
   elements.result.classList.remove('victory');
   $('#challenge-after-win').classList.toggle('hidden', !won);
+  $('#result-leaderboard-button').classList.toggle('hidden', !won);
   $('#play-again-button').classList.toggle('primary-button', !won);
   $('#result-art').textContent = won ? '✦' : '⌛';
   $('#result-eyebrow').textContent = `LEVEL ${String(resultLevel).padStart(2, '0')} · ${won ? 'TREASURE FOUND' : 'THE TRAIL WENT COLD'}`;
@@ -428,8 +484,10 @@ function finish(state) {
   $('#result-stats').innerHTML = `<div><strong>${state.remaining}s</strong><span>ON THE CLOCK</span></div><div><strong>${state.cluesVisible}/3</strong><span>CLUES OPENED</span></div><div><strong>${state.wrongGuesses}</strong><span>WRONG GUESSES</span></div>`;
   $('#result-fact').textContent = state.puzzle.fact;
   if (won) playVictory(elements.result);
-  elements.saveStatus.textContent = user ? 'Saving this hunt…' : won ? 'Sign in to keep this winning find.' : 'Your hunt is complete. Play again for the leaderboard.';
-  if (user) saveSignedInResult(user, state);
+  elements.saveStatus.textContent = user && username ? 'Saving this hunt…' : won
+    ? user ? 'Choose a username to keep this winning find.' : 'Sign in to keep this winning find.'
+    : 'Your hunt is complete. Play again for the leaderboard.';
+  if (user && username) saveSignedInResult(user, state);
   else if (won) {
     const previous = JSON.parse(sessionStorage.getItem(PENDING_ENTRY_KEY) || 'null');
     const current = huntRecord(state);
@@ -479,7 +537,7 @@ async function openAccount(purpose = 'log') {
     friend.openLobby();
     return;
   }
-  elements.accountContent.innerHTML = `<h2>Welcome back, ${escapeHTML(user.displayName?.split(' ')[0] || 'Explorer')}.</h2><p>Your discoveries live here.</p><div id="account-stats" class="account-stats">Loading your log…</div><button id="dialog-sign-out" class="text-button" type="button">Sign out ↗</button>`;
+  elements.accountContent.innerHTML = `<h2>Welcome back, ${username ? `@${escapeHTML(username)}` : escapeHTML(user.displayName?.split(' ')[0] || 'Explorer')}.</h2><p>Your discoveries live here.</p><div id="account-stats" class="account-stats">Loading your log…</div><button id="dialog-sign-out" class="text-button" type="button">Sign out ↗</button>`;
   $('#dialog-sign-out').addEventListener('click', async () => { await logout(); elements.accountDialog.close(); });
   try {
     const hunts = await loadHunts(user);
@@ -520,24 +578,68 @@ $('#welcome-notifications').addEventListener('click', async () => {
     $('#notification-status').textContent = 'Browser alerts are unavailable. Challenges will still appear in your inbox.';
   }
 });
+$('#welcome-username').addEventListener('input', () => {
+  const input = $('#welcome-username');
+  if (!welcomeFor || input.readOnly) return;
+  const player = welcomeFor;
+  const handle = input.value.trim().toLowerCase();
+  const version = ++usernameCheckVersion;
+  const status = $('#welcome-status');
+  clearTimeout(usernameCheckTimer);
+  $('#welcome-save').disabled = true;
+  status.dataset.state = 'checking';
+  if (!/^[a-z][a-z0-9_]{2,19}$/.test(handle)) {
+    status.textContent = 'Use 3–20 characters, starting with a letter. Letters, numbers and underscores work.';
+    status.dataset.state = 'unavailable';
+    return;
+  }
+  status.textContent = `Checking @${handle}…`;
+  usernameCheckTimer = setTimeout(async () => {
+    try {
+      const available = await isUsernameAvailable(handle);
+      if (version !== usernameCheckVersion || welcomeFor?.uid !== player.uid || input.value.trim().toLowerCase() !== handle) return;
+      status.textContent = available ? `@${handle} is available.` : `@${handle} is taken. Try another.`;
+      status.dataset.state = available ? 'available' : 'unavailable';
+      $('#welcome-save').disabled = !available;
+    } catch (error) {
+      if (version !== usernameCheckVersion) return;
+      console.error(error);
+      status.textContent = 'Could not check this username. Try typing it again.';
+      status.dataset.state = 'unavailable';
+    }
+  }, 300);
+});
 $('#welcome-form').addEventListener('submit', async event => {
   event.preventDefault();
   if (!welcomeFor || user?.uid !== welcomeFor.uid) return;
   const saveButton = $('#welcome-save');
   saveButton.disabled = true;
-  $('#welcome-status').textContent = '';
+  const status = $('#welcome-status');
   try {
-    if (!username) username = await claimUsername(welcomeFor, $('#welcome-username').value);
+    if (!username) {
+      const handle = $('#welcome-username').value.trim().toLowerCase();
+      if (!await isUsernameAvailable(handle)) {
+        status.dataset.state = 'unavailable';
+        throw new Error(`@${handle} is taken. Try another.`);
+      }
+      username = await claimUsername(welcomeFor, handle);
+      renderUsername();
+    }
     $('#welcome-dialog').close();
     welcomeFor = null;
     friend.onAuth(user);
     watchInbox(user);
+    renderLeaderboardGate();
+    postPendingGuestEntry(user);
     if (browserNotificationsAvailable() && Notification.permission === 'granted')
       registerChallengePush(user).catch(error => console.warn('Background alerts could not start:', error));
   } catch (error) {
     console.error(error);
-    $('#welcome-status').textContent = error.message || 'Your username could not be saved. Try again.';
-  } finally { saveButton.disabled = false; }
+    status.textContent = error.message || 'Your username could not be saved. Try again.';
+    if (error.message?.includes('taken')) status.dataset.state = 'unavailable';
+  } finally {
+    if ($('#welcome-dialog').open) saveButton.disabled = !username && status.dataset.state !== 'available';
+  }
 });
 $('#close-welcome').addEventListener('click', () => $('#welcome-dialog').close());
 $('#challenge-list').addEventListener('click', async event => {
@@ -556,9 +658,23 @@ $('#challenge-list').addEventListener('click', async event => {
 
 $('#start-button').addEventListener('click', startHunt);
 $('#multiplayer-button').addEventListener('click', () => friend.openLobby());
+$('#home-leaderboard-button').addEventListener('click', openLeaderboard);
+$('#result-leaderboard-button').addEventListener('click', openLeaderboard);
+$('#leaderboard-back-button').addEventListener('click', closeLeaderboard);
+window.addEventListener('hashchange', () => {
+  if (location.hash === '#leaderboard') showLeaderboard();
+  else if (!elements.leaderboardScreen.classList.contains('hidden')) {
+    leaderboardOpenedHere = false;
+    restoreFromLeaderboard();
+  }
+});
 elements.leaderboardSignIn.addEventListener('click', async () => {
   if (!lastResult) return;
-  if (user) { postPendingGuestEntry(user); return; }
+  if (user) {
+    if (!username) showWelcome(user);
+    else postPendingGuestEntry(user);
+    return;
+  }
   sessionStorage.setItem(RESUME_RESULT_KEY, JSON.stringify(lastResult));
   try {
     await login();
@@ -600,6 +716,7 @@ elements.accountDialog.addEventListener('click', event => { if (event.target ===
 
 loadMap();
 loadPuzzleSet();
+if (location.hash === '#leaderboard') showLeaderboard();
 try {
   const resumed = sessionStorage.getItem(RESUME_RESULT_KEY);
   if (resumed) {
@@ -615,6 +732,7 @@ watchUser(async nextUser => {
   const currentVersion = ++authVersion;
   user = nextUser;
   username = '';
+  renderUsername();
   stopChallenges?.();
   stopChallenges = null;
   $('#account-challenges').classList.toggle('hidden', !nextUser);
@@ -628,6 +746,7 @@ watchUser(async nextUser => {
       const profile = await loadProfile(nextUser);
       if (currentVersion !== authVersion) return;
       username = profile?.username || '';
+      renderUsername();
       if (!username || (browserNotificationsAvailable() && Notification.permission === 'default' && !sessionStorage.getItem(`treasurehunch:notify-asked:${nextUser.uid}`))) {
         sessionStorage.setItem(`treasurehunch:notify-asked:${nextUser.uid}`, '1');
         showWelcome(nextUser, username);
@@ -646,7 +765,7 @@ watchUser(async nextUser => {
   renderLeaderboardGate();
   if (nextUser) {
     sessionStorage.removeItem(RESUME_RESULT_KEY);
-    postPendingGuestEntry(nextUser);
+    if (username) postPendingGuestEntry(nextUser);
     loadHunts(nextUser).then(hunts => {
       if (user?.uid !== nextUser.uid) return;
       const remoteWins = hunts.filter(hunt => hunt.result === 'won').length;

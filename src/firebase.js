@@ -2,6 +2,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult, signOut } from 'firebase/auth';
 import { getFirestore, collection, doc, getDoc, getDocs, query, setDoc, where, orderBy, limit, runTransaction, serverTimestamp, onSnapshot, writeBatch, updateDoc, deleteDoc } from 'firebase/firestore';
 import messagingWorkerUrl from './firebase-messaging-sw.js?worker&url';
+import { scoreSoloHunts } from './leaderboard.js';
 
 const app = initializeApp({
   apiKey: 'AIzaSyCDEJwlHrSfeSzfLwehsTFhCjOJOFayEc4',
@@ -138,29 +139,31 @@ export async function loadHunts(user) {
 }
 
 export async function loadLeaderboard() {
-  const result = await getDocs(query(collection(db, 'leaderboard'), orderBy('score', 'desc'), limit(50)));
+  const result = await getDocs(query(collection(db, 'leaderboard'), orderBy('averageTenths', 'asc'), limit(50)));
   return result.docs.map(snapshot => snapshot.data());
 }
 
-export async function enterLeaderboard(user, hunt) {
-  if (!user || hunt.result !== 'won' || hunt.timeLeft <= 0) return false;
+export async function enterLeaderboard(user) {
+  if (!user) return false;
+  const score = scoreSoloHunts(await loadHunts(user));
+  if (!score) return false;
   const reference = doc(db, 'leaderboard', user.uid);
   return runTransaction(db, async transaction => {
     const profile = await transaction.get(profileRef(user.uid));
     if (!profile.exists()) throw new Error('Choose a username before entering the leaderboard.');
     const username = profile.data().username;
     const previous = await transaction.get(reference);
-    if (previous.exists() && previous.data().score >= hunt.timeLeft) {
-      if (previous.data().name !== username) transaction.update(reference, { name: username });
+    if (previous.exists() && previous.data().name === username &&
+        previous.data().averageTenths === score.averageTenths &&
+        previous.data().levelsCompleted === score.levelsCompleted &&
+        previous.data().highestLevel === score.highestLevel) {
       return false;
     }
     transaction.set(reference, {
       uid: user.uid,
       name: username,
-      country: hunt.country,
-      puzzleId: hunt.puzzleId,
-      score: hunt.timeLeft,
-      completedAt: serverTimestamp(),
+      ...score,
+      updatedAt: serverTimestamp(),
     });
     return true;
   });

@@ -101,17 +101,22 @@ try {
   await assertSucceeds(getDoc(doc(stranger, 'usernames/mapfinder')));
 
   const leader = doc(seeker, 'leaderboard/seeker');
-  const leaderboardEntry = { uid: 'seeker', country: 'Italy', puzzleId: 'ITA', score: 92, completedAt: serverTimestamp() };
+  const leaderboardEntry = { uid: 'seeker', averageTenths: 500, levelsCompleted: 2, highestLevel: 2, updatedAt: serverTimestamp() };
   await assertFails(setDoc(leader, { ...leaderboardEntry, name: 'Impostor' }));
   await assertSucceeds(setDoc(leader, { ...leaderboardEntry, name: 'mapfinder' }));
-  await assertFails(updateDoc(leader, { name: 'Impostor' }));
-  await assertSucceeds(updateDoc(leader, { score: 95 }));
+  await assertFails(updateDoc(leader, { name: 'Impostor', updatedAt: serverTimestamp() }));
+  await assertSucceeds(updateDoc(leader, { averageTenths: 550, levelsCompleted: 3, highestLevel: 3, updatedAt: serverTimestamp() }));
+  await assertSucceeds(updateDoc(leader, { averageTenths: 540, updatedAt: serverTimestamp() }));
+  await assertFails(updateDoc(leader, { averageTenths: 560, updatedAt: serverTimestamp() }));
+  await assertFails(updateDoc(leader, { levelsCompleted: 2, updatedAt: serverTimestamp() }));
   await environment.withSecurityRulesDisabled(async context => {
     await setDoc(doc(context.firestore(), 'leaderboard/hider'), {
       uid: 'hider', name: 'Explorer HIDE', country: 'Italy', puzzleId: 'ITA', score: 80, completedAt: Timestamp.now(),
     });
   });
-  await assertSucceeds(updateDoc(doc(hider, 'leaderboard/hider'), { name: 'mapmaker' }));
+  await assertSucceeds(setDoc(doc(hider, 'leaderboard/hider'), {
+    uid: 'hider', name: 'mapmaker', averageTenths: 400, levelsCompleted: 1, highestLevel: 1, updatedAt: serverTimestamp(),
+  }));
 
   await assertFails(setDoc(doc(hider, 'friendHunts/QRSTUVWX23'), {
     hiderUid: 'hider', hiderName: 'Hider', targetUid: 'seeker', targetUsername: 'mapfinder', seekerUid: null, seekerName: null,

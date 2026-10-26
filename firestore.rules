@@ -204,26 +204,29 @@ service cloud.firestore {
       function validEntry() {
         return request.auth != null
           && request.auth.uid == userId
-          && request.resource.data.keys().hasOnly(['uid', 'name', 'country', 'puzzleId', 'score', 'completedAt'])
+          && request.resource.data.keys().hasOnly(['uid', 'name', 'averageTenths', 'levelsCompleted', 'highestLevel', 'updatedAt'])
+          && request.resource.data.keys().hasAll(['uid', 'name', 'averageTenths', 'levelsCompleted', 'highestLevel', 'updatedAt'])
           && request.resource.data.uid == userId
           && request.resource.data.name is string
           && request.resource.data.name.size() <= 32
           && request.resource.data.name == get(/databases/$(database)/documents/profiles/$(userId)).data.username
-          && request.resource.data.country is string
-          && request.resource.data.country.size() <= 80
-          && request.resource.data.puzzleId is string
-          && request.resource.data.puzzleId.matches('[A-Z]{3}')
-          && request.resource.data.score is int
-          && request.resource.data.score > 0
-          && request.resource.data.score <= 120
-          && request.resource.data.completedAt is timestamp;
+          && request.resource.data.averageTenths is int
+          && request.resource.data.averageTenths >= 0
+          && request.resource.data.averageTenths <= 1200
+          && request.resource.data.levelsCompleted is int
+          && request.resource.data.levelsCompleted > 0
+          && request.resource.data.highestLevel is int
+          && request.resource.data.highestLevel >= request.resource.data.levelsCompleted
+          && request.resource.data.updatedAt == request.time;
       }
       allow read: if true;
       allow create: if validEntry();
       allow update: if validEntry() &&
-        (request.resource.data.score > resource.data.score ||
-          (request.resource.data.score == resource.data.score &&
-            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name'])));
+        (!resource.data.keys().hasAll(['averageTenths', 'levelsCompleted', 'highestLevel']) ||
+          (request.resource.data.levelsCompleted >= resource.data.levelsCompleted &&
+            request.resource.data.highestLevel >= resource.data.highestLevel &&
+            (request.resource.data.levelsCompleted > resource.data.levelsCompleted ||
+              request.resource.data.averageTenths <= resource.data.averageTenths)));
       allow delete: if false;
     }
 

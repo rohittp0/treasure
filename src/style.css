@@ -166,6 +166,7 @@
 .leaderboard-screen .leaderboard-player strong{font-size:14px}
 .leaderboard-screen .leaderboard-player small{font-size:10px}
 .leaderboard-screen .leaderboard-score{font-size:22px}
+.leaderboard-screen .leaderboard-score small{display:block;color:#8f8b72;font:700 8px DM Sans,sans-serif;letter-spacing:1px;text-align:right}
 .leaderboard-screen #leaderboard-back-button{font-size:12px}
 .welcome-dialog #welcome-status[data-state="available"]{color:#336b56!important}
 .welcome-dialog #welcome-status[data-state="unavailable"]{color:#a5533f!important}

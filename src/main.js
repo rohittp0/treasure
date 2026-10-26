@@ -40,6 +40,7 @@ let victoryTimeout;
 let countryData;
 let lastResult = null;
 let pendingEntryPromise = null;
+let leaderboardSyncFailed = false;
 let leaderboardReturn = 'home';
 let leaderboardOpenedHere = false;
 let leaderboardLoadVersion = 0;
@@ -349,18 +350,34 @@ function huntRecord(state) {
   };
 }
 
+function pendingGuestHunts() {
+  try {
+    const stored = JSON.parse(sessionStorage.getItem(PENDING_ENTRY_KEY) || 'null');
+    return Array.isArray(stored) ? stored : stored ? [stored] : [];
+  } catch {
+    return [];
+  }
+}
+
+function rememberPendingGuestHunt(hunt) {
+  const pending = pendingGuestHunts();
+  if (!pending.some(item => item.level === hunt.level && item.puzzleId === hunt.puzzleId && item.timeLeft === hunt.timeLeft))
+    pending.push(hunt);
+  sessionStorage.setItem(PENDING_ENTRY_KEY, JSON.stringify(pending));
+}
+
 function renderLeaderboardGate() {
   if (!lastResult) return;
   const won = lastResult.status === 'won';
-  const pending = !!sessionStorage.getItem(PENDING_ENTRY_KEY);
-  elements.leaderboardSignIn.classList.toggle('hidden', !!user && !!username && !pending);
+  const pending = pendingGuestHunts().length > 0;
+  elements.leaderboardSignIn.classList.toggle('hidden', !!user && !!username && !pending && !leaderboardSyncFailed);
   elements.leaderboardSignIn.innerHTML = user && !username
     ? 'Choose your username <span>↗</span>'
     : user ? 'Retry leaderboard entry <span>↗</span>'
     : won ? 'Sign in to enter this find <span>↗</span>' : 'Sign in for future finds <span>↗</span>';
   elements.leaderboardNote.textContent = won
-    ? user ? !username ? 'Choose an available username to enter this find.' : pending ? 'Your find is waiting to be posted.' : 'Your best winning hunt is entered automatically.' : 'Your find is waiting. Sign in to put it on the board.'
-    : 'Winning hunts are ranked by seconds remaining. Sign in to enter your next find.';
+    ? user ? !username ? 'Choose an available username to enter this find.' : pending ? 'Your finds are waiting to be posted.' : leaderboardSyncFailed ? 'Your score needs another try to update.' : 'Your weighted average updates after each winning level.' : 'Your find is waiting. Sign in to put it on the board.'
+    : 'Winning levels are ranked by weighted average time used. Sign in to enter your next find.';
 }
 
 async function refreshLeaderboard() {
@@ -371,7 +388,7 @@ async function refreshLeaderboard() {
     const leaders = await loadLeaderboard();
     if (version !== leaderboardLoadVersion) return;
     elements.leaderboardRows.innerHTML = leaders.length
-      ? leaders.map((entry, index) => `<div class="leaderboard-row"><span class="leaderboard-rank">${String(index + 1).padStart(2, '0')}</span><span class="leaderboard-player"><strong>@${escapeHTML(entry.name)}</strong><small>${escapeHTML(entry.country)}</small></span><strong class="leaderboard-score">${Number(entry.score)}s</strong></div>`).join('')
+      ? leaders.map((entry, index) => `<div class="leaderboard-row"><span class="leaderboard-rank">${String(index + 1).padStart(2, '0')}</span><span class="leaderboard-player"><strong>@${escapeHTML(entry.name)}</strong><small>${Number(entry.levelsCompleted)} ${entry.levelsCompleted === 1 ? 'level' : 'levels'} · reached level ${Number(entry.highestLevel)}</small></span><strong class="leaderboard-score">${(Number(entry.averageTenths) / 10).toFixed(1)}s<small>AVG</small></strong></div>`).join('')
       : '<p class="leaderboard-empty">No finds yet. The first place is yours to claim.</p>';
   } catch (error) {
     if (version !== leaderboardLoadVersion) return;
@@ -419,10 +436,14 @@ async function saveSignedInResult(player, state) {
     await saveHunt(player, hunt);
     huntSaved = true;
     if (lastResult === state) elements.saveStatus.textContent = 'Saved to your explorer log.';
-    if (hunt.result === 'won') await enterLeaderboard(player, hunt);
+    if (hunt.result === 'won') await enterLeaderboard(player);
+    leaderboardSyncFailed = false;
+    renderLeaderboardGate();
     await refreshLeaderboard();
   } catch (error) {
     console.error(error);
+    leaderboardSyncFailed = huntSaved;
+    renderLeaderboardGate();
     if (lastResult === state) elements.saveStatus.textContent = huntSaved
       ? 'Your hunt was saved, but your score could not reach the leaderboard.'
       : 'This hunt could not be saved. Check your connection and try again later.';
@@ -431,20 +452,24 @@ async function saveSignedInResult(player, state) {
 
 function postPendingGuestEntry(player) {
   if (!player || pendingEntryPromise) return pendingEntryPromise;
-  const pending = sessionStorage.getItem(PENDING_ENTRY_KEY);
-  if (!pending) return null;
+  const pending = pendingGuestHunts();
   pendingEntryPromise = (async () => {
-    const hunt = JSON.parse(pending);
-    await enterLeaderboard(player, hunt);
-    await saveHunt(player, hunt);
-    sessionStorage.removeItem(PENDING_ENTRY_KEY);
-    sessionStorage.removeItem(RESUME_RESULT_KEY);
-    if (lastResult) elements.saveStatus.textContent = 'Your find is saved and entered on the leaderboard.';
+    for (const hunt of pending) await saveHunt(player, hunt);
+    await enterLeaderboard(player);
+    if (pending.length) {
+      sessionStorage.removeItem(PENDING_ENTRY_KEY);
+      sessionStorage.removeItem(RESUME_RESULT_KEY);
+    }
+    leaderboardSyncFailed = false;
+    if (pending.length && lastResult) elements.saveStatus.textContent = 'Your finds are saved and entered on the leaderboard.';
     renderLeaderboardGate();
     await refreshLeaderboard();
   })().catch(error => {
     console.error(error);
-    if (lastResult) elements.saveStatus.textContent = 'Your find is still saved on this device. Tap retry to post it.';
+    leaderboardSyncFailed = true;
+    if (lastResult) elements.saveStatus.textContent = pending.length
+      ? 'Your finds are still saved on this device. Tap retry to post them.'
+      : 'Your score could not update. Tap retry to try again.';
     renderLeaderboardGate();
   }).finally(() => { pendingEntryPromise = null; });
   return pendingEntryPromise;
@@ -489,11 +514,7 @@ function finish(state) {
     ? user ? 'Choose a username to keep this winning find.' : 'Sign in to keep this winning find.'
     : 'Your hunt is complete. Play again for the leaderboard.';
   if (user && username) saveSignedInResult(user, state);
-  else if (won) {
-    const previous = JSON.parse(sessionStorage.getItem(PENDING_ENTRY_KEY) || 'null');
-    const current = huntRecord(state);
-    if (!previous || current.timeLeft > previous.timeLeft) sessionStorage.setItem(PENDING_ENTRY_KEY, JSON.stringify(current));
-  }
+  else if (won) rememberPendingGuestHunt(huntRecord(state));
   renderLeaderboardGate();
   refreshLeaderboard();
 }
@@ -733,6 +754,7 @@ watchUser(async nextUser => {
   const currentVersion = ++authVersion;
   user = nextUser;
   username = '';
+  leaderboardSyncFailed = false;
   renderUsername();
   stopChallenges?.();
   stopChallenges = null;
@@ -769,7 +791,7 @@ watchUser(async nextUser => {
     if (username) postPendingGuestEntry(nextUser);
     loadHunts(nextUser).then(hunts => {
       if (user?.uid !== nextUser.uid) return;
-      const remoteWins = hunts.filter(hunt => hunt.result === 'won').length;
+      const remoteWins = Math.max(0, ...hunts.filter(hunt => hunt.result === 'won').map(hunt => Number.isSafeInteger(hunt.level) && hunt.level > 0 ? hunt.level : 1));
       if (remoteWins > completedWins) {
         completedWins = remoteWins;
         rememberCompletedWins();

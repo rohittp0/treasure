@@ -4,7 +4,7 @@ A mobile-first solo geography hunt. The player has two minutes to locate a hidde
 
 Hunts have easy, medium and hard country pools. The first two winning levels draw easy countries, levels 3–5 draw medium countries, and level 6 onward draws hard countries. Losing keeps the player on the same level. Solo progress is kept on this device; signed-in players also save completed hunts to Firestore, and their winning hunt count can restore progress on another device.
 
-Solo hunts start without an account. After the first completed hunt, the result screen shows a public leaderboard. A winning guest can sign in with Google to post that find; each signed-in explorer keeps their best score, measured in seconds remaining.
+Solo hunts start without an account. After a win, the player can open the public leaderboard and sign in with Google to enter it. The score is the weighted average seconds used across won levels, including time spent on clues and wrong guesses. Each level contributes its best winning time once; level N has weight N, so later, harder levels count more. Lower averages rank higher. Guest wins stay in the browser session until sign-in.
 
 A winning result celebrates the find and offers **Challenge a friend**. That opens the hiding flow with the just-found country selected, ready for the player to write their own clues. Guests sign in before creating the challenge.
 
@@ -25,8 +25,8 @@ The browser uses the 44 included puzzles if Firestore is unavailable. Google sig
 
 - [data/countries.json](data/countries.json) is the editorial source for 44 countries and 132 clues, each country marked easy, medium or hard. [data/CLUE-SOURCES.md](data/CLUE-SOURCES.md) records the references.
 - `node scripts/seed-firestore.mjs` checks the data without writing. `node scripts/seed-firestore.mjs --write` publishes it to the `puzzles` collection in project `treasurehunch`, using the currently signed-in Firebase CLI account.
-- Public clients can read active puzzles and leaderboard entries. Only a signed-in player can read their own profile and hunt history under `users/{uid}` or write their own best leaderboard entry. Puzzle writes require a privileged Firebase CLI account; the browser cannot edit them.
-- Signed-in players save completed hunts in `users/{uid}/hunts`. A guest's best winning result is kept in the current browser session until sign-in.
+- Public clients can read active puzzles and leaderboard entries. Only a signed-in player can read their own profile and hunt history under `users/{uid}` or write their own leaderboard entry. Puzzle writes require a privileged Firebase CLI account; the browser cannot edit them.
+- Signed-in players save completed hunts in `users/{uid}/hunts`. Guest wins are kept in the current browser session until sign-in.
 - The leaderboard is a casual client-scored feature. Competitive anti-cheat would require server-validated rounds.
 - A friend hunt stores the hidden country and pin in a separate Firestore document. Rules only let the hider read it until the seeker pays for the reveal or the hunt ends. Guess transitions are checked against that document by Firestore rules. This is a casual game: rejected writes can still be probed by a modified client, so friend scores deliberately stay off the leaderboard.
 - Run `npm run test:rules` with Java and the Firebase CLI installed to verify friend-hunt rules in the Firestore emulator.

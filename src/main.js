@@ -310,6 +310,7 @@ function finish(state) {
   }
   lastResult = state;
   clearMapSelection();
+  renderSelection(state);
   document.body.classList.remove('in-game');
   setSheetCollapsed(false);
   elements.hud.classList.add('hidden');

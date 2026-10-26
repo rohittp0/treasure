@@ -5,6 +5,7 @@ import './style.css';
 import fallbackPuzzles from '../data/countries.json';
 import { choosePuzzle, createGame, difficultyForLevel, CLUE_COST, REVEAL_COST } from './game.js';
 import { watchUser, login, logout, loadPuzzles, saveHunt, loadHunts, loadLeaderboard, enterLeaderboard } from './firebase.js';
+import { createFriendController } from './friend-controller.js';
 
 maplibregl.setWorkerUrl(mapWorkerUrl);
 
@@ -83,6 +84,7 @@ function setSheetCollapsed(collapsed) {
 }
 
 function collapseSheetForMap() {
+  if (friend.mode === 'seeker') { friend.collapseOnMap(); return; }
   if (game?.snapshot().status === 'playing') setSheetCollapsed(true);
 }
 
@@ -125,11 +127,12 @@ async function loadMap() {
       map.addSource('country-labels', { type: 'geojson', data: { type: 'FeatureCollection', features: labels } });
       map.addLayer({ id: 'labels', type: 'symbol', source: 'country-labels', layout: { 'text-field': ['get', 'name'], 'text-size': ['interpolate', ['linear'], ['zoom'], 0, 9, 3, 12], 'text-font': ['Open Sans Semibold'], 'text-allow-overlap': false }, paint: { 'text-color': '#395a57', 'text-halo-color': '#dfdcc1', 'text-halo-width': 1.2 } });
       map.on('click', 'land', event => {
-        if (!game || game.snapshot().status !== 'playing') return;
         const feature = event.features?.[0];
-        if (feature) selectMapCountry({ id: feature.properties.id, country: feature.properties.name });
+        if (!feature) return;
+        if (friend.mapCountry(feature, event.lngLat)) return;
+        if (game?.snapshot().status === 'playing') selectMapCountry({ id: feature.properties.id, country: feature.properties.name });
       });
-      map.on('mouseenter', 'land', () => { map.getCanvas().style.cursor = game ? 'pointer' : 'grab'; });
+      map.on('mouseenter', 'land', () => { map.getCanvas().style.cursor = game || ['hiding', 'seeker'].includes(friend.mode) ? 'pointer' : 'grab'; });
       map.on('mouseleave', 'land', () => { map.getCanvas().style.cursor = ''; });
       elements.mapLoading.classList.add('hidden');
     });
@@ -193,6 +196,7 @@ function renderGame() {
 
 function startHunt() {
   if (!map?.getLayer('land')) { showToast('The map is still loading. One moment!'); return; }
+  if (friend.mode !== 'idle') friend.home();
   activeLevel = completedWins + 1;
   const lastId = sessionStorage.getItem('treasurehunch:last-country') || '';
   const puzzle = choosePuzzle(puzzles, lastId, Math.random, activeLevel);
@@ -352,13 +356,12 @@ async function openAccount(purpose = 'log') {
   elements.accountDialog.showModal();
   if (!user) {
     elements.accountContent.innerHTML = multiplayer
-      ? '<h2>Sign in to play together.</h2><p>Multiplayer will require a Google account. Sign in now to get ready; friend hunts are coming soon.</p><button id="dialog-sign-in" class="primary-button" type="button">Sign in with Google <span>↗</span></button>'
+      ? '<h2>Sign in to play together.</h2><p>Use your Google account to hide a treasure or join a friend’s hunt.</p><button id="dialog-sign-in" class="primary-button" type="button">Sign in with Google <span>↗</span></button>'
       : '<h2>Keep your discoveries.</h2><p>Sign in with Google to save each completed hunt and revisit your explorer log.</p><button id="dialog-sign-in" class="primary-button" type="button">Continue with Google <span>↗</span></button>';
     $('#dialog-sign-in').addEventListener('click', async () => {
       try {
         await login();
         if (elements.accountDialog.open) elements.accountDialog.close();
-        if (multiplayer) showToast('Signed in! Friend hunts are coming soon.');
       } catch (error) {
         showToast('Sign-in could not start. Please try again.');
         console.error(error);
@@ -367,8 +370,8 @@ async function openAccount(purpose = 'log') {
     return;
   }
   if (multiplayer) {
-    elements.accountContent.innerHTML = '<h2>You’re ready to play together.</h2><p>Multiplayer matches are still in development. Your account is ready, and solo hunts are open now.</p><button id="dialog-solo" class="primary-button" type="button">Start a solo hunt <span>↗</span></button>';
-    $('#dialog-solo').addEventListener('click', () => { elements.accountDialog.close(); startHunt(); });
+    elements.accountDialog.close();
+    friend.openLobby();
     return;
   }
   elements.accountContent.innerHTML = `<h2>Welcome back, ${escapeHTML(user.displayName?.split(' ')[0] || 'Explorer')}.</h2><p>Your discoveries live here.</p><div id="account-stats" class="account-stats">Loading your log…</div><button id="dialog-sign-out" class="text-button" type="button">Sign out ↗</button>`;
@@ -385,8 +388,18 @@ async function openAccount(purpose = 'log') {
   }
 }
 
+const friend = createFriendController({
+  getUser: () => user,
+  getMap: () => map,
+  getCountries: () => countryData,
+  showToast,
+  requestSignIn: () => openAccount('multiplayer'),
+  clearMapSelection,
+  setSheetCollapsed,
+});
+
 $('#start-button').addEventListener('click', startHunt);
-$('#multiplayer-button').addEventListener('click', () => openAccount('multiplayer'));
+$('#multiplayer-button').addEventListener('click', () => friend.openLobby());
 elements.leaderboardSignIn.addEventListener('click', async () => {
   if (!lastResult) return;
   if (user) { postPendingGuestEntry(user); return; }
@@ -401,12 +414,13 @@ elements.leaderboardSignIn.addEventListener('click', async () => {
   }
 });
 $('#play-again-button').addEventListener('click', startHunt);
-$('#leave-button').addEventListener('click', leaveHunt);
+$('#leave-button').addEventListener('click', () => friend.mode === 'seeker' ? friend.home() : leaveHunt());
 elements.sheetToggle.addEventListener('click', () => setSheetCollapsed(!document.body.classList.contains('sheet-collapsed')));
-$('#unlock-button').addEventListener('click', () => { game?.unlock(); renderGame(); });
-$('#reveal-button').addEventListener('click', () => { game?.reveal(); renderGame(); });
-$('#cancel-button').addEventListener('click', () => { game?.cancel(); clearMapSelection(); renderGame(); });
+$('#unlock-button').addEventListener('click', () => { if (friend.mode === 'seeker') friend.unlock(); else { game?.unlock(); renderGame(); } });
+$('#reveal-button').addEventListener('click', () => { if (friend.mode === 'seeker') friend.reveal(); else { game?.reveal(); renderGame(); } });
+$('#cancel-button').addEventListener('click', () => { if (friend.mode === 'seeker') friend.cancelSelection(); else { game?.cancel(); clearMapSelection(); renderGame(); } });
 $('#guess-button').addEventListener('click', () => {
+  if (friend.mode === 'seeker') { friend.guess(); return; }
   if (!game) return;
   const before = game.snapshot();
   const after = game.guess();
@@ -439,7 +453,8 @@ watchUser(nextUser => {
   user = nextUser;
   elements.accountButton.innerHTML = nextUser ? `<span class="account-avatar">${escapeHTML((nextUser.displayName || 'E')[0])}</span><span class="account-label">My log</span>` : 'Sign in <span aria-hidden="true">↗</span>';
   elements.accountButton.setAttribute('aria-label', nextUser ? 'Open explorer log' : 'Sign in with Google');
-  $('#multiplayer-hint').textContent = nextUser ? 'You’re signed in · Coming soon' : 'Sign in required · Coming soon';
+  $('#multiplayer-hint').textContent = nextUser ? 'Hide or join a hunt' : 'Sign in required';
+  friend.onAuth(nextUser);
   renderLeaderboardGate();
   if (nextUser) {
     sessionStorage.removeItem(RESUME_RESULT_KEY);

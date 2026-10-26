@@ -62,3 +62,47 @@
 }
 @media(max-width:390px){.in-game{--sheet-height:54dvh}.in-game.sheet-collapsed{--sheet-height:90px}}
 @media(prefers-reduced-motion:reduce){.in-game .game-panel{transition:none}}
+
+.friend-card{position:absolute;z-index:6;left:max(4vw,24px);top:50%;transform:translateY(-45%);width:min(470px,calc(100vw - 48px));max-height:calc(100dvh - 105px);overflow-y:auto;padding:33px 34px 28px;background:linear-gradient(150deg,#f4e8cd,#e9dbbb);border:1px solid #fff2cf;color:#17383a;border-radius:10px;box-shadow:0 24px 65px #041a20aa;scrollbar-width:thin}
+.friend-card:before{content:'';pointer-events:none;position:absolute;inset:8px;border:1px solid #967e5844;border-radius:5px}
+.friend-card>*{position:relative;z-index:1}
+.friend-card h2{font:600 39px/1.08 Fraunces,serif;letter-spacing:-1.3px;margin:16px 0 12px}
+.friend-card h2 em{color:#b87642;font-weight:500}
+.friend-card p:not(.kicker){color:#536a64;font-size:13px;line-height:1.6}
+.friend-primary{width:100%;margin:12px 0 4px}
+.friend-divider{display:flex;align-items:center;gap:13px;margin:26px 0 18px;color:#8c795c;font-size:9px;font-weight:700;letter-spacing:1.6px}
+.friend-divider:before,.friend-divider:after{content:'';flex:1;height:1px;background:#bda981}
+.friend-card label{display:block;margin:13px 0 7px;color:#526d66;font-size:10px;letter-spacing:1.2px;font-weight:700;text-transform:uppercase}
+.friend-card input,.friend-card textarea{width:100%;border:1px solid #bba780;background:#fff9e8;color:#17383a;border-radius:5px;padding:12px 13px;font:13px DM Sans,sans-serif;outline:none}
+.friend-card input:focus,.friend-card textarea:focus{border-color:#b76c3e;box-shadow:0 0 0 3px #c8794833}
+.friend-card textarea{min-height:72px;resize:vertical;line-height:1.4}
+.friend-join-form>div{display:flex;gap:8px;align-items:center}
+.friend-join-form input{min-width:0;flex:1;letter-spacing:1.5px;text-transform:uppercase}
+.friend-join-form .secondary-button{width:auto;min-width:119px;min-height:43px;margin:0;justify-content:center;background:#f9efda;white-space:nowrap}
+.friend-status{min-height:19px;margin:13px 0;color:#875e3e!important;font-weight:600}
+.friend-back{margin-top:3px;padding-left:0;font-size:12px}
+.friend-place{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:9px 0 13px;padding:10px 12px;border:1px dashed #b69d73;border-radius:5px;color:#6a776b;font-size:12px}
+.friend-place strong{color:#17383a;font:600 18px Fraunces,serif}
+.friend-search-results{display:grid;gap:1px;max-height:162px;overflow:auto;background:#f4e7ca;border:1px solid #bbab88;border-radius:5px}
+.friend-search-results button{min-height:35px;padding:7px 12px;border:0;border-bottom:1px solid #d4c4a0;background:#fff8e6;color:#234e4c;text-align:left;font-size:12px}
+.friend-search-results button:hover{background:#ead5a8}
+.friend-search-results span{padding:10px;color:#718078;font-size:11px}
+.friend-share-code{margin:20px 0 13px;padding:15px;border:1px dashed #ac8b59;border-radius:6px;background:#fff7e4;color:#a2653c;text-align:center;font:600 29px Fraunces,serif;letter-spacing:5px;user-select:all}
+.friend-copy{width:100%;margin:0}
+.friend-result{text-align:center;left:50%;transform:translate(-50%,-45%)}
+.friend-result .result-art{margin-top:5px}
+.friend-result .result-stats{margin:20px 0}
+.friend-result-note{font-size:11px!important;margin:16px 0 5px}
+@media(max-width:700px){
+  .friend-card{left:12px;top:calc(50% + 24px);transform:translateY(-50%);width:calc(100vw - 24px);max-height:calc(100dvh - 90px);padding:25px 23px 23px}
+  .friend-card h2{font-size:32px}
+  .friend-hide{left:0;top:auto;bottom:0;transform:none;width:100%;height:min(63dvh,570px);max-height:none;padding:22px 21px calc(22px + env(safe-area-inset-bottom));border-radius:17px 17px 0 0}
+  .friend-hide:before{border-radius:11px 11px 0 0}
+  .friend-hide h2{margin:10px 0 7px}
+  .friend-hide p:not(.kicker){margin:5px 0 12px}
+  .friend-card textarea{min-height:64px}
+  .friend-join-form>div{flex-direction:column;align-items:stretch}
+  .friend-join-form .secondary-button{width:100%}
+  .friend-share-code{font-size:22px;letter-spacing:3px}
+  .friend-result{left:12px;top:calc(50% + 24px);transform:translateY(-50%)}
+}

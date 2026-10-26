@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult, signOut } from 'firebase/auth';
-import { getFirestore, collection, doc, getDoc, getDocs, query, setDoc, where, orderBy, limit, runTransaction, serverTimestamp } from 'firebase/firestore';
+import { getFirestore, collection, doc, getDoc, getDocs, query, setDoc, where, orderBy, limit, runTransaction, serverTimestamp, onSnapshot, writeBatch } from 'firebase/firestore';
 
 const app = initializeApp({
   apiKey: 'AIzaSyCDEJwlHrSfeSzfLwehsTFhCjOJOFayEc4',
@@ -83,4 +83,127 @@ export async function enterLeaderboard(user, hunt) {
     });
     return true;
   });
+}
+
+const friendRef = code => doc(db, 'friendHunts', code);
+const answerRef = code => doc(db, 'friendHunts', code, 'private', 'answer');
+
+export async function createFriendHunt(user, code, place, clues) {
+  const batch = writeBatch(db);
+  batch.set(friendRef(code), {
+    hiderUid: user.uid,
+    hiderName: (user.displayName || 'Explorer').slice(0, 48),
+    seekerUid: null,
+    seekerName: null,
+    clues,
+    status: 'waiting',
+    createdAt: serverTimestamp(),
+    startedAt: null,
+    endedAt: null,
+    cluesVisible: 1,
+    costSeconds: 0,
+    wrongGuesses: 0,
+    triedIds: [],
+    lastGuessId: '',
+    lastGuessOutcome: '',
+    revealed: false,
+  });
+  batch.set(answerRef(code), {
+    id: place.id,
+    country: place.country,
+    lng: place.lng,
+    lat: place.lat,
+  });
+  await batch.commit();
+}
+
+export async function getFriendHunt(code) {
+  const snapshot = await getDoc(friendRef(code));
+  return snapshot.exists() ? snapshot.data() : null;
+}
+
+export function watchFriendHunt(code, onChange, onError) {
+  return onSnapshot(friendRef(code), snapshot => onChange(snapshot.exists() ? snapshot.data() : null), onError);
+}
+
+export async function joinFriendHunt(user, code) {
+  return runTransaction(db, async transaction => {
+    const reference = friendRef(code);
+    const snapshot = await transaction.get(reference);
+    if (!snapshot.exists()) throw new Error('That hunt code was not found.');
+    const hunt = snapshot.data();
+    if (hunt.hiderUid === user.uid) return 'hider';
+    if (hunt.seekerUid === user.uid) return 'seeker';
+    if (hunt.status !== 'waiting') throw new Error('That hunt already has a seeker.');
+    transaction.update(reference, {
+      seekerUid: user.uid,
+      seekerName: (user.displayName || 'Explorer').slice(0, 48),
+      status: 'playing',
+      startedAt: serverTimestamp(),
+    });
+    return 'seeker';
+  });
+}
+
+export async function loadFriendAnswer(code) {
+  const snapshot = await getDoc(answerRef(code));
+  if (!snapshot.exists()) throw new Error('The treasure location could not be found.');
+  return snapshot.data();
+}
+
+export async function unlockFriendClue(code) {
+  await runTransaction(db, async transaction => {
+    const reference = friendRef(code);
+    const snapshot = await transaction.get(reference);
+    if (!snapshot.exists()) throw new Error('This hunt is no longer available.');
+    const hunt = snapshot.data();
+    transaction.update(reference, { cluesVisible: hunt.cluesVisible + 1, costSeconds: hunt.costSeconds + 20 });
+  });
+}
+
+export async function revealFriendCountry(code) {
+  await runTransaction(db, async transaction => {
+    const reference = friendRef(code);
+    const snapshot = await transaction.get(reference);
+    if (!snapshot.exists()) throw new Error('This hunt is no longer available.');
+    const hunt = snapshot.data();
+    transaction.update(reference, { revealed: true, costSeconds: hunt.costSeconds + 50 });
+  });
+}
+
+export async function submitFriendGuess(code, countryId) {
+  async function submit(outcome) {
+    return runTransaction(db, async transaction => {
+      const reference = friendRef(code);
+      const snapshot = await transaction.get(reference);
+      if (!snapshot.exists()) throw new Error('This hunt is no longer available.');
+      const hunt = snapshot.data();
+      if (hunt.status !== 'playing' || hunt.triedIds.includes(countryId)) throw new Error('This country cannot be guessed now.');
+      if (outcome === 'correct') {
+        transaction.update(reference, {
+          status: 'won', endedAt: serverTimestamp(),
+          lastGuessId: countryId, lastGuessOutcome: 'correct',
+        });
+      } else {
+        transaction.update(reference, {
+          costSeconds: hunt.costSeconds + 5,
+          wrongGuesses: hunt.wrongGuesses + 1,
+          triedIds: [...hunt.triedIds, countryId],
+          lastGuessId: countryId, lastGuessOutcome: 'wrong',
+        });
+      }
+    });
+  }
+  try {
+    await submit('correct');
+    return 'correct';
+  } catch (error) {
+    if (error.code !== 'permission-denied') throw error;
+    await submit('wrong');
+    return 'wrong';
+  }
+}
+
+export async function timeOutFriendHunt(code) {
+  await updateDoc(friendRef(code), { status: 'lost', endedAt: serverTimestamp() });
 }

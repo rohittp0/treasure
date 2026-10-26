@@ -6,6 +6,157 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /friendHunts/{code} {
+      function fields() {
+        return ['hiderUid', 'hiderName', 'seekerUid', 'seekerName', 'clues',
+          'status', 'createdAt', 'startedAt', 'endedAt', 'cluesVisible',
+          'costSeconds', 'wrongGuesses', 'triedIds', 'lastGuessId',
+          'lastGuessOutcome', 'revealed'];
+      }
+      function changedOnly(allowed) {
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed);
+      }
+      function participant() {
+        return request.auth != null &&
+          (request.auth.uid == resource.data.hiderUid || request.auth.uid == resource.data.seekerUid);
+      }
+      function activeSeeker() {
+        return request.auth != null && request.auth.uid == resource.data.seekerUid
+          && resource.data.status == 'playing'
+          && resource.data.startedAt is timestamp
+          && request.time < resource.data.startedAt + duration.value(120 - resource.data.costSeconds, 's');
+      }
+      function answerId() {
+        return get(/databases/$(database)/documents/friendHunts/$(code)/private/answer).data.id;
+      }
+      function validCreate() {
+        return request.auth != null
+          && code.matches('[A-HJ-NP-Z2-9]{10}')
+          && request.resource.data.keys().hasOnly(fields())
+          && request.resource.data.keys().hasAll(fields())
+          && request.resource.data.hiderUid == request.auth.uid
+          && request.resource.data.hiderName is string
+          && request.resource.data.hiderName.size() <= 48
+          && request.resource.data.seekerUid == null
+          && request.resource.data.seekerName == null
+          && request.resource.data.clues is list
+          && request.resource.data.clues.size() == 3
+          && request.resource.data.clues[0] is string
+          && request.resource.data.clues[1] is string
+          && request.resource.data.clues[2] is string
+          && request.resource.data.clues[0].size() >= 5
+          && request.resource.data.clues[1].size() >= 5
+          && request.resource.data.clues[2].size() >= 5
+          && request.resource.data.clues[0].size() <= 180
+          && request.resource.data.clues[1].size() <= 180
+          && request.resource.data.clues[2].size() <= 180
+          && request.resource.data.status == 'waiting'
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.startedAt == null
+          && request.resource.data.endedAt == null
+          && request.resource.data.cluesVisible == 1
+          && request.resource.data.costSeconds == 0
+          && request.resource.data.wrongGuesses == 0
+          && request.resource.data.triedIds == []
+          && request.resource.data.lastGuessId == ''
+          && request.resource.data.lastGuessOutcome == ''
+          && request.resource.data.revealed == false;
+      }
+      function validJoin() {
+        return request.auth != null
+          && resource.data.status == 'waiting'
+          && request.auth.uid != resource.data.hiderUid
+          && changedOnly(['seekerUid', 'seekerName', 'status', 'startedAt'])
+          && request.resource.data.seekerUid == request.auth.uid
+          && request.resource.data.seekerName is string
+          && request.resource.data.seekerName.size() <= 48
+          && request.resource.data.status == 'playing'
+          && request.resource.data.startedAt == request.time;
+      }
+      function validUnlock() {
+        return activeSeeker()
+          && resource.data.cluesVisible < 3
+          && request.time < resource.data.startedAt + duration.value(100 - resource.data.costSeconds, 's')
+          && changedOnly(['cluesVisible', 'costSeconds'])
+          && request.resource.data.cluesVisible == resource.data.cluesVisible + 1
+          && request.resource.data.costSeconds == resource.data.costSeconds + 20;
+      }
+      function validReveal() {
+        return activeSeeker()
+          && resource.data.cluesVisible == 3
+          && resource.data.revealed == false
+          && request.time < resource.data.startedAt + duration.value(70 - resource.data.costSeconds, 's')
+          && changedOnly(['revealed', 'costSeconds'])
+          && request.resource.data.revealed == true
+          && request.resource.data.costSeconds == resource.data.costSeconds + 50;
+      }
+      function freshGuess() {
+        return request.resource.data.lastGuessId is string
+          && request.resource.data.lastGuessId.matches('[A-Z]{3}')
+          && !(request.resource.data.lastGuessId in resource.data.triedIds);
+      }
+      function validCorrectGuess() {
+        return activeSeeker()
+          && changedOnly(['status', 'endedAt', 'lastGuessId', 'lastGuessOutcome'])
+          && freshGuess()
+          && request.resource.data.lastGuessId == answerId()
+          && request.resource.data.lastGuessOutcome == 'correct'
+          && request.resource.data.status == 'won'
+          && request.resource.data.endedAt == request.time;
+      }
+      function validWrongGuess() {
+        return activeSeeker()
+          && changedOnly(['costSeconds', 'wrongGuesses', 'triedIds', 'lastGuessId', 'lastGuessOutcome'])
+          && freshGuess()
+          && request.resource.data.lastGuessId != answerId()
+          && request.resource.data.lastGuessOutcome == 'wrong'
+          && request.resource.data.costSeconds == resource.data.costSeconds + 5
+          && request.resource.data.wrongGuesses == resource.data.wrongGuesses + 1
+          && request.resource.data.triedIds == resource.data.triedIds.concat([request.resource.data.lastGuessId]);
+      }
+      function validTimeout() {
+        return participant()
+          && resource.data.status == 'playing'
+          && request.time >= resource.data.startedAt + duration.value(120 - resource.data.costSeconds, 's')
+          && changedOnly(['status', 'endedAt'])
+          && request.resource.data.status == 'lost'
+          && request.resource.data.endedAt == request.time;
+      }
+
+      allow get: if request.auth != null &&
+        (participant() || resource.data.status == 'waiting');
+      allow list: if false;
+      allow create: if validCreate();
+      allow update: if validJoin() || validUnlock() || validReveal()
+        || validCorrectGuess() || validWrongGuess() || validTimeout();
+      allow delete: if false;
+
+      match /private/{privateId} {
+        function hunt() {
+          return get(/databases/$(database)/documents/friendHunts/$(code)).data;
+        }
+        allow get: if request.auth != null && privateId == 'answer' &&
+          (request.auth.uid == hunt().hiderUid ||
+            (request.auth.uid == hunt().seekerUid &&
+              (hunt().revealed == true || hunt().status in ['won', 'lost'])));
+        allow list: if false;
+        allow create: if request.auth != null && privateId == 'answer'
+          && getAfter(/databases/$(database)/documents/friendHunts/$(code)).data.hiderUid == request.auth.uid
+          && getAfter(/databases/$(database)/documents/friendHunts/$(code)).data.status == 'waiting'
+          && request.resource.data.keys().hasOnly(['id', 'country', 'lng', 'lat'])
+          && request.resource.data.keys().hasAll(['id', 'country', 'lng', 'lat'])
+          && request.resource.data.id is string
+          && request.resource.data.id.matches('[A-Z]{3}')
+          && request.resource.data.country is string
+          && request.resource.data.country.size() <= 80
+          && request.resource.data.lng is number
+          && request.resource.data.lat is number
+          && request.resource.data.lng >= -180 && request.resource.data.lng <= 180
+          && request.resource.data.lat >= -90 && request.resource.data.lat <= 90;
+        allow update, delete: if false;
+      }
+    }
+
     match /leaderboard/{userId} {
       function validEntry() {
         return request.auth != null

@@ -47,9 +47,65 @@
           <h1 id="home-title">Every place<br />has a <em>story.</em></h1>
           <p class="home-copy">Three clues. One hidden country. Follow your hunch and find the treasure before the clock runs out.</p>
           <button id="start-button" class="primary-button home-start" type="button">Start a solo hunt <span aria-hidden="true">↗</span></button>
-          <button id="multiplayer-button" class="multiplayer-button" type="button"><span><strong>Play with a friend</strong><small id="multiplayer-hint">Sign in required · Coming soon</small></span><span aria-hidden="true">↗</span></button>
+          <button id="multiplayer-button" class="multiplayer-button" type="button"><span><strong>Play with a friend</strong><small id="multiplayer-hint">Sign in required</small></span><span aria-hidden="true">↗</span></button>
           <div class="home-rule"><span>01 <b>READ THE CLUE</b></span><i></i><span>02 <b>EXPLORE THE MAP</b></span><i></i><span>03 <b>FIND THE COUNTRY</b></span></div>
           <p id="home-status" class="home-status" role="status">Loading your adventures…</p>
+        </section>
+
+        <section id="friend-lobby" class="friend-card hidden" aria-labelledby="friend-lobby-title">
+          <p class="kicker">✦ &nbsp; TWO EXPLORERS, ONE TREASURE</p>
+          <h2 id="friend-lobby-title">Play with a <em>friend.</em></h2>
+          <p>One of you hides a country and writes three clues. The other follows the trail across the map.</p>
+          <button id="friend-hide-button" class="primary-button friend-primary" type="button">Hide a treasure <span aria-hidden="true">↗</span></button>
+          <div class="friend-divider">OR JOIN A HUNT</div>
+          <form id="friend-join-form" class="friend-join-form">
+            <label for="friend-code-input">Invite code</label>
+            <div><input id="friend-code-input" maxlength="14" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Enter 10-character code" required /><button class="secondary-button" type="submit">Join hunt →</button></div>
+          </form>
+          <p id="friend-lobby-status" class="friend-status" role="status"></p>
+          <button class="friend-back text-button" type="button">← Back to home</button>
+        </section>
+
+        <section id="friend-hide" class="friend-card friend-hide hidden" aria-labelledby="friend-hide-title">
+          <p class="kicker">✦ &nbsp; THE HIDING PLAYER</p>
+          <h2 id="friend-hide-title">Set the <em>trail.</em></h2>
+          <p>Search for a country or tap it on the map to drop your pin. Your friend will only see your clues.</p>
+          <form id="friend-hide-form">
+            <label for="friend-country-search">Hidden country</label>
+            <input id="friend-country-search" autocomplete="off" placeholder="Search countries" />
+            <div id="friend-search-results" class="friend-search-results hidden"></div>
+            <div id="friend-place" class="friend-place">Tap the map or choose a search result.</div>
+            <label for="friend-clue-1">Clue 1 · free</label>
+            <textarea id="friend-clue-1" maxlength="180" minlength="5" required placeholder="Start with a fun, recognisable hint"></textarea>
+            <label for="friend-clue-2">Clue 2 · costs 20 seconds</label>
+            <textarea id="friend-clue-2" maxlength="180" minlength="5" required placeholder="Give a stronger location hint"></textarea>
+            <label for="friend-clue-3">Clue 3 · costs 20 seconds</label>
+            <textarea id="friend-clue-3" maxlength="180" minlength="5" required placeholder="Make the answer nearly unmistakable"></textarea>
+            <button id="friend-create-button" class="primary-button friend-primary" type="submit">Create hunt <span aria-hidden="true">↗</span></button>
+          </form>
+          <p id="friend-hide-status" class="friend-status" role="status"></p>
+          <button class="friend-back text-button" type="button">← Back to home</button>
+        </section>
+
+        <section id="friend-wait" class="friend-card hidden" aria-labelledby="friend-wait-title">
+          <p class="kicker">✦ &nbsp; FRIEND HUNT</p>
+          <h2 id="friend-wait-title">Share the <em>trail.</em></h2>
+          <p id="friend-wait-copy">Your treasure is hidden. Send this code or link to your friend.</p>
+          <div id="friend-share-code" class="friend-share-code">—</div>
+          <button id="friend-copy-button" class="secondary-button friend-copy" type="button">Copy invite link <span>↗</span></button>
+          <p id="friend-wait-status" class="friend-status" role="status">Waiting for your friend to join…</p>
+          <button class="friend-back text-button" type="button">← Back to home</button>
+        </section>
+
+        <section id="friend-result" class="friend-card friend-result hidden" aria-labelledby="friend-result-title">
+          <div id="friend-result-art" class="result-art" aria-hidden="true">✦</div>
+          <p id="friend-result-eyebrow" class="result-eyebrow">FRIEND HUNT COMPLETE</p>
+          <h2 id="friend-result-title">Treasure found.</h2>
+          <p id="friend-result-copy"></p>
+          <div id="friend-result-stats" class="result-stats"></div>
+          <p class="friend-result-note">Friend hunt scores stay off the solo leaderboard.</p>
+          <button id="friend-again-button" class="primary-button friend-primary" type="button">Play another friend hunt <span aria-hidden="true">↗</span></button>
+          <button class="friend-back text-button" type="button">← Back to home</button>
         </section>
 
         <section id="game-panel" class="game-panel hidden" aria-label="Current treasure hunt">

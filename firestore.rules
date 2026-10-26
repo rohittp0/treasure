@@ -62,11 +62,15 @@ service cloud.firestore {
       function validCreate() {
         return request.auth != null
           && code.matches('[A-HJ-NP-Z2-9]{10}')
-          && request.resource.data.keys().hasOnly(fields())
+          && request.resource.data.keys().hasOnly(fields().concat(['hiderUsername']))
           && request.resource.data.keys().hasAll(fields())
           && request.resource.data.hiderUid == request.auth.uid
           && request.resource.data.hiderName is string
           && request.resource.data.hiderName.size() <= 48
+          && (!('hiderUsername' in request.resource.data) ||
+            (request.resource.data.hiderUsername is string
+              && request.resource.data.hiderUsername.matches('[a-z][a-z0-9_]{2,19}')
+              && request.resource.data.hiderUsername == get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.username))
           && ((request.resource.data.targetUid == null && request.resource.data.targetUsername == null)
             || (request.resource.data.targetUid is string
               && request.resource.data.targetUid != request.auth.uid
@@ -162,7 +166,7 @@ service cloud.firestore {
       }
 
       allow get: if request.auth != null &&
-        (participant() || (resource.data.status == 'waiting' &&
+        (participant() || resource.data.status in ['won', 'lost'] || (resource.data.status == 'waiting' &&
           (resource.data.targetUid == null || resource.data.targetUid == request.auth.uid)));
       allow list: if false;
       allow create: if validCreate();

@@ -62,6 +62,10 @@ try {
   }));
   const finished = await assertSucceeds(getDoc(doc(seeker, huntPath)));
   assert.equal(finished.data().status, 'won');
+  const sharedResult = await assertSucceeds(getDoc(doc(stranger, huntPath)));
+  assert.equal(sharedResult.data().status, 'won');
+  await assertFails(getDoc(doc(stranger, secretPath)));
+  await assertFails(updateDoc(doc(stranger, huntPath), { seekerUid: 'stranger', seekerName: 'Stranger' }));
   await assertFails(updateDoc(doc(seeker, huntPath), { costSeconds: 80 }));
 
   const expiredPath = 'friendHunts/JKLMNPQRST';
@@ -79,6 +83,9 @@ try {
   });
   await assertSucceeds(updateDoc(doc(hider, expiredPath), { status: 'lost', endedAt: serverTimestamp() }));
   await assertSucceeds(getDoc(doc(seeker, `${expiredPath}/private/answer`)));
+  const sharedLoss = await assertSucceeds(getDoc(doc(stranger, expiredPath)));
+  assert.equal(sharedLoss.data().status, 'lost');
+  await assertFails(getDoc(doc(stranger, `${expiredPath}/private/answer`)));
 
   const hiderName = writeBatch(hider);
   hiderName.set(doc(hider, 'profiles/hider'), { username: 'mapmaker', createdAt: serverTimestamp() });
@@ -104,7 +111,7 @@ try {
   const directPath = `friendHunts/${directCode}`;
   const direct = writeBatch(hider);
   direct.set(doc(hider, directPath), {
-    hiderUid: 'hider', hiderName: 'Hider', targetUid: 'seeker', targetUsername: 'mapfinder', seekerUid: null, seekerName: null,
+    hiderUid: 'hider', hiderName: 'Hider', hiderUsername: 'mapmaker', targetUid: 'seeker', targetUsername: 'mapfinder', seekerUid: null, seekerName: null,
     clues: ['First clue', 'Second clue', 'Third clue'], status: 'waiting', createdAt: serverTimestamp(),
     startedAt: null, endedAt: null, cluesVisible: 1, costSeconds: 0, wrongGuesses: 0, triedIds: [],
     lastGuessId: '', lastGuessOutcome: '', revealed: false,

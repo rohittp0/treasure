@@ -141,8 +141,11 @@ function watchInbox(player) {
   stopChallenges = watchChallenges(player, challenges => {
     if (user?.uid !== player.uid) return;
     const unread = challenges.filter(challenge => !challenge.read);
-    $('#challenge-count').textContent = String(unread.length);
-    $('#challenge-count').classList.toggle('hidden', unread.length === 0);
+    $('#account-challenge-count').textContent = String(unread.length);
+    $('#account-challenge-count').classList.toggle('hidden', unread.length === 0);
+    elements.accountButton.setAttribute('aria-label', unread.length
+      ? `Open explorer log, ${unread.length} new ${unread.length === 1 ? 'challenge' : 'challenges'}`
+      : 'Open explorer log');
     $('#challenge-inbox-count').textContent = String(unread.length);
     $('#challenge-list').innerHTML = challenges.length
       ? challenges.map(challenge => `<button class="challenge-item ${challenge.read ? '' : 'unread'}" type="button" data-code="${escapeHTML(challenge.code)}"><span><strong>@${escapeHTML(challenge.fromUsername)}</strong> hid a treasure for you.<small>${challenge.read ? 'Open hunt' : 'New challenge · open hunt'}</small></span><span aria-hidden="true">↗</span></button>`).join('')
@@ -175,7 +178,7 @@ function setSheetCollapsed(collapsed) {
 }
 
 function collapseSheetForMap() {
-  if (friend.mode === 'seeker') { friend.collapseOnMap(); return; }
+  if (friend.mode === 'seeker' || friend.mode === 'hiding') { friend.collapseOnMap(); return; }
   if (game?.snapshot().status === 'playing') setSheetCollapsed(true);
 }
 
@@ -302,7 +305,8 @@ function startHunt() {
   elements.result.classList.add('hidden');
   elements.game.classList.remove('hidden');
   elements.hud.classList.remove('hidden');
-  document.body.classList.add('in-game');
+  document.body.classList.add('in-game', 'solo-game');
+  $('#end-level-button').classList.remove('hidden');
   setSheetCollapsed(false);
   clearInterval(ticker);
   ticker = setInterval(renderGame, 200);
@@ -407,7 +411,8 @@ function finish(state) {
   lastResult = state;
   clearMapSelection();
   renderSelection(state);
-  document.body.classList.remove('in-game');
+  document.body.classList.remove('in-game', 'solo-game');
+  $('#end-level-button').classList.add('hidden');
   setSheetCollapsed(false);
   elements.hud.classList.add('hidden');
   elements.home.classList.add('hidden');
@@ -439,7 +444,8 @@ function leaveHunt() {
   clearInterval(ticker);
   game = null;
   clearMapSelection();
-  document.body.classList.remove('in-game');
+  document.body.classList.remove('in-game', 'solo-game');
+  $('#end-level-button').classList.add('hidden');
   setSheetCollapsed(false);
   elements.hud.classList.add('hidden');
   elements.game.classList.add('hidden');
@@ -450,6 +456,8 @@ function leaveHunt() {
 async function openAccount(purpose = 'log') {
   const multiplayer = purpose === 'multiplayer';
   $('#account-dialog-kicker').textContent = multiplayer ? '✦   PLAY TOGETHER' : '✦   YOUR EXPLORER LOG';
+  $('#account-challenges').classList.toggle('hidden', !user || multiplayer);
+  $('#account-challenge-status').textContent = '';
   elements.accountDialog.showModal();
   if (!user) {
     elements.accountContent.innerHTML = multiplayer
@@ -532,7 +540,6 @@ $('#welcome-form').addEventListener('submit', async event => {
   } finally { saveButton.disabled = false; }
 });
 $('#close-welcome').addEventListener('click', () => $('#welcome-dialog').close());
-$('#challenge-bell').addEventListener('click', () => friend.openLobby());
 $('#challenge-list').addEventListener('click', async event => {
   const button = event.target.closest('button[data-code]');
   if (!button || !user) return;
@@ -540,9 +547,10 @@ $('#challenge-list').addEventListener('click', async event => {
   try {
     await markChallengeRead(user, code);
     await friend.joinCode(code);
+    if (elements.accountDialog.open) elements.accountDialog.close();
   } catch (error) {
     console.error(error);
-    $('#friend-lobby-status').textContent = error.message || 'That challenge could not be opened.';
+    $('#account-challenge-status').textContent = error.message || 'That challenge could not be opened.';
   }
 });
 
@@ -585,6 +593,7 @@ $('#guess-button').addEventListener('click', () => {
 });
 $('#zoom-in').addEventListener('click', () => map?.zoomIn());
 $('#zoom-out').addEventListener('click', () => map?.zoomOut());
+$('#end-level-button').addEventListener('click', leaveHunt);
 elements.accountButton.addEventListener('click', () => openAccount());
 $('#close-account').addEventListener('click', () => elements.accountDialog.close());
 elements.accountDialog.addEventListener('click', event => { if (event.target === elements.accountDialog) elements.accountDialog.close(); });
@@ -608,10 +617,9 @@ watchUser(async nextUser => {
   username = '';
   stopChallenges?.();
   stopChallenges = null;
-  $('#challenge-bell').classList.toggle('hidden', !nextUser);
-  $('#challenge-count').classList.add('hidden');
+  $('#account-challenges').classList.toggle('hidden', !nextUser);
   if (!nextUser && $('#welcome-dialog').open) $('#welcome-dialog').close();
-  elements.accountButton.innerHTML = nextUser ? `<span class="account-avatar">${escapeHTML((nextUser.displayName || 'E')[0])}</span><span class="account-label">My log</span>` : 'Sign in <span aria-hidden="true">↗</span>';
+  elements.accountButton.innerHTML = nextUser ? `<span class="account-avatar">${escapeHTML((nextUser.displayName || 'E')[0])}</span><span class="account-label">My logs</span><span id="account-challenge-count" class="account-alert-count hidden">0</span>` : 'Sign in <span aria-hidden="true">↗</span>';
   elements.accountButton.setAttribute('aria-label', nextUser ? 'Open explorer log' : 'Sign in with Google');
   $('#multiplayer-hint').textContent = nextUser ? 'Hide or join a hunt' : 'Sign in required';
   if (!nextUser) friend.onAuth(null);

@@ -17,9 +17,10 @@
         <div id="map"></div>
         <div class="map-vignette" aria-hidden="true"></div>
         <div class="map-stamp" aria-hidden="true">EXPLORE · WONDER · DISCOVER</div>
-        <div class="map-controls" aria-label="Map zoom controls">
+        <div class="map-controls" aria-label="Map controls">
           <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
           <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
+          <button id="end-level-button" class="hidden" type="button">End level</button>
         </div>
         <div id="map-loading" class="map-loading">Charting the world…</div>
       </div>
@@ -31,7 +32,6 @@
         </a>
         <div class="topbar-actions">
           <span class="topbar-edition">THE WORLD IS YOUR MAP</span>
-          <button id="challenge-bell" class="challenge-bell hidden" type="button" aria-label="Open challenges">✉ <span id="challenge-count" class="hidden">0</span></button>
           <button id="account-button" class="account-button" type="button" aria-label="Sign in with Google">Sign in <span aria-hidden="true">↗</span></button>
         </div>
       </header>
@@ -64,30 +64,38 @@
             <div><input id="friend-code-input" maxlength="14" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Enter 10-character code" required /><button class="secondary-button" type="submit">Join hunt →</button></div>
           </form>
           <p id="friend-lobby-status" class="friend-status" role="status"></p>
-          <div class="challenge-inbox"><div class="challenge-inbox-title"><strong>YOUR CHALLENGES</strong><span id="challenge-inbox-count">0</span></div><div id="challenge-list" class="challenge-list">No challenges yet. Ask a friend to find you by username.</div></div>
           <button class="friend-back text-button" type="button">← Back to home</button>
         </section>
 
         <section id="friend-hide" class="friend-card friend-hide hidden" aria-labelledby="friend-hide-title">
-          <p class="kicker">✦ &nbsp; THE HIDING PLAYER</p>
-          <h2 id="friend-hide-title">Set the <em>trail.</em></h2>
-          <p>Search for a country or tap it on the map to drop your pin. Your friend will only see your clues.</p>
-          <form id="friend-hide-form">
-            <label for="friend-country-search">Hidden country</label>
-            <input id="friend-country-search" autocomplete="off" placeholder="Search countries" />
-            <div id="friend-search-results" class="friend-search-results hidden"></div>
-            <div id="friend-place" class="friend-place">Tap the map or choose a search result.</div>
-            <label for="friend-clue-1">Clue 1 · free</label>
-            <textarea id="friend-clue-1" maxlength="180" minlength="5" required placeholder="Start with a fun, recognisable hint"></textarea>
-            <label for="friend-clue-2">Clue 2 · costs 20 seconds</label>
-            <textarea id="friend-clue-2" maxlength="180" minlength="5" required placeholder="Give a stronger location hint"></textarea>
-            <label for="friend-clue-3">Clue 3 · costs 20 seconds</label>
-            <textarea id="friend-clue-3" maxlength="180" minlength="5" required placeholder="Make the answer nearly unmistakable"></textarea>
-            <div class="friend-invite-choice"><label for="friend-target-username">Challenge by username <span>optional</span></label><input id="friend-target-username" maxlength="21" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="@friendname" /><small>Leave blank to share a link yourself.</small></div>
-            <button id="friend-create-button" class="primary-button friend-primary" type="submit">Create hunt <span aria-hidden="true">↗</span></button>
-          </form>
-          <p id="friend-hide-status" class="friend-status" role="status"></p>
-          <button class="friend-back text-button" type="button">← Back to home</button>
+          <div class="sheet-topline">
+            <button id="friend-hide-toggle" class="sheet-toggle" type="button" aria-expanded="true" aria-controls="friend-hide-content" aria-label="Minimise hunt setup">
+              <span class="sheet-grip" aria-hidden="true"></span>
+              <span class="sheet-row"><span class="kicker">✦ &nbsp; THE HIDING PLAYER</span><span id="friend-hide-toggle-action" class="sheet-toggle-action">Minimise ↓</span></span>
+              <span id="friend-hide-peek" class="sheet-peek-clue">Tap the map or search for a country.</span>
+            </button>
+            <button id="friend-hide-close" class="sheet-leave" type="button" aria-label="Leave hunt setup">×</button>
+          </div>
+          <div id="friend-hide-content" class="hide-sheet-content">
+            <h2 id="friend-hide-title">Set the <em>trail.</em></h2>
+            <p>Search for a country or tap it on the map to drop your pin. Your friend will only see your clues.</p>
+            <form id="friend-hide-form">
+              <label for="friend-country-search">Hidden country</label>
+              <input id="friend-country-search" autocomplete="off" placeholder="Search countries" />
+              <div id="friend-search-results" class="friend-search-results hidden"></div>
+              <div id="friend-place" class="friend-place">Tap the map or choose a search result.</div>
+              <label for="friend-clue-1">Clue 1 · free</label>
+              <textarea id="friend-clue-1" maxlength="180" minlength="5" required placeholder="Start with a fun, recognisable hint"></textarea>
+              <label for="friend-clue-2">Clue 2 · costs 20 seconds</label>
+              <textarea id="friend-clue-2" maxlength="180" minlength="5" required placeholder="Give a stronger location hint"></textarea>
+              <label for="friend-clue-3">Clue 3 · costs 20 seconds</label>
+              <textarea id="friend-clue-3" maxlength="180" minlength="5" required placeholder="Make the answer nearly unmistakable"></textarea>
+              <div class="friend-invite-choice"><label for="friend-target-username">Challenge by username <span>optional</span></label><input id="friend-target-username" maxlength="21" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="@friendname" /><small>Leave blank to share a link yourself.</small></div>
+              <button id="friend-create-button" class="primary-button friend-primary" type="submit">Create hunt <span aria-hidden="true">↗</span></button>
+            </form>
+            <p id="friend-hide-status" class="friend-status" role="status"></p>
+            <button class="friend-back text-button" type="button">← Back to home</button>
+          </div>
         </section>
 
         <section id="friend-wait" class="friend-card hidden" aria-labelledby="friend-wait-title">
@@ -107,6 +115,7 @@
           <p id="friend-result-copy"></p>
           <div id="friend-result-stats" class="result-stats"></div>
           <p class="friend-result-note">Friend hunt scores stay off the solo leaderboard.</p>
+          <button id="friend-challenge-back-button" class="primary-button friend-primary hidden" type="button">Challenge back <span aria-hidden="true">↗</span></button>
           <button id="friend-again-button" class="primary-button friend-primary" type="button">Play another friend hunt <span aria-hidden="true">↗</span></button>
           <button class="friend-back text-button" type="button">← Back to home</button>
         </section>
@@ -139,7 +148,7 @@
         <div id="toast" class="toast hidden" role="status"></div>
       </main>
 
-      <dialog id="account-dialog" class="account-dialog"><div class="dialog-top"><span id="account-dialog-kicker" class="kicker">✦ &nbsp; YOUR EXPLORER LOG</span><button id="close-account" class="icon-button" type="button" aria-label="Close account">×</button></div><div id="account-content"></div></dialog>
+      <dialog id="account-dialog" class="account-dialog"><div class="dialog-top"><span id="account-dialog-kicker" class="kicker">✦ &nbsp; YOUR EXPLORER LOG</span><button id="close-account" class="icon-button" type="button" aria-label="Close account">×</button></div><div id="account-content"></div><section id="account-challenges" class="account-challenges hidden" aria-labelledby="challenge-inbox-heading"><div class="challenge-inbox-title"><strong id="challenge-inbox-heading">INCOMING CHALLENGES</strong><span id="challenge-inbox-count">0</span></div><div id="challenge-list" class="challenge-list">No challenges yet. Ask a friend to find you by username.</div><p id="account-challenge-status" class="friend-status" role="status"></p></section></dialog>
       <dialog id="welcome-dialog" class="account-dialog welcome-dialog"><div class="dialog-top"><span class="kicker">✦ &nbsp; YOUR EXPLORER NAME</span><button id="close-welcome" class="icon-button" type="button" aria-label="Close">×</button></div><h2>Choose your <em>name.</em></h2><p>Friends can challenge you using a unique username. You can also get a heads-up when a new challenge arrives.</p><form id="welcome-form"><label for="welcome-username">Your username</label><input id="welcome-username" minlength="3" maxlength="20" autocapitalize="none" autocomplete="off" spellcheck="false" placeholder="mapfinder" required /><p id="welcome-status" class="friend-status" role="status"></p><button id="welcome-notifications" class="secondary-button" type="button">Enable browser notifications</button><p id="notification-status" class="notification-status"></p><button id="welcome-save" class="primary-button" type="submit">Save and continue ↗</button></form></dialog>
     </div>
     <script type="module" src="/src/main.js"></script>

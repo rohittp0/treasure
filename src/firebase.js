@@ -162,6 +162,7 @@ export async function createFriendHunt(user, code, place, clues, target = null, 
   batch.set(friendRef(code), {
     hiderUid: user.uid,
     hiderName: (user.displayName || 'Explorer').slice(0, 48),
+    hiderUsername: senderUsername,
     targetUid: target?.uid || null,
     targetUsername: target?.username || null,
     seekerUid: null,

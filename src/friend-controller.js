@@ -1,6 +1,6 @@
 import * as maplibregl from 'maplibre-gl';
 import { canRevealFriendCountry, canUnlockFriendClue, friendSecondsLeft, makeHuntCode, normaliseHuntCode, validHuntCode } from './friend.js';
-import { createFriendHunt, findUsername, getFriendHunt, joinFriendHunt, loadChallengeSender, loadFriendAnswer, revealFriendCountry, submitFriendGuess, timeOutFriendHunt, unlockFriendClue, watchFriendHunt } from './firebase.js';
+import { createFriendHunt, findUsername, getFriendHunt, joinFriendHunt, loadFriendAnswer, revealFriendCountry, submitFriendGuess, timeOutFriendHunt, unlockFriendClue, watchFriendHunt } from './firebase.js';
 
 const $ = selector => document.querySelector(selector);
 const friendScreens = ['#friend-lobby', '#friend-hide', '#friend-wait', '#friend-result'];
@@ -256,9 +256,11 @@ export function createFriendController({ getUser, getUsername, getMap, getCountr
   function renderHider() {
     showScreen('#friend-wait');
     $('#friend-share-code').textContent = code;
+    $('#friend-share-link').value = `${location.origin}${location.pathname}?hunt=${code}`;
+    $('#friend-share-options').classList.toggle('hidden', match.status !== 'waiting');
     $('#friend-wait-copy').textContent = match.status === 'waiting'
       ? match.targetUsername
-        ? `Challenge sent to @${match.targetUsername}. They can open it from their inbox. You can also copy the invite link.`
+        ? `Challenge sent to @${match.targetUsername}. Share the link with them too.`
         : 'Your treasure is hidden. Send this code or link to your friend.'
       : `${match.seekerName || 'Your friend'} is following your clues. Keep this page open to watch the hunt.`;
     const country = getCountries()?.features.find(feature => feature.properties.id === match.lastGuessId)?.properties.name;
@@ -368,20 +370,11 @@ export function createFriendController({ getUser, getUsername, getMap, getCountr
   function challengeBack() {
     if (mode !== 'seeker-result' || !match || !['won', 'lost'].includes(match.status)) return;
     const targetUsername = match.hiderUsername || '';
-    const finishedCode = code;
-    const player = getUser();
     openHide();
     $('#friend-target-username').value = targetUsername;
     $('#friend-hide-status').textContent = targetUsername
       ? `Your new hunt will challenge @${targetUsername}.`
       : 'Enter your friend’s username to notify them, or share the new link.';
-    if (!targetUsername && player) {
-      loadChallengeSender(player, finishedCode).then(username => {
-        if (!username || mode !== 'hiding' || $('#friend-target-username').value.trim()) return;
-        $('#friend-target-username').value = username;
-        $('#friend-hide-status').textContent = `Your new hunt will challenge @${username}.`;
-      }).catch(error => console.warn('Could not prefill the earlier challenge sender:', error));
-    }
   }
 
   async function unlock() {
@@ -462,9 +455,22 @@ export function createFriendController({ getUser, getUsername, getMap, getCountr
     try { await join($('#friend-code-input').value); }
     catch (error) { console.error(error); $('#friend-lobby-status').textContent = error.message || 'Could not join that hunt.'; }
   });
-  $('#friend-copy-button').addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(`${location.origin}${location.pathname}?hunt=${code}`); showToast('Invite link copied.'); }
+  async function copyInvite() {
+    try { await navigator.clipboard.writeText($('#friend-share-link').value); showToast('Invite link copied.'); }
     catch { showToast('Copy unavailable. Share the code shown here.'); }
+  }
+  $('#friend-copy-button').addEventListener('click', copyInvite);
+  $('#friend-share-button').addEventListener('click', async () => {
+    if (!navigator.share) { await copyInvite(); return; }
+    try {
+      await navigator.share({
+        title: 'TreasureHunch challenge',
+        text: 'I hid a treasure for you. Follow the clues and find it!',
+        url: $('#friend-share-link').value,
+      });
+    } catch (error) {
+      if (error.name !== 'AbortError') await copyInvite();
+    }
   });
   $('#friend-again-button').addEventListener('click', openLobby);
   $('#friend-challenge-back-button').addEventListener('click', challengeBack);

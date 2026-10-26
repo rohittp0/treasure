@@ -90,7 +90,7 @@
               <textarea id="friend-clue-2" maxlength="180" minlength="5" required placeholder="Give a stronger location hint"></textarea>
               <label for="friend-clue-3">Clue 3 · costs 20 seconds</label>
               <textarea id="friend-clue-3" maxlength="180" minlength="5" required placeholder="Make the answer nearly unmistakable"></textarea>
-              <div class="friend-invite-choice"><label for="friend-target-username">Challenge by username <span>optional</span></label><input id="friend-target-username" maxlength="21" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="@friendname" /><small>Leave blank to share a link yourself.</small></div>
+              <div class="friend-invite-choice"><label for="friend-target-username">Challenge by username <span>optional</span></label><input id="friend-target-username" maxlength="21" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="@friendname" /><small>Every hunt gets a shareable link. Add a username to send an in-app challenge too.</small></div>
               <button id="friend-create-button" class="primary-button friend-primary" type="submit">Create hunt <span aria-hidden="true">↗</span></button>
             </form>
             <p id="friend-hide-status" class="friend-status" role="status"></p>
@@ -103,7 +103,14 @@
           <h2 id="friend-wait-title">Share the <em>trail.</em></h2>
           <p id="friend-wait-copy">Your treasure is hidden. Send this code or link to your friend.</p>
           <div id="friend-share-code" class="friend-share-code">—</div>
-          <button id="friend-copy-button" class="secondary-button friend-copy" type="button">Copy invite link <span>↗</span></button>
+          <div id="friend-share-options" class="friend-share-options">
+            <label for="friend-share-link">Invite link</label>
+            <input id="friend-share-link" readonly aria-label="Invite link" />
+            <div class="friend-share-actions">
+              <button id="friend-share-button" class="primary-button" type="button">Share link <span aria-hidden="true">↗</span></button>
+              <button id="friend-copy-button" class="secondary-button" type="button">Copy link <span aria-hidden="true">⧉</span></button>
+            </div>
+          </div>
           <p id="friend-wait-status" class="friend-status" role="status">Waiting for your friend to join…</p>
           <button class="friend-back text-button" type="button">← Back to home</button>
         </section>

@@ -49,6 +49,7 @@ node_modules/
 dist/
 output/
 .playwright-mcp/
+.playwright-cli/
 
 # Optional npm cache directory
 .npm

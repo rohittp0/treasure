@@ -1,7 +1,7 @@
 export const ROUND_SECONDS = 120;
 export const WRONG_GUESS_COST = 5;
 export const CLUE_COST = 20;
-export const REVEAL_COST = 50;
+export const REVEAL_COST = 30;
 
 export function difficultyForLevel(level) {
   if (level <= 2) return 'easy';

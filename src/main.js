@@ -4,7 +4,7 @@ import mapWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import './style.css';
 import fallbackPuzzles from '../data/countries.json';
 import { choosePuzzle, createGame, difficultyForLevel, CLUE_COST, REVEAL_COST } from './game.js';
-import { watchUser, login, logout, loadPuzzles, saveHunt, loadHunts, loadLeaderboard, enterLeaderboard } from './firebase.js';
+import { watchUser, login, logout, loadPuzzles, saveHunt, loadHunts, loadLeaderboard, enterLeaderboard, loadProfile, claimUsername, watchChallenges, markChallengeRead, registerChallengePush } from './firebase.js';
 import { createFriendController } from './friend-controller.js';
 
 maplibregl.setWorkerUrl(mapWorkerUrl);
@@ -27,11 +27,16 @@ const elements = {
 let map;
 let puzzles = fallbackPuzzles;
 let user = null;
+let username = '';
+let stopChallenges = null;
+let welcomeFor = null;
+let authVersion = 0;
 let game = null;
 let selectedMapId = '';
 let saved = false;
 let ticker;
 let toastTimeout;
+let victoryTimeout;
 let countryData;
 let lastResult = null;
 let pendingEntryPromise = null;
@@ -69,6 +74,92 @@ function showToast(message) {
   elements.toast.classList.remove('hidden');
   clearTimeout(toastTimeout);
   toastTimeout = setTimeout(() => elements.toast.classList.add('hidden'), 3300);
+}
+
+function playVictory(card) {
+  card.classList.remove('victory');
+  void card.offsetWidth;
+  card.classList.add('victory');
+  const effects = $('#victory-effects');
+  effects.replaceChildren();
+  clearTimeout(victoryTimeout);
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const flash = document.createElement('div');
+  flash.className = 'victory-flash';
+  effects.append(flash);
+  const colors = ['#f4c56b', '#fff0b8', '#c87b4b', '#5b9994', '#f7e5c3'];
+  for (let index = 0; index < 42; index += 1) {
+    const angle = (index / 42) * Math.PI * 2 + (Math.random() - .5) * .22;
+    const distance = 115 + Math.random() * Math.min(window.innerWidth * .4, 240);
+    const particle = document.createElement('i');
+    particle.className = 'victory-particle';
+    particle.style.setProperty('--x', `${Math.cos(angle) * distance}px`);
+    particle.style.setProperty('--y', `${Math.sin(angle) * distance + 65}px`);
+    particle.style.setProperty('--spin', `${Math.round((Math.random() - .5) * 900)}deg`);
+    particle.style.setProperty('--delay', `${Math.random() * .18}s`);
+    particle.style.backgroundColor = colors[index % colors.length];
+    effects.append(particle);
+  }
+  victoryTimeout = setTimeout(() => effects.replaceChildren(), 3100);
+}
+
+function clearVictory() {
+  clearTimeout(victoryTimeout);
+  $('#victory-effects').replaceChildren();
+  elements.result.classList.remove('victory');
+  $('#friend-result').classList.remove('victory');
+}
+
+function browserNotificationsAvailable() {
+  return typeof Notification !== 'undefined' && window.isSecureContext;
+}
+
+function showWelcome(player, existingUsername = '') {
+  welcomeFor = player;
+  const input = $('#welcome-username');
+  input.value = existingUsername;
+  input.readOnly = !!existingUsername;
+  input.required = !existingUsername;
+  $('#welcome-save').textContent = existingUsername ? 'Continue to TreasureHunch ↗' : 'Save and continue ↗';
+  $('#welcome-status').textContent = '';
+  const notificationButton = $('#welcome-notifications');
+  const notificationStatus = $('#notification-status');
+  notificationButton.classList.toggle('hidden', !browserNotificationsAvailable() || Notification.permission !== 'default');
+  notificationStatus.textContent = !browserNotificationsAvailable()
+    ? 'Browser notifications are unavailable here. Challenges will still appear in your inbox.'
+    : Notification.permission === 'granted' ? 'Browser notifications are on.'
+      : Notification.permission === 'denied' ? 'Browser notifications are off. Challenges will still appear in your inbox.'
+        : 'Tap to allow alerts when a friend challenges you, or continue without them.';
+  if (!$('#welcome-dialog').open) $('#welcome-dialog').showModal();
+  if (!existingUsername) setTimeout(() => input.focus(), 0);
+}
+
+function watchInbox(player) {
+  stopChallenges?.();
+  let firstSnapshot = true;
+  let known = new Set();
+  stopChallenges = watchChallenges(player, challenges => {
+    if (user?.uid !== player.uid) return;
+    const unread = challenges.filter(challenge => !challenge.read);
+    $('#challenge-count').textContent = String(unread.length);
+    $('#challenge-count').classList.toggle('hidden', unread.length === 0);
+    $('#challenge-inbox-count').textContent = String(unread.length);
+    $('#challenge-list').innerHTML = challenges.length
+      ? challenges.map(challenge => `<button class="challenge-item ${challenge.read ? '' : 'unread'}" type="button" data-code="${escapeHTML(challenge.code)}"><span><strong>@${escapeHTML(challenge.fromUsername)}</strong> hid a treasure for you.<small>${challenge.read ? 'Open hunt' : 'New challenge · open hunt'}</small></span><span aria-hidden="true">↗</span></button>`).join('')
+      : 'No challenges yet. Ask a friend to find you by username.';
+    if (!firstSnapshot && document.visibilityState === 'visible' && browserNotificationsAvailable() && Notification.permission === 'granted') {
+      for (const challenge of unread) {
+        if (!known.has(challenge.id)) {
+          try {
+            const alert = new Notification('A TreasureHunch challenge awaits', { body: `@${challenge.fromUsername} hid a treasure for you.`, tag: `hunt-${challenge.code}` });
+            alert.onclick = () => { window.focus(); friend.joinCode(challenge.code).catch(error => showToast(error.message)); alert.close(); };
+          } catch (error) { console.warn('Browser alert was unavailable:', error); }
+        }
+      }
+    }
+    known = new Set(challenges.map(challenge => challenge.id));
+    firstSnapshot = false;
+  }, error => console.warn('Could not load challenges:', error));
 }
 
 function clearMapSelection() {
@@ -197,6 +288,7 @@ function renderGame() {
 function startHunt() {
   if (!map?.getLayer('land')) { showToast('The map is still loading. One moment!'); return; }
   if (friend.mode !== 'idle') friend.home();
+  clearVictory();
   activeLevel = completedWins + 1;
   const lastId = sessionStorage.getItem('treasurehunch:last-country') || '';
   const puzzle = choosePuzzle(puzzles, lastId, Math.random, activeLevel);
@@ -321,12 +413,16 @@ function finish(state) {
   elements.home.classList.add('hidden');
   elements.game.classList.add('hidden');
   elements.result.classList.remove('hidden');
+  elements.result.classList.remove('victory');
+  $('#challenge-after-win').classList.toggle('hidden', !won);
+  $('#play-again-button').classList.toggle('primary-button', !won);
   $('#result-art').textContent = won ? '✦' : '⌛';
   $('#result-eyebrow').textContent = `LEVEL ${String(resultLevel).padStart(2, '0')} · ${won ? 'TREASURE FOUND' : 'THE TRAIL WENT COLD'}`;
   $('#result-title').textContent = won ? 'Beautifully found.' : 'The world is still waiting.';
   $('#result-copy').textContent = won ? `You found ${state.puzzle.country} with ${state.remaining} seconds to spare. Level ${resultLevel + 1} is ready.` : `The treasure was hiding in ${state.puzzle.country}. Try level ${resultLevel} again with a new country.`;
   $('#result-stats').innerHTML = `<div><strong>${state.remaining}s</strong><span>ON THE CLOCK</span></div><div><strong>${state.cluesVisible}/3</strong><span>CLUES OPENED</span></div><div><strong>${state.wrongGuesses}</strong><span>WRONG GUESSES</span></div>`;
   $('#result-fact').textContent = state.puzzle.fact;
+  if (won) playVictory(elements.result);
   elements.saveStatus.textContent = user ? 'Saving this hunt…' : won ? 'Sign in to keep this winning find.' : 'Your hunt is complete. Play again for the leaderboard.';
   if (user) saveSignedInResult(user, state);
   else if (won) {
@@ -339,6 +435,7 @@ function finish(state) {
 }
 
 function leaveHunt() {
+  clearVictory();
   clearInterval(ticker);
   game = null;
   clearMapSelection();
@@ -390,12 +487,63 @@ async function openAccount(purpose = 'log') {
 
 const friend = createFriendController({
   getUser: () => user,
+  getUsername: () => username,
   getMap: () => map,
   getCountries: () => countryData,
   showToast,
+  playVictory,
+  clearVictory,
   requestSignIn: () => openAccount('multiplayer'),
+  requestUsername: () => { if (user) showWelcome(user); },
   clearMapSelection,
   setSheetCollapsed,
+});
+
+$('#welcome-notifications').addEventListener('click', async () => {
+  if (!browserNotificationsAvailable()) return;
+  try {
+    const permission = await Notification.requestPermission();
+    $('#welcome-notifications').classList.add('hidden');
+    $('#notification-status').textContent = permission === 'granted'
+      ? 'Browser notifications are on.' : 'No problem. Challenges will still appear in your inbox.';
+    if (permission === 'granted' && user) registerChallengePush(user).catch(error => console.warn('Background alerts could not start:', error));
+  } catch (error) {
+    console.warn('Notification permission could not be requested:', error);
+    $('#notification-status').textContent = 'Browser alerts are unavailable. Challenges will still appear in your inbox.';
+  }
+});
+$('#welcome-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  if (!welcomeFor || user?.uid !== welcomeFor.uid) return;
+  const saveButton = $('#welcome-save');
+  saveButton.disabled = true;
+  $('#welcome-status').textContent = '';
+  try {
+    if (!username) username = await claimUsername(welcomeFor, $('#welcome-username').value);
+    $('#welcome-dialog').close();
+    welcomeFor = null;
+    friend.onAuth(user);
+    watchInbox(user);
+    if (browserNotificationsAvailable() && Notification.permission === 'granted')
+      registerChallengePush(user).catch(error => console.warn('Background alerts could not start:', error));
+  } catch (error) {
+    console.error(error);
+    $('#welcome-status').textContent = error.message || 'Your username could not be saved. Try again.';
+  } finally { saveButton.disabled = false; }
+});
+$('#close-welcome').addEventListener('click', () => $('#welcome-dialog').close());
+$('#challenge-bell').addEventListener('click', () => friend.openLobby());
+$('#challenge-list').addEventListener('click', async event => {
+  const button = event.target.closest('button[data-code]');
+  if (!button || !user) return;
+  const code = button.dataset.code;
+  try {
+    await markChallengeRead(user, code);
+    await friend.joinCode(code);
+  } catch (error) {
+    console.error(error);
+    $('#friend-lobby-status').textContent = error.message || 'That challenge could not be opened.';
+  }
 });
 
 $('#start-button').addEventListener('click', startHunt);
@@ -414,6 +562,11 @@ elements.leaderboardSignIn.addEventListener('click', async () => {
   }
 });
 $('#play-again-button').addEventListener('click', startHunt);
+$('#challenge-after-win').addEventListener('click', () => {
+  if (!lastResult || lastResult.status !== 'won') return;
+  clearVictory();
+  friend.challengeFriend(lastResult.puzzle);
+});
 $('#leave-button').addEventListener('click', () => friend.mode === 'seeker' ? friend.home() : leaveHunt());
 elements.sheetToggle.addEventListener('click', () => setSheetCollapsed(!document.body.classList.contains('sheet-collapsed')));
 $('#unlock-button').addEventListener('click', () => { if (friend.mode === 'seeker') friend.unlock(); else { game?.unlock(); renderGame(); } });
@@ -449,12 +602,39 @@ try {
   sessionStorage.removeItem(RESUME_RESULT_KEY);
 }
 
-watchUser(nextUser => {
+watchUser(async nextUser => {
+  const currentVersion = ++authVersion;
   user = nextUser;
+  username = '';
+  stopChallenges?.();
+  stopChallenges = null;
+  $('#challenge-bell').classList.toggle('hidden', !nextUser);
+  $('#challenge-count').classList.add('hidden');
+  if (!nextUser && $('#welcome-dialog').open) $('#welcome-dialog').close();
   elements.accountButton.innerHTML = nextUser ? `<span class="account-avatar">${escapeHTML((nextUser.displayName || 'E')[0])}</span><span class="account-label">My log</span>` : 'Sign in <span aria-hidden="true">↗</span>';
   elements.accountButton.setAttribute('aria-label', nextUser ? 'Open explorer log' : 'Sign in with Google');
   $('#multiplayer-hint').textContent = nextUser ? 'Hide or join a hunt' : 'Sign in required';
-  friend.onAuth(nextUser);
+  if (!nextUser) friend.onAuth(null);
+  else {
+    try {
+      const profile = await loadProfile(nextUser);
+      if (currentVersion !== authVersion) return;
+      username = profile?.username || '';
+      if (!username || (browserNotificationsAvailable() && Notification.permission === 'default' && !sessionStorage.getItem(`treasurehunch:notify-asked:${nextUser.uid}`))) {
+        sessionStorage.setItem(`treasurehunch:notify-asked:${nextUser.uid}`, '1');
+        showWelcome(nextUser, username);
+      }
+      if (username) {
+        friend.onAuth(nextUser);
+        watchInbox(nextUser);
+        if (browserNotificationsAvailable() && Notification.permission === 'granted')
+          registerChallengePush(nextUser).catch(error => console.warn('Background alerts could not start:', error));
+      }
+    } catch (error) {
+      console.error(error);
+      showToast('Your explorer profile could not load. Please try signing in again.');
+    }
+  }
   renderLeaderboardGate();
   if (nextUser) {
     sessionStorage.removeItem(RESUME_RESULT_KEY);

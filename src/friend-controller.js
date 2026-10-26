@@ -1,13 +1,12 @@
 import * as maplibregl from 'maplibre-gl';
-import { CLUE_COST, REVEAL_COST } from './game.js';
 import { canRevealFriendCountry, canUnlockFriendClue, friendSecondsLeft, makeHuntCode, normaliseHuntCode, validHuntCode } from './friend.js';
-import { createFriendHunt, getFriendHunt, joinFriendHunt, loadFriendAnswer, revealFriendCountry, submitFriendGuess, timeOutFriendHunt, unlockFriendClue, watchFriendHunt } from './firebase.js';
+import { createFriendHunt, findUsername, getFriendHunt, joinFriendHunt, loadFriendAnswer, revealFriendCountry, submitFriendGuess, timeOutFriendHunt, unlockFriendClue, watchFriendHunt } from './firebase.js';
 
 const $ = selector => document.querySelector(selector);
 const friendScreens = ['#friend-lobby', '#friend-hide', '#friend-wait', '#friend-result'];
 const escapeHTML = value => String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
 
-export function createFriendController({ getUser, getMap, getCountries, showToast, requestSignIn, clearMapSelection, setSheetCollapsed }) {
+export function createFriendController({ getUser, getUsername, getMap, getCountries, showToast, playVictory, clearVictory, requestSignIn, requestUsername, clearMapSelection, setSheetCollapsed }) {
   let mode = 'idle';
   let code = '';
   let match = null;
@@ -20,6 +19,8 @@ export function createFriendController({ getUser, getMap, getCountries, showToas
   let busy = false;
   let timeoutPending = false;
   let pendingLobby = false;
+  let pendingHidePlace = null;
+  let animatedWinCode = '';
   let pendingInvite = normaliseHuntCode(new URLSearchParams(location.search).get('hunt'));
   let inviteHandled = false;
 
@@ -95,6 +96,7 @@ export function createFriendController({ getUser, getMap, getCountries, showToas
   }
 
   function clearActive() {
+    clearVictory();
     unsubscribe?.();
     unsubscribe = null;
     clearInterval(ticker);
@@ -114,6 +116,7 @@ export function createFriendController({ getUser, getMap, getCountries, showToas
     mode = 'idle';
     pendingLobby = false;
     pendingInvite = '';
+    pendingHidePlace = null;
     history.replaceState({}, '', location.pathname);
     showScreen('#home-screen');
   }
@@ -124,6 +127,7 @@ export function createFriendController({ getUser, getMap, getCountries, showToas
       requestSignIn();
       return;
     }
+    if (!getUsername()) { pendingLobby = true; requestUsername(); return; }
     clearActive();
     mode = 'lobby';
     $('#friend-lobby-status').textContent = '';
@@ -132,6 +136,7 @@ export function createFriendController({ getUser, getMap, getCountries, showToas
 
   function openHide() {
     if (!getUser()) return openLobby();
+    if (!getUsername()) return openLobby();
     if (!getMap()?.getLayer('land')) { showToast('The map is still loading. One moment!'); return; }
     clearActive();
     mode = 'hiding';
@@ -140,6 +145,20 @@ export function createFriendController({ getUser, getMap, getCountries, showToas
     $('#friend-hide-status').textContent = '';
     $('#friend-search-results').classList.add('hidden');
     showScreen('#friend-hide');
+  }
+
+  function challengeFriend(place) {
+    pendingHidePlace = place || null;
+    if (!getUser()) { requestSignIn(); return; }
+    if (!getUsername()) { requestUsername(); return; }
+    openHide();
+    const feature = getCountries()?.features.find(item => item.properties.id === pendingHidePlace?.id);
+    if (feature) {
+      const { labelX, labelY } = feature.properties;
+      setHiddenPlace({ id: feature.properties.id, country: feature.properties.name, lng: labelX, lat: labelY });
+      getMap().flyTo({ center: [labelX, labelY], zoom: Math.max(getMap().getZoom(), 3) });
+    }
+    pendingHidePlace = null;
   }
 
   async function create(event) {
@@ -155,8 +174,11 @@ export function createFriendController({ getUser, getMap, getCountries, showToas
     $('#friend-create-button').disabled = true;
     $('#friend-hide-status').textContent = 'Hiding your treasure…';
     try {
+      const typedUsername = $('#friend-target-username').value.trim();
+      const target = typedUsername ? await findUsername(typedUsername) : null;
+      if (target?.uid === getUser().uid) throw new Error('Challenge a friend, not yourself.');
       const nextCode = makeHuntCode();
-      await createFriendHunt(getUser(), nextCode, hiddenPlace, clues);
+      await createFriendHunt(getUser(), nextCode, hiddenPlace, clues, target, getUsername());
       answer = hiddenPlace;
       code = nextCode;
       mode = 'hider';
@@ -164,7 +186,7 @@ export function createFriendController({ getUser, getMap, getCountries, showToas
       subscribe();
     } catch (error) {
       console.error(error);
-      $('#friend-hide-status').textContent = 'The hunt could not be created. Try again.';
+      $('#friend-hide-status').textContent = error.message || 'The hunt could not be created. Try again.';
     } finally {
       busy = false;
       $('#friend-create-button').disabled = false;
@@ -212,7 +234,9 @@ export function createFriendController({ getUser, getMap, getCountries, showToas
     showScreen('#friend-wait');
     $('#friend-share-code').textContent = code;
     $('#friend-wait-copy').textContent = match.status === 'waiting'
-      ? 'Your treasure is hidden. Send this code or link to your friend.'
+      ? match.targetUsername
+        ? `Challenge sent to @${match.targetUsername}. They can open it from their inbox. You can also copy the invite link.`
+        : 'Your treasure is hidden. Send this code or link to your friend.'
       : `${match.seekerName || 'Your friend'} is following your clues. Keep this page open to watch the hunt.`;
     const country = getCountries()?.features.find(feature => feature.properties.id === match.lastGuessId)?.properties.name;
     $('#friend-wait-status').textContent = match.status === 'waiting'
@@ -297,6 +321,11 @@ export function createFriendController({ getUser, getMap, getCountries, showToas
     }
     if (code !== resultCode || !match || !['won', 'lost'].includes(match.status)) return;
     const won = match.status === 'won';
+    if (won && animatedWinCode !== code) {
+      animatedWinCode = code;
+      playVictory($('#friend-result'));
+    }
+    if (!won) $('#friend-result').classList.remove('victory');
     $('#friend-result-art').textContent = won ? '✦' : '⌛';
     $('#friend-result-eyebrow').textContent = won ? 'TREASURE FOUND' : 'THE TRAIL WENT COLD';
     $('#friend-result-title').textContent = hider
@@ -358,6 +387,8 @@ export function createFriendController({ getUser, getMap, getCountries, showToas
       pendingInvite = '';
       inviteHandled = true;
       join(invite).catch(error => { console.error(error); openLobby(); $('#friend-lobby-status').textContent = error.message || 'Could not open that invite.'; });
+    } else if (pendingHidePlace) {
+      challengeFriend(pendingHidePlace);
     } else if (pendingLobby) {
       pendingLobby = false;
       openLobby();
@@ -393,6 +424,8 @@ export function createFriendController({ getUser, getMap, getCountries, showToas
     get mode() { return mode; },
     mapCountry,
     openLobby,
+    challengeFriend,
+    joinCode: join,
     onAuth,
     home,
     unlock,

@@ -1,6 +1,36 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    match /profiles/{userId} {
+      allow get: if request.auth != null && request.auth.uid == userId;
+      allow list: if false;
+      allow create: if request.auth != null && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly(['username', 'createdAt'])
+        && request.resource.data.keys().hasAll(['username', 'createdAt'])
+        && request.resource.data.username is string
+        && request.resource.data.username.matches('[a-z][a-z0-9_]{2,19}')
+        && request.resource.data.createdAt == request.time
+        && !exists(/databases/$(database)/documents/usernames/$(request.resource.data.username))
+        && getAfter(/databases/$(database)/documents/usernames/$(request.resource.data.username)).data.uid == userId;
+      allow update, delete: if false;
+    }
+
+    match /usernames/{username} {
+      allow get: if request.auth != null;
+      allow list: if false;
+      allow create: if request.auth != null
+        && username.matches('[a-z][a-z0-9_]{2,19}')
+        && request.resource.data.keys().hasOnly(['uid', 'displayName', 'createdAt'])
+        && request.resource.data.keys().hasAll(['uid', 'displayName', 'createdAt'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() <= 48
+        && request.resource.data.createdAt == request.time
+        && !exists(/databases/$(database)/documents/profiles/$(request.auth.uid))
+        && getAfter(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.username == username;
+      allow update, delete: if false;
+    }
+
     match /puzzles/{puzzleId} {
       allow read: if resource.data.active == true;
       allow write: if false;
@@ -8,7 +38,7 @@ service cloud.firestore {
 
     match /friendHunts/{code} {
       function fields() {
-        return ['hiderUid', 'hiderName', 'seekerUid', 'seekerName', 'clues',
+        return ['hiderUid', 'hiderName', 'targetUid', 'targetUsername', 'seekerUid', 'seekerName', 'clues',
           'status', 'createdAt', 'startedAt', 'endedAt', 'cluesVisible',
           'costSeconds', 'wrongGuesses', 'triedIds', 'lastGuessId',
           'lastGuessOutcome', 'revealed'];
@@ -37,6 +67,13 @@ service cloud.firestore {
           && request.resource.data.hiderUid == request.auth.uid
           && request.resource.data.hiderName is string
           && request.resource.data.hiderName.size() <= 48
+          && ((request.resource.data.targetUid == null && request.resource.data.targetUsername == null)
+            || (request.resource.data.targetUid is string
+              && request.resource.data.targetUid != request.auth.uid
+              && request.resource.data.targetUsername is string
+              && request.resource.data.targetUsername.matches('[a-z][a-z0-9_]{2,19}')
+              && get(/databases/$(database)/documents/usernames/$(request.resource.data.targetUsername)).data.uid == request.resource.data.targetUid
+              && getAfter(/databases/$(database)/documents/users/$(request.resource.data.targetUid)/notifications/$(code)).data.code == code))
           && request.resource.data.seekerUid == null
           && request.resource.data.seekerName == null
           && request.resource.data.clues is list
@@ -66,6 +103,7 @@ service cloud.firestore {
         return request.auth != null
           && resource.data.status == 'waiting'
           && request.auth.uid != resource.data.hiderUid
+          && (resource.data.targetUid == null || resource.data.targetUid == request.auth.uid)
           && changedOnly(['seekerUid', 'seekerName', 'status', 'startedAt'])
           && request.resource.data.seekerUid == request.auth.uid
           && request.resource.data.seekerName is string
@@ -85,10 +123,10 @@ service cloud.firestore {
         return activeSeeker()
           && resource.data.cluesVisible == 3
           && resource.data.revealed == false
-          && request.time < resource.data.startedAt + duration.value(70 - resource.data.costSeconds, 's')
+          && request.time < resource.data.startedAt + duration.value(90 - resource.data.costSeconds, 's')
           && changedOnly(['revealed', 'costSeconds'])
           && request.resource.data.revealed == true
-          && request.resource.data.costSeconds == resource.data.costSeconds + 50;
+          && request.resource.data.costSeconds == resource.data.costSeconds + 30;
       }
       function freshGuess() {
         return request.resource.data.lastGuessId is string
@@ -124,7 +162,8 @@ service cloud.firestore {
       }
 
       allow get: if request.auth != null &&
-        (participant() || resource.data.status == 'waiting');
+        (participant() || (resource.data.status == 'waiting' &&
+          (resource.data.targetUid == null || resource.data.targetUid == request.auth.uid)));
       allow list: if false;
       allow create: if validCreate();
       allow update: if validJoin() || validUnlock() || validReveal()
@@ -187,6 +226,41 @@ service cloud.firestore {
       match /hunts/{huntId} {
         allow read, create: if request.auth != null && request.auth.uid == userId;
         allow update, delete: if false;
+      }
+
+      match /notifications/{code} {
+        allow get, list: if request.auth != null && request.auth.uid == userId;
+        allow create: if request.auth != null
+          && code.matches('[A-HJ-NP-Z2-9]{10}')
+          && request.resource.data.keys().hasOnly(['code', 'fromUid', 'fromUsername', 'createdAt', 'read'])
+          && request.resource.data.keys().hasAll(['code', 'fromUid', 'fromUsername', 'createdAt', 'read'])
+          && request.resource.data.code == code
+          && request.resource.data.fromUid == request.auth.uid
+          && request.resource.data.fromUsername is string
+          && request.resource.data.fromUsername == get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.username
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.read == false
+          && !exists(/databases/$(database)/documents/friendHunts/$(code))
+          && getAfter(/databases/$(database)/documents/friendHunts/$(code)).data.hiderUid == request.auth.uid
+          && getAfter(/databases/$(database)/documents/friendHunts/$(code)).data.targetUid == userId;
+        allow update: if request.auth != null && request.auth.uid == userId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
+          && request.resource.data.read == true;
+        allow delete: if false;
+      }
+
+      match /pushTokens/{tokenHash} {
+        allow get: if request.auth != null && request.auth.uid == userId;
+        allow list: if false;
+        allow create, update: if request.auth != null && request.auth.uid == userId
+          && tokenHash.matches('[a-f0-9]{64}')
+          && request.resource.data.keys().hasOnly(['token', 'createdAt'])
+          && request.resource.data.keys().hasAll(['token', 'createdAt'])
+          && request.resource.data.token is string
+          && request.resource.data.token.size() > 20
+          && request.resource.data.token.size() < 500
+          && request.resource.data.createdAt == request.time;
+        allow delete: if request.auth != null && request.auth.uid == userId;
       }
     }
   }

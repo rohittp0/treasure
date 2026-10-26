@@ -49,7 +49,7 @@ test('clues unlock in order, reveal waits for all clues, and correct map guess w
   assert.equal(game.snapshot().cluesVisible, 3);
   assert.equal(game.snapshot().remaining, 80);
   game.reveal();
-  assert.equal(game.snapshot().remaining, 30);
+  assert.equal(game.snapshot().remaining, 50);
   assert.equal(game.snapshot().revealedCountry, true);
   game.select({ id: 'JPN', country: 'Japan' });
   assert.equal(game.guess().status, 'won');

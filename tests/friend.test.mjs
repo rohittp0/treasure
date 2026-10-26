@@ -19,6 +19,10 @@ test('friend timer charges clues and stops at the end timestamp', () => {
   assert.equal(friendSecondsLeft(hunt, 130_000), 70);
   hunt.cluesVisible = 3;
   assert.equal(canRevealFriendCountry(hunt, 130_000), true);
+  hunt.costSeconds = 60;
+  assert.equal(canRevealFriendCountry(hunt, 130_000), false);
+  hunt.costSeconds = 59;
+  assert.equal(canRevealFriendCountry(hunt, 130_000), true);
   hunt.costSeconds = 70;
   assert.equal(canRevealFriendCountry(hunt, 130_000), false);
   hunt.endedAt = 145_000;

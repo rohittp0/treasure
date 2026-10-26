@@ -1,5 +1,6 @@
 import * as maplibregl from 'maplibre-gl';
 import { canRevealFriendCountry, canUnlockFriendClue, friendSecondsLeft, makeHuntCode, normaliseHuntCode, validHuntCode } from './friend.js';
+import { ROUND_SECONDS } from './game.js';
 import { createFriendHunt, findUsername, getFriendHunt, joinFriendHunt, loadFriendAnswer, revealFriendCountry, submitFriendGuess, timeOutFriendHunt, unlockFriendClue, watchFriendHunt } from './firebase.js';
 
 const $ = selector => document.querySelector(selector);
@@ -376,7 +377,8 @@ export function createFriendController({ getUser, getUsername, getMap, getCountr
       : place
       ? `The treasure was in ${place.country}. ${won ? `${match.seekerName || 'The seeker'} followed the trail.` : 'A new hunt is ready whenever you are.'}`
       : 'The hunt is over. The treasure location could not be loaded.';
-    $('#friend-result-stats').innerHTML = `<div><strong>${friendSecondsLeft(match)}s</strong><span>ON THE CLOCK</span></div><div><strong>${match.cluesVisible}/3</strong><span>CLUES OPENED</span></div><div><strong>${match.wrongGuesses}</strong><span>WRONG GUESSES</span></div>`;
+    const remaining = friendSecondsLeft(match);
+    $('#friend-result-stats').innerHTML = `<div><strong>${won ? Math.max(0, ROUND_SECONDS - remaining) : remaining}s</strong><span>${won ? 'TIME USED' : 'ON THE CLOCK'}</span></div><div><strong>${match.cluesVisible}/3</strong><span>CLUES OPENED</span></div><div><strong>${match.wrongGuesses}</strong><span>WRONG GUESSES</span></div>`;
     $('#friend-challenge-back-button').classList.toggle('hidden', hider || spectator);
     $('#friend-challenge-back-button').innerHTML = `Challenge ${match.hiderUsername ? `@${escapeHTML(match.hiderUsername)}` : 'back'} <span aria-hidden="true">↗</span>`;
   }

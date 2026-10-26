@@ -3,7 +3,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import mapWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import './style.css';
 import fallbackPuzzles from '../data/countries.json';
-import { choosePuzzle, createGame, difficultyForLevel, CLUE_COST, REVEAL_COST } from './game.js';
+import { choosePuzzle, createGame, difficultyForLevel, ROUND_SECONDS, CLUE_COST, REVEAL_COST } from './game.js';
 import { watchUser, login, logout, loadPuzzles, saveHunt, loadHunts, loadLeaderboard, enterLeaderboard, loadProfile, claimUsername, isUsernameAvailable, watchChallenges, markChallengeRead, registerChallengePush } from './firebase.js';
 import { createFriendController } from './friend-controller.js';
 
@@ -480,8 +480,9 @@ function finish(state) {
   $('#result-art').textContent = won ? '✦' : '⌛';
   $('#result-eyebrow').textContent = `LEVEL ${String(resultLevel).padStart(2, '0')} · ${won ? 'TREASURE FOUND' : 'THE TRAIL WENT COLD'}`;
   $('#result-title').textContent = won ? 'Beautifully found.' : 'The world is still waiting.';
-  $('#result-copy').textContent = won ? `You found ${state.puzzle.country} with ${state.remaining} seconds to spare. Level ${resultLevel + 1} is ready.` : `The treasure was hiding in ${state.puzzle.country}. Try level ${resultLevel} again with a new country.`;
-  $('#result-stats').innerHTML = `<div><strong>${state.remaining}s</strong><span>ON THE CLOCK</span></div><div><strong>${state.cluesVisible}/3</strong><span>CLUES OPENED</span></div><div><strong>${state.wrongGuesses}</strong><span>WRONG GUESSES</span></div>`;
+  const timeUsed = Math.max(0, ROUND_SECONDS - state.remaining);
+  $('#result-copy').textContent = won ? `You found ${state.puzzle.country} using ${timeUsed} seconds. Level ${resultLevel + 1} is ready.` : `The treasure was hiding in ${state.puzzle.country}. Try level ${resultLevel} again with a new country.`;
+  $('#result-stats').innerHTML = `<div><strong>${won ? timeUsed : state.remaining}s</strong><span>${won ? 'TIME USED' : 'ON THE CLOCK'}</span></div><div><strong>${state.cluesVisible}/3</strong><span>CLUES OPENED</span></div><div><strong>${state.wrongGuesses}</strong><span>WRONG GUESSES</span></div>`;
   $('#result-fact').textContent = state.puzzle.fact;
   if (won) playVictory(elements.result);
   elements.saveStatus.textContent = user && username ? 'Saving this hunt…' : won

@@ -87,6 +87,11 @@ export async function markChallengeRead(user, code) {
   await updateDoc(doc(db, 'users', user.uid, 'notifications', code), { read: true });
 }
 
+export async function loadChallengeSender(user, code) {
+  const snapshot = await getDoc(doc(db, 'users', user.uid, 'notifications', code));
+  return snapshot.exists() ? snapshot.data().fromUsername || '' : '';
+}
+
 export async function registerChallengePush(user) {
   const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY || publicWebPushKey;
   if (!vapidKey || !('serviceWorker' in navigator) || Notification.permission !== 'granted') return false;

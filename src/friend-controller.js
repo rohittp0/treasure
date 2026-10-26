@@ -1,6 +1,6 @@
 import * as maplibregl from 'maplibre-gl';
 import { canRevealFriendCountry, canUnlockFriendClue, friendSecondsLeft, makeHuntCode, normaliseHuntCode, validHuntCode } from './friend.js';
-import { createFriendHunt, findUsername, getFriendHunt, joinFriendHunt, loadFriendAnswer, revealFriendCountry, submitFriendGuess, timeOutFriendHunt, unlockFriendClue, watchFriendHunt } from './firebase.js';
+import { createFriendHunt, findUsername, getFriendHunt, joinFriendHunt, loadChallengeSender, loadFriendAnswer, revealFriendCountry, submitFriendGuess, timeOutFriendHunt, unlockFriendClue, watchFriendHunt } from './firebase.js';
 
 const $ = selector => document.querySelector(selector);
 const friendScreens = ['#friend-lobby', '#friend-hide', '#friend-wait', '#friend-result'];
@@ -368,11 +368,20 @@ export function createFriendController({ getUser, getUsername, getMap, getCountr
   function challengeBack() {
     if (mode !== 'seeker-result' || !match || !['won', 'lost'].includes(match.status)) return;
     const targetUsername = match.hiderUsername || '';
+    const finishedCode = code;
+    const player = getUser();
     openHide();
     $('#friend-target-username').value = targetUsername;
     $('#friend-hide-status').textContent = targetUsername
       ? `Your new hunt will challenge @${targetUsername}.`
       : 'Enter your friend’s username to notify them, or share the new link.';
+    if (!targetUsername && player) {
+      loadChallengeSender(player, finishedCode).then(username => {
+        if (!username || mode !== 'hiding' || $('#friend-target-username').value.trim()) return;
+        $('#friend-target-username').value = username;
+        $('#friend-hide-status').textContent = `Your new hunt will challenge @${username}.`;
+      }).catch(error => console.warn('Could not prefill the earlier challenge sender:', error));
+    }
   }
 
   async function unlock() {

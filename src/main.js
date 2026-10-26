@@ -9,6 +9,9 @@ import { createFriendController } from './friend-controller.js';
 
 maplibregl.setWorkerUrl(mapWorkerUrl);
 
+// Safari still emits its own gesture events even when touch-action blocks page zoom.
+document.addEventListener('gesturestart', event => event.preventDefault(), { passive: false });
+
 const $ = selector => document.querySelector(selector);
 const elements = {
   home: $('#home-screen'), game: $('#game-panel'), result: $('#result-screen'),

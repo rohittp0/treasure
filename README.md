@@ -21,6 +21,8 @@ npm run dev
 
 The browser uses the 44 included puzzles if Firestore is unavailable. Google sign-in and cloud saving work when the page runs on a Firebase Auth authorized domain.
 
+Home and hunt-invite links share a generic social preview that keeps the hidden country secret. Open Graph and X card tags are in `index.html`; the 1200×630 PNG is `public/social-preview.png`. Regenerate the artwork with `python3 scripts/generate-social-preview.py` (requires Pillow).
+
 ## Curated puzzles and Firebase
 
 - [data/countries.json](data/countries.json) is the editorial source for 44 countries and 132 clues, each country marked easy, medium or hard. [data/CLUE-SOURCES.md](data/CLUE-SOURCES.md) records the references.

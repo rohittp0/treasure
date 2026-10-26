@@ -377,7 +377,8 @@ function renderLeaderboardGate() {
     : won ? 'Sign in to enter this find <span>↗</span>' : 'Sign in for future finds <span>↗</span>';
   elements.leaderboardNote.textContent = won
     ? user ? !username ? 'Choose an available username to enter this find.' : pending ? 'Your finds are waiting to be posted.' : leaderboardSyncFailed ? 'Your score needs another try to update.' : 'Your weighted average updates after each winning level.' : 'Your find is waiting. Sign in to put it on the board.'
-    : 'Winning levels are ranked by weighted average time used. Sign in to enter your next find.';
+    : user ? '' : 'Winning levels are ranked by weighted average time used. Sign in to enter your next find.';
+  $('#result-leaderboard').classList.toggle('hidden', !won && !!user && !!username && !pending && !leaderboardSyncFailed);
 }
 
 async function refreshLeaderboard() {

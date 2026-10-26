@@ -3,6 +3,7 @@ import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signI
 import { getFirestore, collection, doc, getDoc, getDocs, query, setDoc, where, orderBy, limit, runTransaction, serverTimestamp, onSnapshot, writeBatch, updateDoc, deleteDoc } from 'firebase/firestore';
 import messagingWorkerUrl from './firebase-messaging-sw.js?worker&url';
 import { scoreSoloHunts } from './leaderboard.js';
+import { ROUND_SECONDS } from './game.js';
 
 const app = initializeApp({
   apiKey: 'AIzaSyCDEJwlHrSfeSzfLwehsTFhCjOJOFayEc4',
@@ -184,6 +185,7 @@ export async function createFriendHunt(user, code, place, clues, target = null, 
     seekerName: null,
     clues,
     status: 'waiting',
+    roundSeconds: ROUND_SECONDS,
     createdAt: serverTimestamp(),
     startedAt: null,
     endedAt: null,

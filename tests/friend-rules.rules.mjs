@@ -28,6 +28,17 @@ try {
   });
   batch.set(answer, { id: 'ITA', country: 'Italy', lng: 12.5, lat: 42.8 });
   await assertSucceeds(batch.commit());
+  const newCode = 'MNPRSTUVWX';
+  const newHunt = writeBatch(hider);
+  newHunt.set(doc(hider, `friendHunts/${newCode}`), {
+    hiderUid: 'hider', hiderName: 'Hider', targetUid: null, targetUsername: null, seekerUid: null, seekerName: null,
+    clues: ['First clue', 'Second clue', 'Third clue'], status: 'waiting', roundSeconds: 180,
+    createdAt: serverTimestamp(), startedAt: null, endedAt: null,
+    cluesVisible: 1, costSeconds: 0, wrongGuesses: 0, triedIds: [],
+    lastGuessId: '', lastGuessOutcome: '', revealed: false,
+  });
+  newHunt.set(doc(hider, `friendHunts/${newCode}/private/answer`), { id: 'ITA', country: 'Italy', lng: 12.5, lat: 42.8 });
+  await assertSucceeds(newHunt.commit());
   await assertSucceeds(getDoc(hunt));
   await assertSucceeds(getDoc(doc(seeker, huntPath)));
   await assertSucceeds(getDoc(answer));
@@ -87,6 +98,28 @@ try {
   assert.equal(sharedLoss.data().status, 'lost');
   await assertFails(getDoc(doc(stranger, `${expiredPath}/private/answer`)));
 
+  const threeMinutePath = 'friendHunts/UVWXYZ2345';
+  await environment.withSecurityRulesDisabled(async context => {
+    const database = context.firestore();
+    await setDoc(doc(database, threeMinutePath), {
+      hiderUid: 'hider', hiderName: 'Hider', targetUid: null, targetUsername: null, seekerUid: 'seeker', seekerName: 'Seeker',
+      clues: ['First clue', 'Second clue', 'Third clue'], status: 'playing', roundSeconds: 180,
+      createdAt: Timestamp.fromMillis(Date.now() - 150_000),
+      startedAt: Timestamp.fromMillis(Date.now() - 130_000), endedAt: null,
+      cluesVisible: 1, costSeconds: 0, wrongGuesses: 0, triedIds: [],
+      lastGuessId: '', lastGuessOutcome: '', revealed: false,
+    });
+    await setDoc(doc(database, `${threeMinutePath}/private/answer`), { id: 'ITA', country: 'Italy', lng: 12.5, lat: 42.8 });
+  });
+  await assertFails(updateDoc(doc(hider, threeMinutePath), { status: 'lost', endedAt: serverTimestamp() }));
+  await assertSucceeds(updateDoc(doc(seeker, threeMinutePath), {
+    costSeconds: 5, wrongGuesses: 1, triedIds: ['FRA'], lastGuessId: 'FRA', lastGuessOutcome: 'wrong',
+  }));
+  await environment.withSecurityRulesDisabled(async context => {
+    await updateDoc(doc(context.firestore(), threeMinutePath), { startedAt: Timestamp.fromMillis(Date.now() - 190_000) });
+  });
+  await assertSucceeds(updateDoc(doc(hider, threeMinutePath), { status: 'lost', endedAt: serverTimestamp() }));
+
   const hiderName = writeBatch(hider);
   hiderName.set(doc(hider, 'profiles/hider'), { username: 'mapmaker', createdAt: serverTimestamp() });
   hiderName.set(doc(hider, 'usernames/mapmaker'), { uid: 'hider', displayName: 'Hider', createdAt: serverTimestamp() });
@@ -109,6 +142,8 @@ try {
   await assertSucceeds(updateDoc(leader, { averageTenths: 540, updatedAt: serverTimestamp() }));
   await assertFails(updateDoc(leader, { averageTenths: 560, updatedAt: serverTimestamp() }));
   await assertFails(updateDoc(leader, { levelsCompleted: 2, updatedAt: serverTimestamp() }));
+  await assertSucceeds(updateDoc(leader, { averageTenths: 1790, levelsCompleted: 4, highestLevel: 4, updatedAt: serverTimestamp() }));
+  await assertFails(updateDoc(leader, { averageTenths: 1801, levelsCompleted: 5, highestLevel: 5, updatedAt: serverTimestamp() }));
   await environment.withSecurityRulesDisabled(async context => {
     await setDoc(doc(context.firestore(), 'leaderboard/hider'), {
       uid: 'hider', name: 'Explorer HIDE', country: 'Italy', puzzleId: 'ITA', score: 80, completedAt: Timestamp.now(),

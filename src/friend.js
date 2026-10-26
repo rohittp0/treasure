@@ -14,13 +14,18 @@ export function validHuntCode(value) {
   return /^[A-HJ-NP-Z2-9]{10}$/.test(value);
 }
 
+export function friendRoundSeconds(match) {
+  return match?.roundSeconds ?? (match ? 120 : ROUND_SECONDS);
+}
+
 export function friendSecondsLeft(match, now = Date.now()) {
-  if (!match?.startedAt) return ROUND_SECONDS;
+  const roundSeconds = friendRoundSeconds(match);
+  if (!match?.startedAt) return roundSeconds;
   const started = typeof match.startedAt.toMillis === 'function' ? match.startedAt.toMillis() : match.startedAt;
   const end = match.endedAt
     ? (typeof match.endedAt.toMillis === 'function' ? match.endedAt.toMillis() : match.endedAt)
     : now;
-  return Math.max(0, Math.ceil((started + ROUND_SECONDS * 1000 - end - match.costSeconds * 1000) / 1000));
+  return Math.max(0, Math.ceil((started + roundSeconds * 1000 - end - match.costSeconds * 1000) / 1000));
 }
 
 export function canUnlockFriendClue(match, now = Date.now()) {

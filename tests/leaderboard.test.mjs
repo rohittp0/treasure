@@ -21,3 +21,13 @@ test('replays use the best win for each level and losses do not count', () => {
   assert.deepEqual(result, { averageTenths: 150, levelsCompleted: 2, highestLevel: 2 });
   assert.equal(scoreSoloHunts([{ result: 'lost', level: 1, timeLeft: 0 }]), null);
 });
+
+test('two-minute history and three-minute wins use their actual time used', () => {
+  const result = scoreSoloHunts([
+    { result: 'won', level: 1, timeLeft: 110 },
+    { result: 'won', level: 2, roundSeconds: 180, timeLeft: 170 },
+  ]);
+  assert.deepEqual(result, { averageTenths: 100, levelsCompleted: 2, highestLevel: 2 });
+  assert.deepEqual(scoreSoloHunts([{ result: 'won', level: 1, roundSeconds: 180, timeLeft: 1 }]),
+    { averageTenths: 1790, levelsCompleted: 1, highestLevel: 1 });
+});

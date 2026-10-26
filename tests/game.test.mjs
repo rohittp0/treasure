@@ -25,19 +25,20 @@ test('wins progress from easy to medium to hard country pools', () => {
 test('selection is free; wrong guess costs five seconds and cannot be repeated', () => {
   let now = 0;
   const game = createGame(japan, () => now);
+  assert.equal(game.snapshot().roundSeconds, 180);
   game.select(peru);
-  assert.equal(game.snapshot().remaining, 120);
+  assert.equal(game.snapshot().remaining, 180);
   game.cancel();
-  assert.equal(game.snapshot().remaining, 120);
+  assert.equal(game.snapshot().remaining, 180);
   game.select(peru);
   game.guess();
-  assert.equal(game.snapshot().remaining, 115);
+  assert.equal(game.snapshot().remaining, 175);
   assert.equal(game.snapshot().wrongGuesses, 1);
   game.select(peru);
   game.guess();
   assert.equal(game.snapshot().wrongGuesses, 1);
   now = 10_000;
-  assert.equal(game.tick().remaining, 105);
+  assert.equal(game.tick().remaining, 165);
 });
 
 test('clues unlock in order, reveal waits for all clues, and correct map guess wins', () => {
@@ -47,9 +48,9 @@ test('clues unlock in order, reveal waits for all clues, and correct map guess w
   game.unlock();
   game.unlock();
   assert.equal(game.snapshot().cluesVisible, 3);
-  assert.equal(game.snapshot().remaining, 80);
+  assert.equal(game.snapshot().remaining, 140);
   game.reveal();
-  assert.equal(game.snapshot().remaining, 50);
+  assert.equal(game.snapshot().remaining, 110);
   assert.equal(game.snapshot().revealedCountry, true);
   game.select({ id: 'JPN', country: 'Japan' });
   assert.equal(game.guess().status, 'won');
@@ -58,12 +59,12 @@ test('clues unlock in order, reveal waits for all clues, and correct map guess w
 test('time costs cannot consume the final second and a round times out', () => {
   let now = 0;
   const game = createGame(japan, () => now);
-  now = 99_000;
+  now = 159_000;
   game.unlock();
   assert.equal(game.snapshot().remaining, 1);
   game.unlock();
   assert.equal(game.snapshot().cluesVisible, 2);
-  now = 100_000;
+  now = 160_000;
   assert.equal(game.tick().status, 'lost');
   game.select({ id: 'JPN', country: 'Japan' });
   assert.equal(game.guess().status, 'lost');

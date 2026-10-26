@@ -1,4 +1,4 @@
-export const ROUND_SECONDS = 120;
+export const ROUND_SECONDS = 180;
 export const WRONG_GUESS_COST = 5;
 export const CLUE_COST = 20;
 export const REVEAL_COST = 30;
@@ -40,6 +40,7 @@ export function createGame(puzzle, clock = () => Date.now()) {
     return {
       puzzle,
       status,
+      roundSeconds: ROUND_SECONDS,
       remaining: remaining(),
       cluesVisible,
       selected,

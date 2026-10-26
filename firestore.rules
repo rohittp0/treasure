@@ -50,11 +50,14 @@ service cloud.firestore {
         return request.auth != null &&
           (request.auth.uid == resource.data.hiderUid || request.auth.uid == resource.data.seekerUid);
       }
+      function roundSeconds() {
+        return 'roundSeconds' in resource.data ? resource.data.roundSeconds : 120;
+      }
       function activeSeeker() {
         return request.auth != null && request.auth.uid == resource.data.seekerUid
           && resource.data.status == 'playing'
           && resource.data.startedAt is timestamp
-          && request.time < resource.data.startedAt + duration.value(120 - resource.data.costSeconds, 's');
+          && request.time < resource.data.startedAt + duration.value(roundSeconds() - resource.data.costSeconds, 's');
       }
       function answerId() {
         return get(/databases/$(database)/documents/friendHunts/$(code)/private/answer).data.id;
@@ -62,8 +65,9 @@ service cloud.firestore {
       function validCreate() {
         return request.auth != null
           && code.matches('[A-HJ-NP-Z2-9]{10}')
-          && request.resource.data.keys().hasOnly(fields().concat(['hiderUsername']))
+          && request.resource.data.keys().hasOnly(fields().concat(['hiderUsername', 'roundSeconds']))
           && request.resource.data.keys().hasAll(fields())
+          && (!('roundSeconds' in request.resource.data) || request.resource.data.roundSeconds == 180)
           && request.resource.data.hiderUid == request.auth.uid
           && request.resource.data.hiderName is string
           && request.resource.data.hiderName.size() <= 48
@@ -118,7 +122,7 @@ service cloud.firestore {
       function validUnlock() {
         return activeSeeker()
           && resource.data.cluesVisible < 3
-          && request.time < resource.data.startedAt + duration.value(100 - resource.data.costSeconds, 's')
+          && request.time < resource.data.startedAt + duration.value(roundSeconds() - 20 - resource.data.costSeconds, 's')
           && changedOnly(['cluesVisible', 'costSeconds'])
           && request.resource.data.cluesVisible == resource.data.cluesVisible + 1
           && request.resource.data.costSeconds == resource.data.costSeconds + 20;
@@ -127,7 +131,7 @@ service cloud.firestore {
         return activeSeeker()
           && resource.data.cluesVisible == 3
           && resource.data.revealed == false
-          && request.time < resource.data.startedAt + duration.value(90 - resource.data.costSeconds, 's')
+          && request.time < resource.data.startedAt + duration.value(roundSeconds() - 30 - resource.data.costSeconds, 's')
           && changedOnly(['revealed', 'costSeconds'])
           && request.resource.data.revealed == true
           && request.resource.data.costSeconds == resource.data.costSeconds + 30;
@@ -159,7 +163,7 @@ service cloud.firestore {
       function validTimeout() {
         return participant()
           && resource.data.status == 'playing'
-          && request.time >= resource.data.startedAt + duration.value(120 - resource.data.costSeconds, 's')
+          && request.time >= resource.data.startedAt + duration.value(roundSeconds() - resource.data.costSeconds, 's')
           && changedOnly(['status', 'endedAt'])
           && request.resource.data.status == 'lost'
           && request.resource.data.endedAt == request.time;
@@ -212,7 +216,7 @@ service cloud.firestore {
           && request.resource.data.name == get(/databases/$(database)/documents/profiles/$(userId)).data.username
           && request.resource.data.averageTenths is int
           && request.resource.data.averageTenths >= 0
-          && request.resource.data.averageTenths <= 1200
+          && request.resource.data.averageTenths <= 1800
           && request.resource.data.levelsCompleted is int
           && request.resource.data.levelsCompleted > 0
           && request.resource.data.highestLevel is int

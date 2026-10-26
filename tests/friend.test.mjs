@@ -11,19 +11,22 @@ test('invite codes are short, shareable, and reject ambiguous characters', () =>
 });
 
 test('friend timer charges clues and stops at the end timestamp', () => {
-  const hunt = { status: 'playing', startedAt: 100_000, endedAt: null, costSeconds: 0, cluesVisible: 1, revealed: false };
-  assert.equal(friendSecondsLeft(hunt, 100_000), 120);
+  const hunt = { status: 'playing', startedAt: 100_000, endedAt: null, roundSeconds: 180, costSeconds: 0, cluesVisible: 1, revealed: false };
+  assert.equal(friendSecondsLeft(hunt, 100_000), 180);
+  const legacy = { ...hunt };
+  delete legacy.roundSeconds;
+  assert.equal(friendSecondsLeft(legacy, 100_000), 120);
   assert.equal(canUnlockFriendClue(hunt, 100_000), true);
   hunt.costSeconds = 20;
   hunt.cluesVisible = 2;
-  assert.equal(friendSecondsLeft(hunt, 130_000), 70);
+  assert.equal(friendSecondsLeft(hunt, 130_000), 130);
   hunt.cluesVisible = 3;
   assert.equal(canRevealFriendCountry(hunt, 130_000), true);
-  hunt.costSeconds = 60;
+  hunt.costSeconds = 120;
   assert.equal(canRevealFriendCountry(hunt, 130_000), false);
-  hunt.costSeconds = 59;
+  hunt.costSeconds = 119;
   assert.equal(canRevealFriendCountry(hunt, 130_000), true);
-  hunt.costSeconds = 70;
+  hunt.costSeconds = 130;
   assert.equal(canRevealFriendCountry(hunt, 130_000), false);
   hunt.endedAt = 145_000;
   hunt.status = 'lost';

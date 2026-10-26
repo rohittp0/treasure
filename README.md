@@ -1,6 +1,8 @@
 # TreasureHunch
 
-A mobile-first solo geography hunt. The player has two minutes to locate a hidden country on a MapLibre world map. The first clue is free; the next two cost 20 seconds each. A wrong confirmed guess costs 5 seconds. After opening all clues, the player can pay 50 seconds to reveal the country name, then find it on the map to win.
+A mobile-first solo geography hunt. The player has two minutes to locate a hidden country on a MapLibre world map. The first clue is free; the next two cost 20 seconds each. A wrong confirmed guess costs 5 seconds. After opening all clues, the player can pay 50 seconds to reveal the country name, then find it on the map to win. The map stays full screen during a hunt, with a floating timer and clues that minimise as the player explores.
+
+Hunts have easy, medium and hard country pools. The first two winning levels draw easy countries, levels 3–5 draw medium countries, and level 6 onward draws hard countries. Losing keeps the player on the same level. Solo progress is kept on this device; signed-in players also save completed hunts to Firestore, and their winning hunt count can restore progress on another device.
 
 Solo hunts start without an account. After the first completed hunt, the result screen shows a public leaderboard. A winning guest can sign in with Google to post that find; each signed-in explorer keeps their best score, measured in seconds remaining. The home screen offers a multiplayer entry that requires sign-in and clearly marks friend hunts as coming soon.
 
@@ -17,7 +19,7 @@ The browser uses the 24 included puzzles if Firestore is unavailable. Google sig
 
 ## Curated puzzles and Firebase
 
-- [data/countries.json](data/countries.json) is the editorial source for 24 countries and 72 clues. [data/CLUE-SOURCES.md](data/CLUE-SOURCES.md) records the references.
+- [data/countries.json](data/countries.json) is the editorial source for 44 countries and 132 clues, each country marked easy, medium or hard. [data/CLUE-SOURCES.md](data/CLUE-SOURCES.md) records the references.
 - `node scripts/seed-firestore.mjs` checks the data without writing. `node scripts/seed-firestore.mjs --write` publishes it to the `puzzles` collection in project `treasurehunch`, using the currently signed-in Firebase CLI account.
 - Public clients can read active puzzles and leaderboard entries. Only a signed-in player can read their own profile and hunt history under `users/{uid}` or write their own best leaderboard entry. Puzzle writes require a privileged Firebase CLI account; the browser cannot edit them.
 - Signed-in players save completed hunts in `users/{uid}/hunts`. A guest's best winning result is kept in the current browser session until sign-in.

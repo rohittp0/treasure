@@ -1,12 +1,25 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { choosePuzzle, createGame } from '../src/game.js';
+import { choosePuzzle, createGame, difficultyForLevel } from '../src/game.js';
 
-const japan = { id: 'JPN', country: 'Japan', clues: ['a', 'b', 'c'] };
-const peru = { id: 'PER', country: 'Peru', clues: ['a', 'b', 'c'] };
+const japan = { id: 'JPN', country: 'Japan', difficulty: 'easy', clues: ['a', 'b', 'c'] };
+const italy = { id: 'ITA', country: 'Italy', difficulty: 'easy', clues: ['a', 'b', 'c'] };
+const peru = { id: 'PER', country: 'Peru', difficulty: 'medium', clues: ['a', 'b', 'c'] };
+const nepal = { id: 'NPL', country: 'Nepal', difficulty: 'hard', clues: ['a', 'b', 'c'] };
 
 test('last puzzle is avoided when another is available', () => {
-  assert.equal(choosePuzzle([japan, peru], 'JPN', () => 0).id, 'PER');
+  assert.equal(choosePuzzle([japan, italy], 'JPN', () => 0).id, 'ITA');
+});
+
+test('wins progress from easy to medium to hard country pools', () => {
+  assert.equal(difficultyForLevel(1), 'easy');
+  assert.equal(difficultyForLevel(2), 'easy');
+  assert.equal(difficultyForLevel(3), 'medium');
+  assert.equal(difficultyForLevel(5), 'medium');
+  assert.equal(difficultyForLevel(6), 'hard');
+  assert.equal(choosePuzzle([japan, peru, nepal], '', () => 0, 1).id, 'JPN');
+  assert.equal(choosePuzzle([japan, peru, nepal], '', () => 0, 3).id, 'PER');
+  assert.equal(choosePuzzle([japan, peru, nepal], '', () => 0, 6).id, 'NPL');
 });
 
 test('selection is free; wrong guess costs five seconds and cannot be repeated', () => {

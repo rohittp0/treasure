@@ -4,263 +4,527 @@
     "country": "Japan",
     "iso2": "JP",
     "clues": [
-      "Spring paints a moving trail of pink across these islands as cherry blossoms open from south to north.",
+      "Sushi, anime and cherry blossoms are your first clues. This island country sits off the east coast of Asia.",
       "Look off the eastern coast of Asia: a long island chain where bullet trains zip past volcanic mountains.",
       "Mount Fuji watches over this island nation. Think sushi, shinkansen and a red circle on a white flag."
     ],
-    "fact": "Cherry blossom season travels north through Japan, so different regions bloom at different times."
+    "fact": "Cherry blossom season travels north through Japan, so different regions bloom at different times.",
+    "difficulty": "easy"
   },
   {
     "id": "AUS",
     "country": "Australia",
     "iso2": "AU",
     "clues": [
-      "A giant red rock rises from the desert here, while an astonishing coral world waits off the northeast coast.",
+      "Kangaroos and koalas call this huge country home. Look south of Asia for a land surrounded by ocean.",
       "Head south of Indonesia to a huge landmass between the Indian and Pacific oceans. Kangaroos call it home.",
       "The Great Barrier Reef and Sydney's sail-shaped Opera House belong to this country. X marks the land Down Under."
     ],
-    "fact": "Sydney Opera House's famous roofs are groups of interlocking vaulted shells, designed by Jørn Utzon."
+    "fact": "Sydney Opera House's famous roofs are groups of interlocking vaulted shells, designed by Jørn Utzon.",
+    "difficulty": "easy"
   },
   {
     "id": "NZL",
     "country": "New Zealand",
     "iso2": "NZ",
     "clues": [
-      "Pack your binoculars: an alpine parrot called the kea lives among this country's mountains and glacial valleys.",
+      "Kiwi birds and Lord of the Rings scenery point to an island country in the Pacific, southeast of Australia.",
       "Search the southwest Pacific, southeast of Australia, for two large islands with fjords and snowy peaks.",
-      "Aotearoa is another name for this country. Its famous kiwi is a flightless bird, not just a fruit."
+      "Wellington is its capital, and Auckland is a major city. Select the pair of long islands southeast of Australia."
     ],
-    "fact": "The kiwi has hair-like feathers, strong legs and no tail, and is a cherished national symbol."
+    "fact": "The kiwi has hair-like feathers, strong legs and no tail, and is a cherished national symbol.",
+    "difficulty": "medium"
   },
   {
     "id": "PER",
     "country": "Peru",
     "iso2": "PE",
     "clues": [
-      "Your treasure trail climbs from Pacific shores into the Andes, where ancient stone settlements cling to the heights.",
-      "This South American country was the heart of the Inca Empire. It shares Lake Titicaca with Bolivia.",
-      "Follow the Inca Trail to Machu Picchu. Which country holds this mountaintop treasure?"
+      "Think llamas, Inca ruins and the Andes. Your treasure is in a country on South America's Pacific coast.",
+      "This South American country was the heart of the Inca Empire. It lies south of Ecuador and north of Chile.",
+      "Machu Picchu is here, and Lima is its capital. Select the Pacific-coast country between Ecuador and Chile."
     ],
-    "fact": "The Machu Picchu sanctuary protects cloud forests as well as the Inca archaeological site."
+    "fact": "The Machu Picchu sanctuary protects cloud forests as well as the Inca archaeological site.",
+    "difficulty": "medium"
   },
   {
     "id": "BRA",
     "country": "Brazil",
     "iso2": "BR",
     "clues": [
-      "A thunderous waterfall frontier is one treasure here; another is a coastal city tucked between mountains and sea.",
+      "Football, samba and the Amazon rainforest are big clues. Head to South America for this treasure.",
       "Find the largest country in South America. Portuguese is spoken here, and much of the Amazon lies within it.",
       "Christ the Redeemer spreads its arms above Rio de Janeiro in this country, home to Copacabana beach."
     ],
-    "fact": "Rio's World Heritage landscape includes mountains, botanical gardens and the sweeping shore of Copacabana."
+    "fact": "Rio's World Heritage landscape includes mountains, botanical gardens and the sweeping shore of Copacabana.",
+    "difficulty": "easy"
   },
   {
     "id": "MEX",
     "country": "Mexico",
     "iso2": "MX",
     "clues": [
-      "Some forests here are made of towering cacti, and ancient cities hold stone temples and underground water wells.",
+      "Tacos, mariachi music and Maya pyramids are your trail markers. Look for a country in North America.",
       "Look in North America, directly south of the United States, with Pacific and Caribbean shores.",
       "The Maya city of Chichén Itzá and its stepped pyramid, El Castillo, are waiting in this country's Yucatán Peninsula."
     ],
-    "fact": "Chichén Itzá grew near natural wells called cenotes, which gave its residents access to underground water."
+    "fact": "Chichén Itzá grew near natural wells called cenotes, which gave its residents access to underground water.",
+    "difficulty": "easy"
   },
   {
     "id": "CAN",
     "country": "Canada",
     "iso2": "CA",
     "clues": [
-      "An unexpected treasure hides in these Rocky Mountains: fossils of sea creatures that lived over 500 million years ago.",
+      "Think maple syrup, ice hockey and snowy forests. This very large country is in North America.",
       "Find the vast North American country above the United States, stretching from the Atlantic to the Pacific.",
       "Its flag has a red maple leaf. Banff's mountain lakes and Québec's old streets are both in this country."
     ],
-    "fact": "The Burgess Shale preserves remarkable fossils of ancient marine animals, high in the Rocky Mountains."
+    "fact": "The Burgess Shale preserves remarkable fossils of ancient marine animals, high in the Rocky Mountains.",
+    "difficulty": "easy"
   },
   {
     "id": "USA",
     "country": "United States",
     "iso2": "US",
     "clues": [
-      "A treasure of bubbling springs and erupting geysers was protected here as a national park back in 1872.",
+      "Hollywood movies, the Grand Canyon and a stars-and-stripes flag point to this big North American country.",
       "Look between Canada and Mexico for a country whose mainland reaches both the Atlantic and Pacific oceans.",
       "The Grand Canyon, Yellowstone and the Statue of Liberty all belong to this country of 50 states."
     ],
-    "fact": "Yellowstone National Park was established in 1872 and lies mostly in the state of Wyoming."
+    "fact": "Yellowstone National Park was established in 1872 and lies mostly in the state of Wyoming.",
+    "difficulty": "easy"
   },
   {
     "id": "ITA",
     "country": "Italy",
     "iso2": "IT",
     "clues": [
-      "A volcano buried Roman towns here in AD 79, leaving an extraordinary time capsule for future treasure hunters.",
+      "Pizza, pasta and ancient Roman ruins belong on this treasure trail. Look for a country in southern Europe.",
       "One of its cities spreads across a lagoon on small islands, with canals threading between palaces.",
       "Find the boot kicking into the Mediterranean. Venice, Pompeii and the Leaning Tower of Pisa are all here."
     ],
-    "fact": "Venice grew across 118 small islands in a lagoon, linked by its network of waterways."
+    "fact": "Venice grew across 118 small islands in a lagoon, linked by its network of waterways.",
+    "difficulty": "easy"
   },
   {
     "id": "FRA",
     "country": "France",
     "iso2": "FR",
     "clues": [
-      "A medieval abbey crowns a rocky islet here, surrounded by sandbanks that powerful tides can cover.",
-      "This western European country has Atlantic and Mediterranean coasts; the Louvre guards some of its art treasures.",
-      "The Eiffel Tower is your final beacon. Find its country, across the Channel from the United Kingdom."
+      "Croissants, the Louvre and the Eiffel Tower point to this country in western Europe.",
+      "Find the large western European country south of the United Kingdom and north of Spain; the Seine runs through it.",
+      "The Eiffel Tower stands in Paris, this country's capital. Its flag has blue, white and red vertical stripes."
     ],
-    "fact": "Mont-Saint-Michel's abbey was built over centuries on a rocky islet between Normandy and Brittany."
+    "fact": "Mont-Saint-Michel's abbey was built over centuries on a rocky islet between Normandy and Brittany.",
+    "difficulty": "easy"
   },
   {
     "id": "GRC",
     "country": "Greece",
     "iso2": "GR",
     "clues": [
-      "Ancient temples here told stories of gods and goddesses, and carved stone columns still stand above a busy city.",
-      "Search southeastern Europe, where a jagged peninsula reaches into the Mediterranean beside the Aegean Sea.",
-      "The Parthenon, Mount Olympus and the islands of Crete and Santorini point to this country."
+      "Think Zeus, the ancient Olympic Games and sunny Mediterranean islands. Look in southeastern Europe.",
+      "Look at the southern end of the Balkans, south of Bulgaria and west of Turkey, beside the Aegean Sea.",
+      "Athens is its capital and the Parthenon stands here. Find the country with Crete just below its mainland."
     ],
-    "fact": "The Parthenon is part of the Acropolis complex, whose major monuments were built in the fifth century BC."
+    "fact": "The Parthenon is part of the Acropolis complex, whose major monuments were built in the fifth century BC.",
+    "difficulty": "medium"
   },
   {
     "id": "NOR",
     "country": "Norway",
     "iso2": "NO",
     "clues": [
-      "Sail between cliffs that rise like giant castle walls: glaciers carved deep sea inlets into this coastline.",
-      "Look along the western side of Scandinavia, beside Sweden, with a long coastline reaching far into the Arctic.",
-      "This is the country of Geirangerfjord and Nærøyfjord. Its flag is red with a blue cross outlined in white."
+      "Fjords, northern lights and Viking history are your first clues. Look in Scandinavia in northern Europe.",
+      "Find the long, thin country on the western side of Scandinavia, with Sweden directly to its east.",
+      "Oslo is its capital. Select Sweden's western neighbor, the one whose long coast reaches up toward the Arctic."
     ],
-    "fact": "The West Norwegian Fjords have steep rock walls, waterfalls and landscapes shaped by glaciers."
+    "fact": "The West Norwegian Fjords have steep rock walls, waterfalls and landscapes shaped by glaciers.",
+    "difficulty": "medium"
   },
   {
     "id": "ISL",
     "country": "Iceland",
     "iso2": "IS",
     "clues": [
-      "Long before modern parliament buildings, people gathered outdoors here to make laws at an assembly founded in 930.",
-      "Find a volcanic island in the North Atlantic, east of Greenland, where glaciers share the landscape with hot springs.",
-      "The land of fire and ice has geysers, black-sand beaches and the Blue Lagoon. Look just below the Arctic Circle."
+      "Volcanoes, geysers and hot springs make this North Atlantic island a land of fire and ice.",
+      "Find the island between Greenland and Norway, northwest of the United Kingdom, just below the Arctic Circle.",
+      "Reykjavík is its capital. Select the isolated island directly east of Greenland and far northwest of the United Kingdom."
     ],
-    "fact": "The Althing assembly began meeting at Þingvellir in 930 and met there for centuries."
+    "fact": "The Althing assembly began meeting at Þingvellir in 930 and met there for centuries.",
+    "difficulty": "medium"
   },
   {
     "id": "EGY",
     "country": "Egypt",
     "iso2": "EG",
     "clues": [
-      "Ancient rulers built enormous stone tombs here, turning their desert resting places into landmarks for the ages.",
+      "Pyramids, mummies and pharaohs are your treasure trail. Look in northeastern Africa.",
       "Trace the Nile through northeastern Africa to the Mediterranean. This country also touches the Red Sea.",
       "The pyramids of Giza and the Great Sphinx guard your final clue. Which country is their home?"
     ],
-    "fact": "The pyramid fields from Giza to Dahshur form part of a World Heritage site linked to ancient Memphis."
+    "fact": "The pyramid fields from Giza to Dahshur form part of a World Heritage site linked to ancient Memphis.",
+    "difficulty": "easy"
   },
   {
     "id": "MAR",
     "country": "Morocco",
     "iso2": "MA",
     "clues": [
-      "One mountain town here is famous for blue-painted lanes, while old walled cities hide gardens and bustling squares.",
-      "Look in northwest Africa, across the Strait of Gibraltar from Spain, with both Atlantic and Mediterranean shores.",
-      "Marrakesh, Casablanca and the blue town of Chefchaouen are all in this country beside the Atlas Mountains."
+      "Marrakesh markets, the Atlas Mountains and Sahara dunes point to a country in northwestern Africa.",
+      "Find the country at Africa's northwest corner, directly south of Spain across the Strait of Gibraltar.",
+      "Rabat is its capital, and Casablanca and Marrakesh are here. Select Algeria's neighbor to the west."
     ],
-    "fact": "Marrakesh's medina contains monumental gateways, gardens and the open-air square of Jamaâ El Fna."
+    "fact": "Marrakesh's medina contains monumental gateways, gardens and the open-air square of Jamaâ El Fna.",
+    "difficulty": "medium"
   },
   {
     "id": "KEN",
     "country": "Kenya",
     "iso2": "KE",
     "clues": [
-      "Here is a safari surprise: a national park has wild animals roaming with a modern city's skyline behind them.",
-      "Look in East Africa, on the equator and the Indian Ocean, directly north of Tanzania.",
-      "The Maasai Mara's big cats and wildebeest are a famous treasure here. Find Tanzania's neighbor to the northeast."
+      "Think East African safaris and the Maasai Mara, where lions roam the grasslands. The equator crosses this country.",
+      "Look in East Africa, directly south of Ethiopia and north of Tanzania, with a coast on the Indian Ocean.",
+      "Nairobi is its capital. Find the coastal country between Somalia and Tanzania; the Maasai Mara is here."
     ],
-    "fact": "Nairobi National Park protects wildlife habitat close enough to the city for skyscrapers to frame the view."
+    "fact": "Nairobi National Park protects wildlife habitat close enough to the city for skyscrapers to frame the view.",
+    "difficulty": "medium"
   },
   {
     "id": "TZA",
     "country": "Tanzania",
     "iso2": "TZ",
     "clues": [
-      "Vast herds of wildebeest and zebras follow the rains across these grasslands, with hungry predators on their trail.",
+      "Africa's tallest mountain, Kilimanjaro, rises in this East African country. Safari adventure awaits here too.",
       "Head to East Africa, south of Kenya. This country has Indian Ocean shores and the islands of Zanzibar.",
-      "Mount Kilimanjaro and Serengeti National Park are both here. Find the country holding Africa's highest summit."
+      "Find Kenya's southern neighbor: its mainland lies west of Zanzibar, and the Serengeti and Kilimanjaro are both here."
     ],
-    "fact": "The Serengeti's great migration includes wildebeest, zebras and gazelles moving in search of water and grazing."
+    "fact": "The Serengeti's great migration includes wildebeest, zebras and gazelles moving in search of water and grazing.",
+    "difficulty": "medium"
   },
   {
     "id": "MDG",
     "country": "Madagascar",
     "iso2": "MG",
     "clues": [
-      "Not every forest has leaves: this country's tsingy landscapes contain a maze of sharp limestone pinnacles.",
-      "Look for a large island in the Indian Ocean, off southeastern Africa and across the water from Mozambique.",
-      "Lemurs and towering baobab trees are the stars of this island country, just east of mainland Africa."
+      "Lemurs and giant baobab trees are your first clues. Find a large island off Africa's southeast coast.",
+      "Find the large island in the Indian Ocean, east of Mozambique and southeast of the African mainland.",
+      "Antananarivo is its capital. Select the big island immediately east of Mozambique; it is famous for its lemurs."
     ],
-    "fact": "The Andrefana Dry Forests protect limestone landscapes, baobabs and habitats for rare lemurs."
+    "fact": "The Andrefana Dry Forests protect limestone landscapes, baobabs and habitats for rare lemurs.",
+    "difficulty": "medium"
   },
   {
     "id": "IND",
     "country": "India",
     "iso2": "IN",
     "clues": [
-      "Even fetching water could mean descending into a work of art: a carved stepwell here was designed like an inverted temple.",
+      "Bollywood movies, cricket and colorful Holi celebrations point to this large South Asian country.",
       "Search South Asia for a broad peninsula, with the Himalayas to its north and Sri Lanka just off its southern tip.",
       "The white marble Taj Mahal in Agra is the final treasure on your trail. Which country is it in?"
     ],
-    "fact": "Rani-ki-Vav, the Queen's Stepwell, has seven levels of stairs decorated with intricate sculptural panels."
+    "fact": "Rani-ki-Vav, the Queen's Stepwell, has seven levels of stairs decorated with intricate sculptural panels.",
+    "difficulty": "easy"
   },
   {
     "id": "NPL",
     "country": "Nepal",
     "iso2": "NP",
     "clues": [
-      "Snow leopards and red pandas share this country's mountain wilderness with glaciers and deep Himalayan valleys.",
-      "This landlocked South Asian country sits between India and China; Sherpa communities live in its high mountains.",
-      "Everest climbers take the southern approach through this country. Find the narrow Himalayan neighbor north of India."
+      "Himalayan trekking and Mount Everest expeditions point to this small, landlocked country in South Asia.",
+      "Find the narrow landlocked country along the Himalayas, with India to its south and China to its north.",
+      "Kathmandu is its capital. Look for the small strip north of India and west of Bhutan, on Everest's southern side."
     ],
-    "fact": "Sagarmatha National Park protects Himalayan landscapes and wildlife on the southern side of Mount Everest."
+    "fact": "Sagarmatha National Park protects Himalayan landscapes and wildlife on the southern side of Mount Everest.",
+    "difficulty": "medium"
   },
   {
     "id": "CHN",
     "country": "China",
     "iso2": "CN",
     "clues": [
-      "A defensive treasure snakes across hills here: rulers linked older fortifications, then later dynasties kept building.",
-      "Find a vast East Asian country south of Mongolia, with a Pacific coastline and giant pandas among its native wildlife.",
-      "The Great Wall is your unmistakable landmark. Which country built this sprawling system of ancient defenses?"
+      "Giant pandas and the Great Wall are your first clues. Look for a very large country in East Asia.",
+      "Find the huge East Asian country south of Mongolia and west of Japan, with the Himalayas along its southwest.",
+      "Beijing is its capital, and the Great Wall crosses its northern hills. Look for the giant country just below Mongolia."
     ],
-    "fact": "The Great Wall was built and rebuilt over many centuries, with major construction continuing under the Ming dynasty."
+    "fact": "The Great Wall was built and rebuilt over many centuries, with major construction continuing under the Ming dynasty.",
+    "difficulty": "easy"
   },
   {
     "id": "KHM",
     "country": "Cambodia",
     "iso2": "KH",
     "clues": [
-      "An ancient empire left a treasure trail of reservoirs, canals and stone temples hidden among forests here.",
-      "Look in mainland Southeast Asia, between Thailand and Vietnam, for the historic heartland of the Khmer Empire.",
-      "The towers of Angkor Wat are your final beacon. Find the country that holds this famous temple complex."
+      "Angkor Wat's stone towers are the star attraction in this country in mainland Southeast Asia.",
+      "Look in mainland Southeast Asia, directly east of Thailand and west of Vietnam, near the Gulf of Thailand.",
+      "Phnom Penh is its capital. Find the small country between Thailand and southern Vietnam; Angkor Wat is here."
     ],
-    "fact": "The Angkor area includes not only temples but reservoirs, dykes, canals and roads from the Khmer Empire."
+    "fact": "The Angkor area includes not only temples but reservoirs, dykes, canals and roads from the Khmer Empire.",
+    "difficulty": "hard"
   },
   {
     "id": "IDN",
     "country": "Indonesia",
     "iso2": "ID",
     "clues": [
-      "A huge ancient Buddhist temple rises here in tiers of stone, with dozens of bell-shaped stupas circling its upper levels.",
-      "Follow the islands of Sumatra and Java across the equator, between mainland Southeast Asia and Australia.",
-      "Bali, Java and the Komodo dragons' islands all belong to this sprawling island country."
+      "Bali's beaches and Komodo dragons point to this island country between Southeast Asia and Australia.",
+      "Trace Sumatra and Java eastward along the equator, south of Malaysia and north of Australia.",
+      "Jakarta is on Java in this country. Select the island chain that includes Sumatra, Java, Bali and part of Borneo."
     ],
-    "fact": "Borobudur in central Java has 72 openwork stupas around its circular platforms, each containing a Buddha statue."
+    "fact": "Borobudur in central Java has 72 openwork stupas around its circular platforms, each containing a Buddha statue.",
+    "difficulty": "medium"
   },
   {
     "id": "VNM",
     "country": "Vietnam",
     "iso2": "VN",
     "clues": [
-      "Your boat could weave between limestone towers rising from the sea in one of this country's spectacular bays.",
-      "Find a long, narrow country on mainland Southeast Asia's eastern coast, beside Laos and Cambodia and south of China.",
-      "Ha Long Bay lies in its north and the Mekong Delta in its south. Look for the S-shaped country on the coast."
+      "Pho noodle soup and Ha Long Bay are your first clues. Look along the eastern coast of mainland Southeast Asia.",
+      "Find the long, narrow country south of China, east of Laos and Cambodia, stretching along the sea.",
+      "Hanoi is its capital and Ho Chi Minh City is in its south. Look for the S-shaped country east of Laos and Cambodia."
     ],
-    "fact": "Ha Long Bay and the Cat Ba Archipelago contain a dramatic seascape of limestone islands and islets."
+    "fact": "Ha Long Bay and the Cat Ba Archipelago contain a dramatic seascape of limestone islands and islets.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "ESP",
+    "country": "Spain",
+    "iso2": "ES",
+    "difficulty": "easy",
+    "clues": [
+      "Paella, flamenco and Barcelona's Sagrada Família are your first clues. Look in southwestern Europe.",
+      "Find the large country on the Iberian Peninsula, south of France and east of Portugal.",
+      "Madrid is its capital. Select the country that shares the Iberian Peninsula with Portugal and includes Barcelona."
+    ],
+    "fact": "Gaudí's World Heritage works include Park Güell and parts of the Sagrada Família in Barcelona."
+  },
+  {
+    "id": "PRT",
+    "country": "Portugal",
+    "iso2": "PT",
+    "difficulty": "medium",
+    "clues": [
+      "Cristiano Ronaldo, custard tarts and Atlantic beaches point to this country in southwestern Europe.",
+      "Look on the western edge of the Iberian Peninsula. This country's only land neighbor is Spain.",
+      "Lisbon is its capital, and Porto is another famous city. Select the narrow country immediately west of Spain."
+    ],
+    "fact": "The Tower of Belém stands near the entrance to Lisbon's harbor, beside the Jerónimos Monastery."
+  },
+  {
+    "id": "GBR",
+    "country": "United Kingdom",
+    "iso2": "GB",
+    "difficulty": "easy",
+    "clues": [
+      "Big Ben, red double-decker buses and Harry Potter point to this island country off Europe's northwest coast.",
+      "Look across the English Channel from France. This country includes England, Scotland, Wales and Northern Ireland.",
+      "London is its capital. Select Great Britain and Northern Ireland, directly west of mainland Europe."
+    ],
+    "fact": "Stonehenge and nearby Avebury preserve prehistoric stone circles in the English county of Wiltshire."
+  },
+  {
+    "id": "DEU",
+    "country": "Germany",
+    "iso2": "DE",
+    "difficulty": "easy",
+    "clues": [
+      "Pretzels, Oktoberfest and famous car makers point to this country near the center of Europe.",
+      "Find the large country east of France, west of Poland and north of Austria and Switzerland.",
+      "Berlin is its capital; Munich and Hamburg are here too. Look for France's large neighbor to the east."
+    ],
+    "fact": "Construction of Cologne Cathedral began in 1248 and was completed in 1880, more than 600 years later."
+  },
+  {
+    "id": "SWE",
+    "country": "Sweden",
+    "iso2": "SE",
+    "difficulty": "medium",
+    "clues": [
+      "IKEA, ABBA and meatballs point to this northern European country. Its flag has a yellow cross on blue.",
+      "Look in Scandinavia, between Norway to the west and Finland to the northeast, beside the Baltic Sea.",
+      "Stockholm is its capital. Select the long country immediately east of Norway and west of the Baltic Sea."
+    ],
+    "fact": "Drottningholm's royal estate stands on an island and includes a preserved theater built in 1766."
+  },
+  {
+    "id": "FIN",
+    "country": "Finland",
+    "iso2": "FI",
+    "difficulty": "medium",
+    "clues": [
+      "Saunas, snowy Lapland and the Moomins point to this northern European country, just east of Sweden.",
+      "Find the country between Sweden and Russia, with the Gulf of Bothnia along its west coast.",
+      "Helsinki is its capital. Select Sweden's neighbor to the east, north of Estonia across the Gulf."
+    ],
+    "fact": "Suomenlinna is a sea fortress built across islands at the entrance to Helsinki's harbor."
+  },
+  {
+    "id": "ARG",
+    "country": "Argentina",
+    "iso2": "AR",
+    "difficulty": "medium",
+    "clues": [
+      "Lionel Messi, tango and Patagonian glaciers point to this large country in southern South America.",
+      "Find the long country east of Chile and the Andes, stretching toward South America's southern tip.",
+      "Buenos Aires is its capital. Select Chile's broad neighbor to the east; its flag has pale blue and white stripes."
+    ],
+    "fact": "Iguazú Falls spans the border with Brazil, surrounded by subtropical rainforest."
+  },
+  {
+    "id": "CHL",
+    "country": "Chile",
+    "iso2": "CL",
+    "difficulty": "medium",
+    "clues": [
+      "Look for a country shaped like a very long ribbon along South America's Pacific coast. The Andes run beside it.",
+      "It lies west of Argentina and south of Peru, with the dry Atacama Desert in its north.",
+      "Santiago is its capital. Select the skinny strip between the Pacific Ocean and Argentina, far down South America."
+    ],
+    "fact": "Rapa Nui, also called Easter Island, is famous for its enormous stone figures known as moai."
+  },
+  {
+    "id": "COL",
+    "country": "Colombia",
+    "iso2": "CO",
+    "difficulty": "hard",
+    "clues": [
+      "Coffee, Shakira and Caribbean beaches point to this country at the northern end of South America.",
+      "Find the country just southeast of Panama, with both Caribbean and Pacific coasts, west of Venezuela.",
+      "Bogotá is its capital. Select the country joining Panama to South America, directly north of Ecuador and Peru."
+    ],
+    "fact": "Its World Heritage coffee landscape includes farms on steep Andean hillsides and towns above the fields."
+  },
+  {
+    "id": "ECU",
+    "country": "Ecuador",
+    "iso2": "EC",
+    "difficulty": "hard",
+    "clues": [
+      "The Galápagos Islands belong to this small South American country on the Pacific coast. The equator crosses it.",
+      "Find the country between Colombia to the north and Peru to the east and south.",
+      "Quito is its capital, and its name means equator. Select the small Pacific-coast country just south of Colombia."
+    ],
+    "fact": "The Galápagos Islands' unusual wildlife helped inspire Darwin's thinking about evolution after his 1835 visit."
+  },
+  {
+    "id": "ZAF",
+    "country": "South Africa",
+    "iso2": "ZA",
+    "difficulty": "easy",
+    "clues": [
+      "Cape Town, Table Mountain and Nelson Mandela point to a country at the bottom of the African continent.",
+      "Find the large country at Africa's southern tip, with both Atlantic and Indian Ocean coasts.",
+      "Johannesburg and Cape Town are both here. Select the country that surrounds the smaller country of Lesotho."
+    ],
+    "fact": "The Cape Floral Region is home to fynbos, a distinctive vegetation adapted to periodic fires."
+  },
+  {
+    "id": "NGA",
+    "country": "Nigeria",
+    "iso2": "NG",
+    "difficulty": "hard",
+    "clues": [
+      "Afrobeats and Nollywood movies are famous exports of this West African country. Lagos is one of its major cities.",
+      "Look on the Gulf of Guinea, west of Cameroon, east of Benin and south of Niger.",
+      "Abuja is its capital. Find the large coastal country directly below Niger, with a green-white-green flag."
+    ],
+    "fact": "The Osun-Osogbo Sacred Grove contains shrines, sculptures and forest along the Osun River."
+  },
+  {
+    "id": "GHA",
+    "country": "Ghana",
+    "iso2": "GH",
+    "difficulty": "hard",
+    "clues": [
+      "Colorful kente cloth and cocoa farms point to this West African country beside the Gulf of Guinea.",
+      "Find the coastal country between Côte d'Ivoire to the west and Togo to the east, south of Burkina Faso.",
+      "Accra is its capital. Select Togo's western neighbor; its flag has red, yellow and green stripes and a black star."
+    ],
+    "fact": "Historic forts and castles line its coast, preserving evidence of centuries of Atlantic trade and enslavement."
+  },
+  {
+    "id": "ETH",
+    "country": "Ethiopia",
+    "iso2": "ET",
+    "difficulty": "hard",
+    "clues": [
+      "Coffee ceremonies, injera flatbread and highland scenery point to this large country in the Horn of Africa.",
+      "Find the landlocked country north of Kenya, west of Somalia and south of Eritrea.",
+      "Addis Ababa is its capital. Select the large inland country immediately west of Somalia and north of Kenya."
+    ],
+    "fact": "Lalibela has 11 medieval churches carved from rock, an extraordinary tradition of monumental architecture."
+  },
+  {
+    "id": "TUR",
+    "country": "Turkey",
+    "iso2": "TR",
+    "difficulty": "medium",
+    "clues": [
+      "Istanbul, kebabs and Cappadocia's balloon-filled skies point to a country bridging Europe and Asia.",
+      "Look south of the Black Sea and north of Syria, with Greece to the west and Iran to the east.",
+      "Ankara is its capital. Select the long country between the Black Sea and Mediterranean, where Istanbul spans two continents."
+    ],
+    "fact": "Cappadocia preserves rock-cut dwellings, sanctuaries and underground towns in a landscape sculpted by erosion."
+  },
+  {
+    "id": "SAU",
+    "country": "Saudi Arabia",
+    "iso2": "SA",
+    "difficulty": "medium",
+    "clues": [
+      "Mecca, desert dunes and oil fields point to this large country on the Arabian Peninsula.",
+      "Find the biggest country on that peninsula, between the Red Sea and the Persian Gulf, north of Yemen.",
+      "Riyadh is its capital, and Mecca and Medina are here. Select the large country occupying most of the Arabian Peninsula."
+    ],
+    "fact": "Hegra preserves monumental Nabataean tombs carved into rock, with decorated facades and ancient wells."
+  },
+  {
+    "id": "KOR",
+    "country": "South Korea",
+    "iso2": "KR",
+    "difficulty": "medium",
+    "clues": [
+      "K-pop, kimchi and Samsung point to this East Asian country on a peninsula near Japan.",
+      "Look for the southern half of the peninsula east of China, across the sea from Japan.",
+      "Seoul is its capital, and Busan is a major port. Select the southern half of the peninsula between China and Japan."
+    ],
+    "fact": "Jeju Island's World Heritage landscape includes volcanic craters and caves formed by flowing lava."
+  },
+  {
+    "id": "MNG",
+    "country": "Mongolia",
+    "iso2": "MN",
+    "difficulty": "hard",
+    "clues": [
+      "Genghis Khan, open grasslands and the Gobi Desert point to this landlocked country in Asia.",
+      "This broad country has only two neighbors: Russia to its north and China along the rest of its border.",
+      "Ulaanbaatar is its capital. Select the large landlocked country sandwiched directly between Russia and China."
+    ],
+    "fact": "The Orkhon Valley includes the remains of Kharkhorum, a medieval imperial capital, among extensive pasturelands."
+  },
+  {
+    "id": "PAK",
+    "country": "Pakistan",
+    "iso2": "PK",
+    "difficulty": "hard",
+    "clues": [
+      "Cricket, the Indus River and the towering peak K2 point to this South Asian country, west of India.",
+      "Find the country between India and Afghanistan, with Iran to its west and an Arabian Sea coast in the south.",
+      "Islamabad is its capital and Karachi is a major city. Select India's large neighbor immediately to the west."
+    ],
+    "fact": "Mohenjo-daro, an ancient Indus Valley city, preserves evidence of carefully planned streets and urban neighborhoods."
+  },
+  {
+    "id": "BGD",
+    "country": "Bangladesh",
+    "iso2": "BD",
+    "difficulty": "hard",
+    "clues": [
+      "Bengal tigers, river deltas and a green flag with a red circle point to this small country beside India.",
+      "Look east of India's main landmass, north of the Bay of Bengal and west of Myanmar.",
+      "Dhaka is its capital. Select the compact country almost surrounded by India, at the northern end of the Bay of Bengal."
+    ],
+    "fact": "The Sundarbans is a mangrove landscape of tidal waterways and islands shared with neighboring India."
   }
 ]

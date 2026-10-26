@@ -3,7 +3,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import mapWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import './style.css';
 import fallbackPuzzles from '../data/countries.json';
-import { choosePuzzle, createGame, CLUE_COST, REVEAL_COST } from './game.js';
+import { choosePuzzle, createGame, difficultyForLevel, CLUE_COST, REVEAL_COST } from './game.js';
 import { watchUser, login, logout, loadPuzzles, saveHunt, loadHunts, loadLeaderboard, enterLeaderboard } from './firebase.js';
 
 maplibregl.setWorkerUrl(mapWorkerUrl);
@@ -25,7 +25,6 @@ const elements = {
 
 let map;
 let puzzles = fallbackPuzzles;
-let source = 'included';
 let user = null;
 let game = null;
 let selectedMapId = '';
@@ -35,8 +34,30 @@ let toastTimeout;
 let countryData;
 let lastResult = null;
 let pendingEntryPromise = null;
+const PROGRESS_KEY = 'treasurehunch:solo-wins';
 const PENDING_ENTRY_KEY = 'treasurehunch:pending-leaderboard';
 const RESUME_RESULT_KEY = 'treasurehunch:resume-result';
+let completedWins = readCompletedWins();
+let activeLevel = completedWins + 1;
+
+function readCompletedWins() {
+  try {
+    const value = Number(localStorage.getItem(PROGRESS_KEY));
+    return Number.isSafeInteger(value) && value >= 0 ? value : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function rememberCompletedWins() {
+  try { localStorage.setItem(PROGRESS_KEY, String(completedWins)); } catch { /* Continue this hunt if storage is unavailable. */ }
+}
+
+function updateHomeStatus() {
+  const nextLevel = completedWins + 1;
+  const difficulty = difficultyForLevel(nextLevel);
+  elements.homeStatus.textContent = `${puzzles.length} places to discover · Level ${String(nextLevel).padStart(2, '0')} · ${difficulty[0].toUpperCase()}${difficulty.slice(1)}`;
+}
 
 function escapeHTML(value) {
   return String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
@@ -125,11 +146,15 @@ async function loadMap() {
 async function loadPuzzleSet() {
   try {
     const remote = await loadPuzzles();
-    if (remote.length) { puzzles = remote; source = 'firestore'; }
+    if (remote.length) {
+      // Keep the bundled editorial set current until the Firestore seed catches up.
+      const includedIds = new Set(fallbackPuzzles.map(puzzle => puzzle.id));
+      puzzles = [...fallbackPuzzles, ...remote.filter(puzzle => !includedIds.has(puzzle.id))];
+    }
   } catch (error) {
     console.warn('Using included clue set:', error);
   }
-  elements.homeStatus.textContent = `${puzzles.length} places to discover · ${source === 'firestore' ? 'Fresh from the field' : 'Adventure ready'}`;
+  updateHomeStatus();
 }
 
 function renderSelection(state) {
@@ -168,9 +193,11 @@ function renderGame() {
 
 function startHunt() {
   if (!map?.getLayer('land')) { showToast('The map is still loading. One moment!'); return; }
+  activeLevel = completedWins + 1;
   const lastId = sessionStorage.getItem('treasurehunch:last-country') || '';
-  const puzzle = choosePuzzle(puzzles, lastId);
+  const puzzle = choosePuzzle(puzzles, lastId, Math.random, activeLevel);
   sessionStorage.setItem('treasurehunch:last-country', puzzle.id);
+  $('#level-label').textContent = `LEVEL ${String(activeLevel).padStart(2, '0')} · ${difficultyForLevel(activeLevel).toUpperCase()} HUNT`;
   game = createGame(puzzle);
   saved = false;
   lastResult = null;
@@ -197,6 +224,8 @@ function huntRecord(state) {
     cluesUsed: state.cluesVisible,
     wrongGuesses: state.wrongGuesses,
     revealedCountry: state.revealedCountry,
+    level: state.level || activeLevel,
+    difficulty: state.puzzle.difficulty || difficultyForLevel(state.level || activeLevel),
   };
 }
 
@@ -271,6 +300,14 @@ function finish(state) {
   clearInterval(ticker);
   if (saved) return;
   saved = true;
+  const won = state.status === 'won';
+  const resultLevel = state.level || activeLevel;
+  state.level = resultLevel;
+  if (won && game) {
+    completedWins += 1;
+    rememberCompletedWins();
+    updateHomeStatus();
+  }
   lastResult = state;
   clearMapSelection();
   document.body.classList.remove('in-game');
@@ -279,11 +316,10 @@ function finish(state) {
   elements.home.classList.add('hidden');
   elements.game.classList.add('hidden');
   elements.result.classList.remove('hidden');
-  const won = state.status === 'won';
   $('#result-art').textContent = won ? '✦' : '⌛';
-  $('#result-eyebrow').textContent = won ? 'TREASURE FOUND' : 'THE TRAIL WENT COLD';
+  $('#result-eyebrow').textContent = `LEVEL ${String(resultLevel).padStart(2, '0')} · ${won ? 'TREASURE FOUND' : 'THE TRAIL WENT COLD'}`;
   $('#result-title').textContent = won ? 'Beautifully found.' : 'The world is still waiting.';
-  $('#result-copy').textContent = won ? `You found ${state.puzzle.country} with ${state.remaining} seconds to spare.` : `The treasure was hiding in ${state.puzzle.country}. Every explorer needs another try.`;
+  $('#result-copy').textContent = won ? `You found ${state.puzzle.country} with ${state.remaining} seconds to spare. Level ${resultLevel + 1} is ready.` : `The treasure was hiding in ${state.puzzle.country}. Try level ${resultLevel} again with a new country.`;
   $('#result-stats').innerHTML = `<div><strong>${state.remaining}s</strong><span>ON THE CLOCK</span></div><div><strong>${state.cluesVisible}/3</strong><span>CLUES OPENED</span></div><div><strong>${state.wrongGuesses}</strong><span>WRONG GUESSES</span></div>`;
   $('#result-fact').textContent = state.puzzle.fact;
   elements.saveStatus.textContent = user ? 'Saving this hunt…' : won ? 'Sign in to keep this winning find.' : 'Your hunt is complete. Play again for the leaderboard.';
@@ -407,5 +443,14 @@ watchUser(nextUser => {
   if (nextUser) {
     sessionStorage.removeItem(RESUME_RESULT_KEY);
     postPendingGuestEntry(nextUser);
+    loadHunts(nextUser).then(hunts => {
+      if (user?.uid !== nextUser.uid) return;
+      const remoteWins = hunts.filter(hunt => hunt.result === 'won').length;
+      if (remoteWins > completedWins) {
+        completedWins = remoteWins;
+        rememberCompletedWins();
+        updateHomeStatus();
+      }
+    }).catch(error => console.warn('Could not sync explorer level:', error));
   }
 });

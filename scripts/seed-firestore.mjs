@@ -5,14 +5,23 @@ import { execFileSync } from 'node:child_process';
 
 const projectId = 'treasurehunch';
 const countries = JSON.parse(readFileSync(new URL('../data/countries.json', import.meta.url)));
+const map = JSON.parse(readFileSync(new URL('../public/countries.geojson', import.meta.url)));
+const mapIds = new Set(map.features.map(feature => feature.properties.id));
+const difficulties = new Set(['easy', 'medium', 'hard']);
 
-if (countries.length < 20 || new Set(countries.map(country => country.id)).size !== countries.length) {
-  throw new Error('Puzzle set needs at least 20 unique countries.');
+if (countries.length < 44 || new Set(countries.map(country => country.id)).size !== countries.length) {
+  throw new Error('Puzzle set needs at least 44 unique countries.');
 }
 for (const country of countries) {
-  if (!/^[A-Z]{3}$/.test(country.id) || country.clues?.length !== 3) {
+  if (!/^[A-Z]{3}$/.test(country.id) || !mapIds.has(country.id)
+    || !difficulties.has(country.difficulty) || !/^[A-Z]{2}$/.test(country.iso2)
+    || country.clues?.length !== 3 || country.clues.some(clue => typeof clue !== 'string' || !clue.trim())
+    || !country.fact?.trim()) {
     throw new Error(`Invalid puzzle: ${country.id}`);
   }
+}
+for (const difficulty of difficulties) {
+  if (!countries.some(country => country.difficulty === difficulty)) throw new Error(`No ${difficulty} puzzles found.`);
 }
 
 if (!process.argv.includes('--write')) {

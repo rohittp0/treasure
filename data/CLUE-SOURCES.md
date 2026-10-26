@@ -1,6 +1,6 @@
 # TreasureHunch country clue sources
 
-Curated on 26 October 2026. All clue and reveal-fact wording is original. Each set progresses from an interesting detail to geographic guidance to a recognizable landmark or national symbol. Sets are intended to be read cumulatively: the final clue need not identify the answer in isolation. Basic world geography is used alongside the primary sources below. No clue spells out its answer's country name or capital name. Twenty-four countries cover the Americas, Europe, Africa, Asia and Oceania; Antarctica has no eligible country.
+Curated and expanded on 26 October 2026. All clue and reveal-fact wording is original. The 44 puzzles contain 132 clues and cover the Americas, Europe, Africa, Asia and Oceania. First clues deliberately use familiar food, culture, landmarks or direct regional guidance; paid clues narrow the map search further, and the final clue combines a well-known city or capital with a near-explicit map location. No clue spells out its answer's country name. Basic world geography and familiar cultural references accompany the primary factual sources below.
 
 | ID | Country | Primary references and checked detail |
 | --- | --- | --- |
@@ -28,6 +28,36 @@ Curated on 26 October 2026. All clue and reveal-fact wording is original. Each s
 | KHM | Cambodia | [UNESCO: Angkor](https://whc.unesco.org/en/list/668/) — Khmer Empire temples, reservoirs, dykes, canals and roads. |
 | IDN | Indonesia | [UNESCO: Borobudur](https://whc.unesco.org/en/list/592/) — central Java, tiers, 72 openwork stupas and Buddha statues. |
 | VNM | Vietnam | [UNESCO: Ha Long Bay–Cat Ba](https://whc.unesco.org/en/list/672/) — coastal limestone towers, islands and islets in northeastern Vietnam. |
+| ESP | Spain | [UNESCO: Works of Antoni Gaudí](https://whc.unesco.org/en/list/320/) — Park Güell, Barcelona and Gaudí's work on the Sagrada Família. |
+| PRT | Portugal | [UNESCO: Belém and Jerónimos](https://whc.unesco.org/en/list/263/) — tower and monastery by Lisbon's harbor. |
+| GBR | United Kingdom | [UNESCO: Stonehenge and Avebury](https://whc.unesco.org/en/list/373/) — prehistoric stone circles in Wiltshire. |
+| DEU | Germany | [UNESCO: Cologne Cathedral](https://whc.unesco.org/en/list/292/) — construction began in 1248 and was completed in 1880. |
+| SWE | Sweden | [UNESCO: Drottningholm](https://whc.unesco.org/en/list/559/) — island estate and preserved 1766 theater. |
+| FIN | Finland | [UNESCO: Suomenlinna](https://whc.unesco.org/en/list/583/) — island sea fortress at the entrance to Helsinki's harbor. |
+| ARG | Argentina | [UNESCO: Iguazú National Park](https://whc.unesco.org/en/list/303/) — waterfalls on the Brazil border and surrounding subtropical rainforest. |
+| CHL | Chile | [UNESCO: Rapa Nui](https://whc.unesco.org/en/list/715/) — Easter Island and monumental stone moai figures. |
+| COL | Colombia | [UNESCO: Coffee Cultural Landscape](https://whc.unesco.org/en/list/1121/) — farming on steep Andean hillsides and towns above the coffee fields. |
+| ECU | Ecuador | [UNESCO: Galápagos Islands](https://whc.unesco.org/en/list/1/) — unusual wildlife and Darwin's 1835 visit. |
+| ZAF | South Africa | [UNESCO: Cape Floral Region](https://whc.unesco.org/en/list/1007/) — fynbos vegetation and adaptation to periodic fires. |
+| NGA | Nigeria | [UNESCO: Osun-Osogbo Sacred Grove](https://whc.unesco.org/en/list/1118/) — forest, river, shrines and sculpture. |
+| GHA | Ghana | [UNESCO: coastal forts and castles](https://whc.unesco.org/en/list/34/) — centuries of trade and the role of the forts in the transatlantic slave trade. |
+| ETH | Ethiopia | [UNESCO: Lalibela](https://whc.unesco.org/en/list/18/) — 11 medieval rock-hewn churches. |
+| TUR | Turkey | [UNESCO: Göreme and Cappadocia](https://whc.unesco.org/en/list/357/) — erosion-sculpted landscape, rock-cut dwellings and underground settlements. |
+| SAU | Saudi Arabia | [UNESCO: Hegra](https://whc.unesco.org/en/list/1293/) — decorated Nabataean monumental tombs and wells. |
+| KOR | South Korea | [UNESCO: Jeju](https://whc.unesco.org/en/list/1264/) — volcanic cones, craters and lava tubes. |
+| MNG | Mongolia | [UNESCO: Orkhon Valley](https://whc.unesco.org/en/list/1081/) — pasturelands and the remains of the medieval capital Kharkhorum. |
+| PAK | Pakistan | [UNESCO: Mohenjo-daro](https://whc.unesco.org/en/list/138/) — Indus Valley city with a carefully planned lower town. |
+| BGD | Bangladesh | [UNESCO: Sundarbans](https://whc.unesco.org/en/list/798/) — mangrove forest, tidal waterways and adjoining Indian protected area. |
+
+## Difficulty labels
+
+These are editorial estimates for a casual player, considering recognition and map selection together, rather than measured success rates.
+
+- `easy` — 15 countries with globally familiar clues and a relatively recognizable map location. First clues should often support a confident guess.
+- `medium` — 20 countries with familiar landmarks, food or culture, but some extra map knowledge or zooming may be needed.
+- `hard` — 9 countries whose names, position or outline may be less familiar. Clue 1 still gives a concrete region or recognizable reference; final clues give capital and neighbor guidance.
+
+All 44 ISO alpha-3 IDs were checked against `public/countries.geojson`. Each puzzle has exactly three nonempty clues, a reveal fact and an ISO alpha-2 code; the longest clue is 124 characters. Existing reveal facts and IDs were preserved.
 
 Editorial notes:
 
@@ -35,5 +65,5 @@ Editorial notes:
 - No clue claims that the Great Wall is visible from space, that a country has an exact island count, or that a landmark belongs exclusively to one country when it straddles a border.
 - Everest is explicitly approached from the south; it also borders China.
 - Iguaçu is described as a frontier landscape; the waterfalls are shared with Argentina.
-- The Kenya third clue is meant to be combined with its equatorial, coastal and neighboring-country guidance.
+- Capital and major-city names are now deliberate recognition aids in the paid clues, including Nairobi for Kenya.
 - ISO alpha-3 identifiers are keys for matching map features; Tanzania uses TZA, Madagascar MDG, Cambodia KHM, and Vietnam VNM.

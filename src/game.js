@@ -3,9 +3,17 @@ export const WRONG_GUESS_COST = 5;
 export const CLUE_COST = 20;
 export const REVEAL_COST = 50;
 
-export function choosePuzzle(puzzles, previousId = '', random = Math.random) {
+export function difficultyForLevel(level) {
+  if (level <= 2) return 'easy';
+  if (level <= 5) return 'medium';
+  return 'hard';
+}
+
+export function choosePuzzle(puzzles, previousId = '', random = Math.random, level = 1) {
   if (!puzzles.length) throw new Error('No hunts are available.');
-  const choices = puzzles.length > 1 ? puzzles.filter(puzzle => puzzle.id !== previousId) : puzzles;
+  const matching = puzzles.filter(puzzle => puzzle.difficulty === difficultyForLevel(level));
+  const pool = matching.length ? matching : puzzles;
+  const choices = pool.length > 1 ? pool.filter(puzzle => puzzle.id !== previousId) : pool;
   return choices[Math.floor(random() * choices.length)];
 }
 

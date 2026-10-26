@@ -9,7 +9,7 @@ initializeApp();
 
 const resendKey = defineSecret('RESEND_API_KEY');
 const emailFrom = defineString('CHALLENGE_EMAIL_FROM');
-const huntUrl = code => `https://treasurehunch.web.app/?hunt=${encodeURIComponent(code)}`;
+const huntUrl = code => `https://hunch.rohittp.com/?hunt=${encodeURIComponent(code)}`;
 
 async function checkedChallenge(event) {
   const { recipientUid, code } = event.params;

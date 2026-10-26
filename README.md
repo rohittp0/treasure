@@ -43,7 +43,7 @@ cd functions && npm ci && cd ..
 firebase deploy --only firestore:rules,functions,hosting --project treasurehunch
 ```
 
-The deploy prompts for `CHALLENGE_EMAIL_FROM`; enter a sender on your verified email domain. The function links to `https://treasurehunch.web.app/`. If the site uses a custom domain, update `huntUrl` in `functions/index.js` before deploying. Do not put the Resend key in a Vite or Hosting environment variable.
+The deploy prompts for `CHALLENGE_EMAIL_FROM`; enter a sender on your verified email domain. Challenge emails and background alerts link to `https://hunch.rohittp.com/`. Do not put the Resend key in a Vite or Hosting environment variable.
 
 ## Build and deploy
 

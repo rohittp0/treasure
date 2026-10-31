@@ -14,6 +14,7 @@
   "dependencies": {
     "firebase": "^12.9.0",
     "maplibre-gl": "^6.16.0",
+    "posthog-js": "^1.444.0",
     "vite": "^8.3.5"
   },
   "overrides": {

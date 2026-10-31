@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, updateDoc, writeBatch, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, writeBatch, serverTimestamp, Timestamp, collection, getDocs, query, where } from 'firebase/firestore';
 
 const projectId = 'demo-treasure-friend-tests';
 const environment = await initializeTestEnvironment({
@@ -73,6 +73,16 @@ try {
   }));
   const finished = await assertSucceeds(getDoc(doc(seeker, huntPath)));
   assert.equal(finished.data().status, 'won');
+  for (const [database, field, uid] of [[hider, 'hiderUid', 'hider'], [seeker, 'seekerUid', 'seeker']]) {
+    const logs = await assertSucceeds(getDocs(query(collection(database, 'friendHunts'), where(field, '==', uid))));
+    assert.ok(logs.docs.some(item => item.id === code));
+  }
+  await assertFails(getDocs(collection(stranger, 'friendHunts')));
+  await assertFails(getDocs(query(collection(stranger, 'friendHunts'), where('hiderUid', '==', 'hider'))));
+  await assertFails(getDocs(query(collection(stranger, 'friendHunts'), where('seekerUid', '==', 'seeker'))));
+  await assertFails(getDocs(query(collection(stranger, 'friendHunts'), where('status', '==', 'won'))));
+  const ownEmptyLog = await assertSucceeds(getDocs(query(collection(stranger, 'friendHunts'), where('hiderUid', '==', 'stranger'))));
+  assert.equal(ownEmptyLog.size, 0);
   const sharedResult = await assertSucceeds(getDoc(doc(stranger, huntPath)));
   assert.equal(sharedResult.data().status, 'won');
   await assertFails(getDoc(doc(stranger, secretPath)));

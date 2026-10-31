@@ -71,3 +71,5 @@ output/
 
 # dataconnect generated files
 .dataconnect
+
+.idea/

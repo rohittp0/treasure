@@ -58,3 +58,7 @@ firebase deploy --only firestore:rules,functions,hosting --project treasurehunch
 Firebase Hosting serves `dist/`. The existing GitHub Actions workflow deploys Hosting on pushes to `main`; Firestore rules and Functions need the Firebase CLI deployment in the command above when they change. Hosting uses the `FIREBASE_SERVICE_ACCOUNT_TREASUREHUNCH` repository secret set up by Firebase init.
 
 The map uses Natural Earth 1:110m public-domain country outlines; source and terms: https://www.naturalearthdata.com/about/terms-of-use/. The GeoJSON is compacted to the ID, name, and label position fields used by the game. MapLibre GL JS is BSD-3-Clause licensed. The bundled map-label glyphs come from MapLibre demo tiles.
+
+Multiplayer result rendering, participant poster sharing, sent/played challenge logs, deployment requirements and validation are documented in [Multiplayer results](docs/multiplayer-results.md).
+
+Meta Pixel, Firebase Google Analytics and PostHog use a shared [event catalogue and funnel guide](docs/analytics.md); all provider code and event definitions live in `src/events.js`.

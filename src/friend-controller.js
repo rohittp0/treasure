@@ -1,3 +1,6 @@
+import { trackEvent, EVENTS } from './events.js';
+import { friendResult, resultContent } from './friend-result.js';
+import { renderVictoryPoster, sharePosterFile } from './friend-poster.js';
 import * as maplibregl from 'maplibre-gl';
 import { canRevealFriendCountry, canUnlockFriendClue, friendRoundSeconds, friendSecondsLeft, makeHuntCode, normaliseHuntCode, validHuntCode } from './friend.js';
 import { createFriendHunt, findUsername, getFriendHunt, joinFriendHunt, loadFriendAnswer, revealFriendCountry, submitFriendGuess, timeOutFriendHunt, unlockFriendClue, watchFriendHunt } from './firebase.js';
@@ -23,8 +26,20 @@ export function createFriendController({ getUser, getUsername, getMap, getCountr
   let suppressSearchZoom = false;
   let searchZoomTimeout;
   let animatedWinCode = '';
+  let posterPromise = null;
+  let resultSource = 'live';
+  let observedPlayingCode = '';
+  let pendingResult = false;
   let pendingInvite = normaliseHuntCode(new URLSearchParams(location.search).get('hunt'));
   let inviteHandled = false;
+
+  function eventParameters(value = match) {
+    if (!value) return { mode: 'multiplayer' };
+    const role = getUser()?.uid === value.hiderUid ? 'hider' : getUser()?.uid === value.seekerUid ? 'seeker' : 'spectator';
+    return { mode: 'multiplayer', role, round_seconds: friendRoundSeconds(value),
+      time_remaining: friendSecondsLeft(value), clues_opened: value.cluesVisible,
+      wrong_guesses: value.wrongGuesses, revealed: value.revealed };
+  }
 
   function showScreen(selector) {
     const openingGame = selector === '#game-panel' && $('#game-panel').classList.contains('hidden');
@@ -98,6 +113,7 @@ export function createFriendController({ getUser, getUsername, getMap, getCountr
       showToast('You already ruled that country out.');
       return true;
     }
+    trackEvent(EVENTS.COUNTRY_SELECTED, { ...eventParameters(), method: 'map' });
     selected = { id, country: feature.properties.name };
     setMapCountry(id);
     $('#selection-name').textContent = selected.country;
@@ -125,7 +141,11 @@ export function createFriendController({ getUser, getUsername, getMap, getCountr
   }
 
   function clearActive() {
+    if (mode === 'seeker' && match?.status === 'playing') trackEvent(EVENTS.HUNT_ABANDONED, eventParameters());
     clearVictory();
+    posterPromise = null;
+    observedPlayingCode = '';
+    pendingResult = false;
     unsubscribe?.();
     unsubscribe = null;
     clearInterval(ticker);
@@ -161,6 +181,7 @@ export function createFriendController({ getUser, getUsername, getMap, getCountr
     if (!getUsername()) { pendingLobby = true; requestUsername(); return; }
     clearActive();
     mode = 'lobby';
+    trackEvent(EVENTS.MULTIPLAYER_OPENED);
     $('#friend-lobby-status').textContent = '';
     showScreen('#friend-lobby');
   }
@@ -171,6 +192,7 @@ export function createFriendController({ getUser, getUsername, getMap, getCountr
     if (!getMap()?.getLayer('land')) { showToast('The map is still loading. One moment!'); return; }
     clearActive();
     mode = 'hiding';
+    trackEvent(EVENTS.CHALLENGE_SETUP, { mode: 'multiplayer', role: 'hider' });
     $('#friend-hide-form').reset();
     $('#friend-place').textContent = 'Tap the map or choose a search result.';
     $('#friend-hide-status').textContent = '';
@@ -212,6 +234,8 @@ export function createFriendController({ getUser, getUsername, getMap, getCountr
       answer = hiddenPlace;
       code = nextCode;
       mode = 'hider';
+      resultSource = 'live';
+      trackEvent(EVENTS.CHALLENGE_CREATED, { mode: 'multiplayer', role: 'hider', targeted: !!target, round_seconds: 180 });
       history.replaceState({}, '', `?hunt=${code}`);
       subscribe();
     } catch (error) {
@@ -223,7 +247,7 @@ export function createFriendController({ getUser, getUsername, getMap, getCountr
     }
   }
 
-  async function join(rawCode) {
+  async function join(rawCode, source = 'invite') {
     const nextCode = normaliseHuntCode(rawCode);
     if (!validHuntCode(nextCode)) throw new Error('Enter a valid 10-character invite code.');
     if (!getUser()) {
@@ -244,18 +268,28 @@ export function createFriendController({ getUser, getUsername, getMap, getCountr
     clearActive();
     code = nextCode;
     mode = role;
+    resultSource = source;
+    if (role === 'seeker' && existing.status === 'waiting') {
+      trackEvent(EVENTS.CHALLENGE_ACCEPTED, { mode: 'multiplayer', role, source }, nextCode);
+      trackEvent(EVENTS.HUNT_STARTED, { mode: 'multiplayer', role, round_seconds: friendRoundSeconds(existing), source }, nextCode);
+      resultSource = 'live';
+    }
     history.replaceState({}, '', `?hunt=${code}`);
-    if (role === 'hider') loadFriendAnswer(code).then(value => { answer = value; }).catch(error => console.error(error));
+    if (role === 'hider') loadFriendAnswer(nextCode).then(value => { if (code === nextCode) answer = value; }).catch(error => console.error(error));
     subscribe();
   }
 
   function subscribe() {
     unsubscribe?.();
-    unsubscribe = watchFriendHunt(code, value => {
+    unsubscribe = watchFriendHunt(code, (value, metadata) => {
+      // Do not count optimistic local writes as successful actions/results.
+      if (metadata?.hasPendingWrites) return;
       if (!value) { showToast('This friend hunt is no longer available.'); home(); return; }
       match = value;
+      if (value.status === 'playing' && value.seekerUid === getUser()?.uid) observedPlayingCode = code;
       if (value.status === 'won' || value.status === 'lost') {
-        renderResult();
+        if (busy && value.seekerUid === getUser()?.uid) pendingResult = true;
+        else showCompletedResult();
       } else if (mode === 'hider') {
         renderHider();
       } else {
@@ -265,6 +299,21 @@ export function createFriendController({ getUser, getUsername, getMap, getCountr
       console.error(error);
       showToast('Lost the live hunt connection. Reopen the invite link to retry.');
     });
+  }
+
+  function showCompletedResult() {
+    if (observedPlayingCode === code && match?.seekerUid === getUser()?.uid) {
+      trackEvent(EVENTS.HUNT_COMPLETED, { ...eventParameters(), outcome: match.status,
+        winner_role: match.status === 'won' ? 'seeker' : 'hider',
+        time_used: friendRoundSeconds(match) - friendSecondsLeft(match) }, code);
+      resultSource = 'live';
+    }
+    renderResult();
+  }
+
+  function finishAction() {
+    busy = false;
+    if (pendingResult) { pendingResult = false; showCompletedResult(); }
   }
 
   function renderHider() {
@@ -353,38 +402,50 @@ export function createFriendController({ getUser, getUsername, getMap, getCountr
     mode = spectator ? 'spectator-result' : hider ? 'hider-result' : 'seeker-result';
     showScreen('#friend-result');
     const resultCode = code;
-    $('#friend-result-copy').textContent = spectator ? 'This challenge has already been played.' : 'Uncovering the treasure location…';
+    $('#friend-result-content').textContent = spectator ? 'Opening this challenge…' : 'Uncovering the treasure location…';
+    $('#friend-poster-button').classList.add('hidden');
+    $('#friend-challenge-back-button').classList.add('hidden');
     let place = spectator ? null : answer;
     if (!spectator && !place) {
-      try { place = await loadFriendAnswer(code); answer = place; }
+      try { place = await loadFriendAnswer(resultCode); if (code === resultCode) answer = place; }
       catch (error) { console.error(error); }
     }
     if (code !== resultCode || !match || !['won', 'lost'].includes(match.status)) return;
-    const won = match.status === 'won';
-    if (won && animatedWinCode !== code) {
+    const model = friendResult(match, getUser()?.uid, place, code);
+    trackEvent(EVENTS.RESULT_VIEWED, { ...eventParameters(), source: resultSource, outcome: match.status, winner_role: model.winnerRole, personal_win: model.personalWin }, `${code}:${model.role}`);
+    $('#friend-result-content').innerHTML = resultContent(model);
+    $('#friend-result').dataset.outcome = model.personalWin ? 'win' : 'loss';
+    $('#friend-result').dataset.theme = !model.seekerWon && model.role === 'seeker' ? 'teal' : 'parchment';
+    $('#friend-challenge-back-button').classList.toggle('primary-button', !model.personalWin);
+    $('#friend-challenge-back-button').classList.toggle('secondary-button', model.personalWin);
+    $('#friend-poster-button').classList.toggle('primary-button', model.personalWin);
+    $('#friend-poster-button').classList.toggle('secondary-button', !model.personalWin);
+    $('#friend-result').classList.remove('victory');
+    if (model.personalWin && animatedWinCode !== code) {
       animatedWinCode = code;
       playVictory($('#friend-result'));
     }
-    if (!won) $('#friend-result').classList.remove('victory');
-    $('#friend-result-art').textContent = won ? '✦' : '⌛';
-    $('#friend-result-eyebrow').textContent = won ? 'TREASURE FOUND' : 'THE TRAIL WENT COLD';
-    $('#friend-result-title').textContent = spectator ? won ? 'Treasure found.' : 'The trail went cold.' : hider
-      ? won ? 'Your friend found it.' : 'Your treasure stayed hidden.'
-      : won ? 'Beautifully found.' : 'The world is still waiting.';
-    $('#friend-result-copy').textContent = spectator
-      ? `This challenge has already been played. ${won ? `${match.seekerName || 'The seeker'} found the treasure.` : 'The seeker ran out of time.'}`
-      : place
-      ? `The treasure was in ${place.country}. ${won ? `${match.seekerName || 'The seeker'} followed the trail.` : 'A new hunt is ready whenever you are.'}`
-      : 'The hunt is over. The treasure location could not be loaded.';
-    const remaining = friendSecondsLeft(match);
-    $('#friend-result-stats').innerHTML = `<div><strong>${won ? Math.max(0, friendRoundSeconds(match) - remaining) : remaining}s</strong><span>${won ? 'TIME USED' : 'ON THE CLOCK'}</span></div><div><strong>${match.cluesVisible}/3</strong><span>CLUES OPENED</span></div><div><strong>${match.wrongGuesses}</strong><span>WRONG GUESSES</span></div>`;
-    $('#friend-challenge-back-button').classList.toggle('hidden', hider || spectator);
-    $('#friend-challenge-back-button').innerHTML = `Challenge ${match.hiderUsername ? `@${escapeHTML(match.hiderUsername)}` : 'back'} <span aria-hidden="true">↗</span>`;
+    $('#friend-challenge-back-button').classList.toggle('hidden', model.role !== 'seeker');
+    $('#friend-challenge-back-button').textContent = model.action;
+    $('#friend-again-button').classList.toggle('hidden', model.role === 'seeker');
+    $('#friend-again-button').textContent = model.role === 'spectator' ? 'Start a friend hunt' : model.action;
+    const share = $('#friend-poster-button');
+    share.classList.toggle('hidden', !model.canShare);
+    share.textContent = model.personalWin ? 'Share victory poster ↗' : 'Share result poster ↗';
+    share.disabled = true;
+    // Prepare before the click so native file sharing keeps its user activation.
+    posterPromise = model.canShare ? renderVictoryPoster(model, document.querySelector('link[rel=canonical]')?.href || `${location.origin}${location.pathname}`) : null;
+    posterPromise?.then(() => { if (code === resultCode) share.disabled = false; }).catch(error => {
+      console.warn('Poster preparation failed:', error);
+      if (code === resultCode) $('#friend-poster-status').textContent = 'The poster could not be prepared. Reopen this result to retry.';
+    });
+    $('#friend-poster-status').textContent = '';
   }
 
   function challengeBack() {
     if (mode !== 'seeker-result' || !match || !['won', 'lost'].includes(match.status)) return;
     const targetUsername = match.hiderUsername || '';
+    trackEvent(EVENTS.REMATCH_STARTED, { ...eventParameters(), outcome: match.status });
     openHide();
     $('#friend-target-username').value = targetUsername;
     $('#friend-hide-status').textContent = targetUsername
@@ -395,17 +456,26 @@ export function createFriendController({ getUser, getUsername, getMap, getCountr
   async function unlock() {
     if (mode !== 'seeker' || !canUnlockFriendClue(match) || busy) return;
     busy = true;
-    try { await unlockFriendClue(code); }
+    try {
+      const clueNumber = match.cluesVisible + 1;
+      const parameters = eventParameters();
+      await unlockFriendClue(code);
+      trackEvent(EVENTS.CLUE_OPENED, { ...parameters, clues_opened: clueNumber, clue_number: clueNumber, time_remaining: Math.max(0, parameters.time_remaining - 20), cost_seconds: 20 });
+    }
     catch (error) { console.error(error); showToast('That clue could not be opened. Try again.'); }
-    finally { busy = false; }
+    finally { finishAction(); }
   }
 
   async function reveal() {
     if (mode !== 'seeker' || !canRevealFriendCountry(match) || busy) return;
     busy = true;
-    try { await revealFriendCountry(code); }
+    try {
+      const parameters = eventParameters();
+      await revealFriendCountry(code);
+      trackEvent(EVENTS.COUNTRY_REVEALED, { ...parameters, revealed: true, time_remaining: Math.max(0, parameters.time_remaining - 30), cost_seconds: 30 });
+    }
     catch (error) { console.error(error); showToast('The country name could not be revealed. Try again.'); }
-    finally { busy = false; }
+    finally { finishAction(); }
   }
 
   async function guess() {
@@ -414,7 +484,9 @@ export function createFriendController({ getUser, getUsername, getMap, getCountr
     $('#guess-button').disabled = true;
     const country = selected;
     try {
+      const parameters = eventParameters();
       const outcome = await submitFriendGuess(code, country.id);
+      trackEvent(EVENTS.GUESS_SUBMITTED, { ...parameters, outcome, wrong_guesses: parameters.wrong_guesses + (outcome === 'wrong' ? 1 : 0), cost_seconds: outcome === 'wrong' ? 5 : 0 });
       if (outcome === 'wrong') {
         clearSelection();
         showToast(`${country.country} isn't the one. −5 seconds.`);
@@ -423,7 +495,7 @@ export function createFriendController({ getUser, getUsername, getMap, getCountr
       console.error(error);
       showToast('That guess could not be sent. Try again.');
     } finally {
-      busy = false;
+      finishAction();
       $('#guess-button').disabled = false;
     }
   }
@@ -465,11 +537,11 @@ export function createFriendController({ getUser, getUsername, getMap, getCountr
   $('#friend-join-form').addEventListener('submit', async event => {
     event.preventDefault();
     $('#friend-lobby-status').textContent = 'Opening the hunt…';
-    try { await join($('#friend-code-input').value); }
+    try { await join($('#friend-code-input').value, 'code'); }
     catch (error) { console.error(error); $('#friend-lobby-status').textContent = error.message || 'Could not join that hunt.'; }
   });
   async function copyInvite() {
-    try { await navigator.clipboard.writeText($('#friend-share-link').value); showToast('Invite link copied.'); }
+    try { await navigator.clipboard.writeText($('#friend-share-link').value); trackEvent(EVENTS.INVITE_SHARED, { mode: 'multiplayer', role: 'hider', method: 'clipboard' }); showToast('Invite link copied.'); }
     catch { showToast('Copy unavailable. Share the code shown here.'); }
   }
   $('#friend-copy-button').addEventListener('click', copyInvite);
@@ -481,11 +553,26 @@ export function createFriendController({ getUser, getUsername, getMap, getCountr
         text: 'I hid a treasure for you. Follow the clues and find it!',
         url: $('#friend-share-link').value,
       });
+      trackEvent(EVENTS.INVITE_SHARED, { mode: 'multiplayer', role: 'hider', method: 'native' });
     } catch (error) {
       if (error.name !== 'AbortError') await copyInvite();
     }
   });
-  $('#friend-again-button').addEventListener('click', openLobby);
+  $('#friend-poster-button').addEventListener('click', async () => {
+    if (!posterPromise || !match || !friendResult(match, getUser()?.uid).canShare) return;
+    const button = $('#friend-poster-button');
+    button.disabled = true;
+    try {
+      const parameters = eventParameters();
+      const result = await sharePosterFile(await posterPromise, code);
+      if (result !== 'cancelled') trackEvent(EVENTS.POSTER_EXPORTED, { ...parameters, method: result === 'shared' ? 'native' : 'download' });
+      $('#friend-poster-status').textContent = result === 'downloaded' ? 'Your result poster was downloaded.' : result === 'shared' ? 'Result shared.' : '';
+    } catch (error) {
+      console.error(error);
+      $('#friend-poster-status').textContent = 'The poster could not be created. Please reopen this result to retry.';
+    } finally { button.disabled = false; }
+  });
+  $('#friend-again-button').addEventListener('click', () => mode === 'spectator-result' ? openLobby() : openHide());
   $('#friend-challenge-back-button').addEventListener('click', challengeBack);
   document.querySelectorAll('.friend-back').forEach(button => button.addEventListener('click', home));
 
@@ -501,7 +588,10 @@ export function createFriendController({ getUser, getUsername, getMap, getCountr
     unlock,
     reveal,
     guess,
-    cancelSelection: clearSelection,
+    cancelSelection: () => {
+      if (selected) trackEvent(EVENTS.SELECTION_CANCELLED, eventParameters());
+      clearSelection();
+    },
     collapseOnMap: () => {
       if (mode === 'seeker') setSheetCollapsed(true);
       if (mode === 'hiding') setHideCollapsed(true);

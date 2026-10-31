@@ -172,7 +172,7 @@ service cloud.firestore {
       allow get: if request.auth != null &&
         (participant() || resource.data.status in ['won', 'lost'] || (resource.data.status == 'waiting' &&
           (resource.data.targetUid == null || resource.data.targetUid == request.auth.uid)));
-      allow list: if false;
+      allow list: if participant();
       allow create: if validCreate();
       allow update: if validJoin() || validUnlock() || validReveal()
         || validCorrectGuess() || validWrongGuess() || validTimeout();

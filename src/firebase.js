@@ -1,3 +1,5 @@
+import { initializeTracking, trackEvent, EVENTS } from './events.js';
+import { friendHuntHistory } from './friend-result.js';
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult, signOut } from 'firebase/auth';
 import { getFirestore, collection, doc, getDoc, getDocs, query, setDoc, where, orderBy, limit, runTransaction, serverTimestamp, onSnapshot, writeBatch, updateDoc, deleteDoc } from 'firebase/firestore';
@@ -12,7 +14,10 @@ const app = initializeApp({
   storageBucket: 'treasurehunch.firebasestorage.app',
   messagingSenderId: '555455406222',
   appId: '1:555455406222:web:f8b265135bd4bfa327a9df',
+  measurementId: 'G-3L7L0GB63N',
 });
+
+initializeTracking(app);
 
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -21,13 +26,14 @@ const publicWebPushKey = 'BOzlGqFf6AfP-pq_3HdJmFMBecQdMdDi74U44jBl3YNgXRdaVLBbst
 let pushRegistration = null;
 
 export function watchUser(callback) {
-  getRedirectResult(auth).catch(error => console.warn('Sign-in redirect failed:', error));
+  getRedirectResult(auth).then(result => { if (result?.user) trackEvent(EVENTS.LOGIN, { method: 'google' }); }).catch(error => console.warn('Sign-in redirect failed:', error));
   return onAuthStateChanged(auth, callback);
 }
 
 export async function login() {
   try {
     await signInWithPopup(auth, provider);
+    trackEvent(EVENTS.LOGIN, { method: 'google' });
   } catch (error) {
     if (['auth/popup-blocked', 'auth/operation-not-supported-in-this-environment'].includes(error.code)) {
       await signInWithRedirect(auth, provider);
@@ -46,7 +52,8 @@ export async function logout() {
     } catch (error) { console.warn('Could not remove browser alerts:', error); }
     pushRegistration = null;
   }
-  return signOut(auth);
+  await signOut(auth);
+  trackEvent(EVENTS.LOGOUT);
 }
 
 const usernameRef = username => doc(db, 'usernames', username);
@@ -69,6 +76,7 @@ export async function claimUsername(user, username) {
     if (error.code === 'permission-denied' || error.code === 'already-exists') throw new Error('That username is taken. Try another.');
     throw error;
   }
+  trackEvent(EVENTS.SIGN_UP, { method: 'google' });
   return handle;
 }
 
@@ -221,7 +229,7 @@ export async function getFriendHunt(code) {
 }
 
 export function watchFriendHunt(code, onChange, onError) {
-  return onSnapshot(friendRef(code), snapshot => onChange(snapshot.exists() ? snapshot.data() : null), onError);
+  return onSnapshot(friendRef(code), { includeMetadataChanges: true }, snapshot => onChange(snapshot.exists() ? snapshot.data() : null, { hasPendingWrites: snapshot.metadata.hasPendingWrites }), onError);
 }
 
 export async function joinFriendHunt(user, code) {
@@ -305,4 +313,12 @@ export async function submitFriendGuess(code, countryId) {
 
 export async function timeOutFriendHunt(code) {
   await updateDoc(friendRef(code), { status: 'lost', endedAt: serverTimestamp() });
+}
+
+// Two single-field equality queries include legacy documents and need no composite index.
+export async function loadFriendHunts(user) {
+  if (!user || auth.currentUser?.uid !== user.uid) throw new Error('Sign in to load your friend hunts.');
+  const snapshots = await Promise.all(['hiderUid', 'seekerUid'].map(role =>
+    getDocs(query(collection(db, 'friendHunts'), where(role, '==', user.uid)))));
+  return friendHuntHistory(snapshots.flatMap(snapshot => snapshot.docs.map(item => ({ ...item.data(), code: item.id }))));
 }

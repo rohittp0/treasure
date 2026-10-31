@@ -1,10 +1,12 @@
+import { trackEvent, EVENTS, setAnalyticsUser, soloEventParameters } from './events.js';
+import { historyContent } from './friend-result.js';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import mapWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import './style.css';
 import fallbackPuzzles from '../data/countries.json';
 import { choosePuzzle, createGame, difficultyForLevel, CLUE_COST, REVEAL_COST } from './game.js';
-import { watchUser, login, logout, loadPuzzles, saveHunt, loadHunts, loadLeaderboard, enterLeaderboard, loadProfile, claimUsername, isUsernameAvailable, watchChallenges, markChallengeRead, registerChallengePush } from './firebase.js';
+import { loadFriendHunts, watchUser, login, logout, loadPuzzles, saveHunt, loadHunts, loadLeaderboard, enterLeaderboard, loadProfile, claimUsername, isUsernameAvailable, watchChallenges, markChallengeRead, registerChallengePush } from './firebase.js';
 import { createFriendController } from './friend-controller.js';
 
 maplibregl.setWorkerUrl(mapWorkerUrl);
@@ -210,6 +212,7 @@ function selectMapCountry(country) {
     if (state.tried.includes(country.id)) showToast('You already ruled that country out.');
     return;
   }
+  trackEvent(EVENTS.COUNTRY_SELECTED, { ...soloEventParameters(state, activeLevel), method: 'map' });
   selectedMapId = country.id;
   map.setFilter('selected-country', ['==', ['get', 'id'], country.id]);
   renderSelection(state);
@@ -322,6 +325,7 @@ function startHunt() {
   sessionStorage.setItem('treasurehunch:last-country', puzzle.id);
   $('#level-label').textContent = `LEVEL ${String(activeLevel).padStart(2, '0')} · ${difficultyForLevel(activeLevel).toUpperCase()} HUNT`;
   game = createGame(puzzle);
+  trackEvent(EVENTS.HUNT_STARTED, soloEventParameters(game.snapshot(), activeLevel));
   saved = false;
   lastResult = null;
   clearMapSelection();
@@ -419,6 +423,7 @@ function restoreFromLeaderboard() {
 }
 
 function openLeaderboard() {
+  trackEvent(EVENTS.LEADERBOARD_VIEWED, { source: elements.result.classList.contains('hidden') ? 'home' : 'result' });
   leaderboardReturn = elements.result.classList.contains('hidden') ? 'home' : 'result';
   leaderboardOpenedHere = true;
   location.hash = 'leaderboard';
@@ -493,6 +498,7 @@ function finish(state) {
     updateHomeStatus();
   }
   lastResult = state;
+  if (game) trackEvent(EVENTS.HUNT_COMPLETED, { ...soloEventParameters(state, resultLevel), outcome: won ? 'won' : 'lost', winner_role: won ? 'seeker' : 'none' });
   clearMapSelection();
   renderSelection(state);
   document.body.classList.remove('in-game', 'solo-game');
@@ -525,6 +531,7 @@ function finish(state) {
 }
 
 function leaveHunt() {
+  if (game?.snapshot().status === 'playing') trackEvent(EVENTS.HUNT_ABANDONED, soloEventParameters(game.snapshot(), activeLevel));
   clearVictory();
   clearInterval(ticker);
   game = null;
@@ -543,6 +550,7 @@ async function openAccount(purpose = 'log') {
   $('#account-dialog-kicker').textContent = multiplayer ? '✦   PLAY TOGETHER' : '✦   YOUR EXPLORER LOG';
   $('#account-challenges').classList.toggle('hidden', !user || multiplayer);
   $('#account-challenge-status').textContent = '';
+  if (!multiplayer) trackEvent(EVENTS.LOGS_OPENED);
   elements.accountDialog.showModal();
   if (!user) {
     elements.accountContent.innerHTML = multiplayer
@@ -564,7 +572,40 @@ async function openAccount(purpose = 'log') {
     friend.openLobby();
     return;
   }
-  elements.accountContent.innerHTML = `<h2>Welcome back, ${username ? `@${escapeHTML(username)}` : escapeHTML(user.displayName?.split(' ')[0] || 'Explorer')}.</h2><p>Your discoveries live here.</p><div id="account-stats" class="account-stats">Loading your log…</div><button id="dialog-sign-out" class="text-button" type="button">Sign out ↗</button>`;
+  elements.accountContent.innerHTML = `<h2>Welcome back, ${username ? `@${escapeHTML(username)}` : escapeHTML(user.displayName?.split(' ')[0] || 'Explorer')}.</h2><p>Your discoveries live here.</p><h3 class="log-heading">SOLO EXPLORATIONS</h3><div id="account-stats" class="account-stats">Loading your log…</div><section class="multiplayer-history" aria-labelledby="multiplayer-log-heading"><h3 id="multiplayer-log-heading" class="log-heading">FRIEND HUNTS</h3><p class="log-caption">Your rivalries, kept apart from the solo leaderboard.</p><div id="multiplayer-log" role="status">Loading friend hunts…</div><button id="multiplayer-log-retry" class="text-button hidden" type="button">Retry friend hunts ↗</button></section><button id="dialog-sign-out" class="text-button" type="button">Sign out ↗</button>`;
+  const logUser = user;
+  const logContainer = $('#multiplayer-log');
+  const retry = $('#multiplayer-log-retry');
+  async function loadMultiplayerLog() {
+    retry.classList.add('hidden');
+    logContainer.textContent = 'Loading friend hunts…';
+    try {
+      const hunts = await loadFriendHunts(logUser);
+      if (user?.uid !== logUser.uid || !logContainer.isConnected) return;
+      logContainer.innerHTML = historyContent(hunts, logUser.uid);
+    } catch (error) {
+      if (user?.uid !== logUser.uid || !logContainer.isConnected) return;
+      console.warn('Friend history unavailable:', error);
+      logContainer.textContent = 'Your friend hunts could not be loaded.';
+      retry.classList.remove('hidden');
+    }
+  }
+  retry.addEventListener('click', loadMultiplayerLog);
+  logContainer.addEventListener('click', async event => {
+    const entry = event.target.closest('[data-hunt]');
+    if (!entry) return;
+    entry.disabled = true;
+    try {
+      await friend.joinCode(entry.dataset.hunt, 'history');
+      trackEvent(EVENTS.HISTORY_OPENED, { mode: 'multiplayer' });
+      if (game?.snapshot().status === 'playing') trackEvent(EVENTS.HUNT_ABANDONED, { ...soloEventParameters(game.snapshot(), activeLevel), source: 'history' });
+      clearInterval(ticker);
+      game = null;
+      elements.accountDialog.close();
+    } catch (error) { showToast(error.message || 'This result could not be opened. Try again.'); }
+    finally { entry.disabled = false; }
+  });
+  loadMultiplayerLog();
   $('#dialog-sign-out').addEventListener('click', async () => { await logout(); elements.accountDialog.close(); });
   try {
     const hunts = await loadHunts(user);
@@ -596,6 +637,7 @@ $('#welcome-notifications').addEventListener('click', async () => {
   if (!browserNotificationsAvailable()) return;
   try {
     const permission = await Notification.requestPermission();
+    trackEvent(EVENTS.NOTIFICATIONS_PERMISSION, { permission });
     $('#welcome-notifications').classList.add('hidden');
     $('#notification-status').textContent = permission === 'granted'
       ? 'Browser notifications are on.' : 'No problem. Challenges will still appear in your inbox.';
@@ -650,6 +692,7 @@ $('#welcome-form').addEventListener('submit', async event => {
         throw new Error(`@${handle} is taken. Try another.`);
       }
       username = await claimUsername(welcomeFor, handle);
+      setAnalyticsUser({ uid: welcomeFor.uid, username });
       renderUsername();
     }
     $('#welcome-dialog').close();
@@ -720,14 +763,31 @@ $('#challenge-after-win').addEventListener('click', () => {
 });
 $('#leave-button').addEventListener('click', () => friend.mode === 'seeker' ? friend.home() : leaveHunt());
 elements.sheetToggle.addEventListener('click', () => setSheetCollapsed(!document.body.classList.contains('sheet-collapsed')));
-$('#unlock-button').addEventListener('click', () => { if (friend.mode === 'seeker') friend.unlock(); else { game?.unlock(); renderGame(); } });
-$('#reveal-button').addEventListener('click', () => { if (friend.mode === 'seeker') friend.reveal(); else { game?.reveal(); renderGame(); } });
-$('#cancel-button').addEventListener('click', () => { if (friend.mode === 'seeker') friend.cancelSelection(); else { game?.cancel(); clearMapSelection(); renderGame(); } });
+$('#unlock-button').addEventListener('click', () => {
+  if (friend.mode === 'seeker') return friend.unlock();
+  if (!game) return;
+  const before = game.snapshot(); const after = game.unlock();
+  if (after.cluesVisible > before.cluesVisible) trackEvent(EVENTS.CLUE_OPENED, { ...soloEventParameters(after, activeLevel), clue_number: after.cluesVisible, cost_seconds: CLUE_COST });
+  renderGame();
+});
+$('#reveal-button').addEventListener('click', () => {
+  if (friend.mode === 'seeker') return friend.reveal();
+  if (!game) return;
+  const before = game.snapshot(); const after = game.reveal();
+  if (!before.revealedCountry && after.revealedCountry) trackEvent(EVENTS.COUNTRY_REVEALED, { ...soloEventParameters(after, activeLevel), cost_seconds: REVEAL_COST });
+  renderGame();
+});
+$('#cancel-button').addEventListener('click', () => {
+  if (friend.mode === 'seeker') return friend.cancelSelection();
+  if (game?.snapshot().selected) trackEvent(EVENTS.SELECTION_CANCELLED, soloEventParameters(game.snapshot(), activeLevel));
+  game?.cancel(); clearMapSelection(); renderGame();
+});
 $('#guess-button').addEventListener('click', () => {
   if (friend.mode === 'seeker') { friend.guess(); return; }
   if (!game) return;
   const before = game.snapshot();
   const after = game.guess();
+  if (before.selected && (after.status === 'won' || after.wrongGuesses > before.wrongGuesses)) trackEvent(EVENTS.GUESS_SUBMITTED, { ...soloEventParameters(after, activeLevel), outcome: after.status === 'won' ? 'correct' : 'wrong', cost_seconds: after.status === 'won' ? 0 : 5 });
   if (after.status === 'playing' && before.selected) {
     clearMapSelection();
     showToast(`${before.selected.country} isn't the one. −5 seconds.`);
@@ -758,12 +818,14 @@ try {
 watchUser(async nextUser => {
   const currentVersion = ++authVersion;
   user = nextUser;
+  setAnalyticsUser(nextUser && { uid: nextUser.uid });
   username = '';
   leaderboardSyncFailed = false;
   renderUsername();
   stopChallenges?.();
   stopChallenges = null;
   $('#account-challenges').classList.toggle('hidden', !nextUser);
+  if (!nextUser && elements.accountDialog.open) elements.accountDialog.close();
   if (!nextUser && $('#welcome-dialog').open) $('#welcome-dialog').close();
   elements.accountButton.innerHTML = nextUser ? `<span class="account-avatar">${escapeHTML((nextUser.displayName || 'E')[0])}</span><span class="account-label">My logs</span><span id="account-challenge-count" class="account-alert-count hidden">0</span>` : 'Sign in <span aria-hidden="true">↗</span>';
   elements.accountButton.setAttribute('aria-label', nextUser ? 'Open explorer log' : 'Sign in with Google');
@@ -774,6 +836,7 @@ watchUser(async nextUser => {
       const profile = await loadProfile(nextUser);
       if (currentVersion !== authVersion) return;
       username = profile?.username || '';
+      setAnalyticsUser({ uid: nextUser.uid, username });
       renderUsername();
       if (!username || (browserNotificationsAvailable() && Notification.permission === 'default' && !sessionStorage.getItem(`treasurehunch:notify-asked:${nextUser.uid}`))) {
         sessionStorage.setItem(`treasurehunch:notify-asked:${nextUser.uid}`, '1');

@@ -31,6 +31,7 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght,SOFT,WONK@9..144,500,0,1;9..144,600,0,1;9..144,700,0,1&display=swap" rel="stylesheet" />
   </head>
   <body>
+    <noscript><img height="1" width="1" style="display:none" alt="" src="https://www.facebook.com/tr?id=1540952161129164&amp;ev=PageView&amp;noscript=1" /></noscript>
     <div id="app">
       <div class="map-stage" aria-label="Interactive world map">
         <div id="map"></div>
@@ -137,13 +138,10 @@
         </section>
 
         <section id="friend-result" class="friend-card friend-result hidden" aria-labelledby="friend-result-title">
-          <div id="friend-result-art" class="result-art" aria-hidden="true">✦</div>
-          <p id="friend-result-eyebrow" class="result-eyebrow">FRIEND HUNT COMPLETE</p>
-          <h2 id="friend-result-title">Treasure found.</h2>
-          <p id="friend-result-copy"></p>
-          <div id="friend-result-stats" class="result-stats"></div>
-          <p class="friend-result-note">Friend hunt scores stay off the solo leaderboard.</p>
-          <button id="friend-challenge-back-button" class="primary-button friend-primary hidden" type="button">Challenge back <span aria-hidden="true">↗</span></button>
+          <div id="friend-result-content" aria-live="polite"></div>
+          <button id="friend-poster-button" class="primary-button friend-primary hidden" type="button">Share victory poster <span aria-hidden="true">↗</span></button>
+          <p id="friend-poster-status" class="friend-status" role="status"></p>
+          <button id="friend-challenge-back-button" class="secondary-button friend-primary hidden" type="button">Challenge back <span aria-hidden="true">↗</span></button>
           <button id="friend-again-button" class="primary-button friend-primary" type="button">Play another friend hunt <span aria-hidden="true">↗</span></button>
           <button class="friend-back text-button" type="button">← Back to home</button>
         </section>

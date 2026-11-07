@@ -57,7 +57,7 @@ let dailyRecords = [];
 let dailySyncPromise = null;
 let leaderboardBoard = 'monthly';
 let atlasView = null;
-// Set by the daily notification link (?daily=1) or by tapping the quest before signing in.
+// Set by the daily notification link (?daily=1); the quest starts once the map is ready.
 let pendingDaily = new URLSearchParams(location.search).has('daily');
 const PROGRESS_KEY = 'treasurehunch:solo-wins';
 const DAILY_KEY_PREFIX = 'treasurehunch:daily:';
@@ -138,7 +138,7 @@ function renderDailyHome() {
   button.classList.toggle('daily-done', !!record && record.status !== 'playing');
   if (!record) {
     $('#daily-title').textContent = "Start today's quest";
-    $('#daily-hint').textContent = user ? `${label} · Same country for everyone` : `${label} · Sign in to play`;
+    $('#daily-hint').textContent = `${label} · Same country for everyone`;
   } else if (record.status === 'playing') {
     $('#daily-title').textContent = "Resume today's quest";
     $('#daily-hint').textContent = 'Your clock is still running';
@@ -210,8 +210,18 @@ function browserNotificationsAvailable() {
   return typeof Notification !== 'undefined' && window.isSecureContext;
 }
 
+// A guest's daily win waiting for a username to be claimed.
+function unclaimedDailyWin() {
+  return !username && lastResult?.mode === 'daily' && lastResult.status === 'won' ? lastResult.puzzle.country : '';
+}
+
 function showWelcome(player, existingUsername = '') {
   welcomeFor = player;
+  const claim = existingUsername ? '' : unclaimedDailyWin();
+  $('#welcome-dialog h2').innerHTML = claim ? `Claim <em>${escapeHTML(claim)}.</em>` : 'Choose your <em>name.</em>';
+  $('#welcome-intro').textContent = claim
+    ? `Pick a username to put ${claim} on your map. It also appears on the leaderboards and lets friends challenge you.`
+    : "Your username appears on the leaderboards and your shared map, and friends can challenge you with it. Turn on alerts to hear when each day's quest arrives.";
   clearTimeout(usernameCheckTimer);
   usernameCheckVersion += 1;
   const input = $('#welcome-username');
@@ -219,7 +229,7 @@ function showWelcome(player, existingUsername = '') {
   input.readOnly = !!existingUsername;
   input.required = !existingUsername;
   const saveButton = $('#welcome-save');
-  saveButton.textContent = existingUsername ? 'Continue to TreasureHunch ↗' : 'Save and continue ↗';
+  saveButton.textContent = existingUsername ? 'Continue to TreasureHunch ↗' : claim ? `Claim ${claim} ↗` : 'Save and continue ↗';
   saveButton.disabled = !existingUsername;
   $('#welcome-status').textContent = existingUsername
     ? `Your username is @${existingUsername}.`
@@ -228,11 +238,13 @@ function showWelcome(player, existingUsername = '') {
   const notificationButton = $('#welcome-notifications');
   const notificationStatus = $('#notification-status');
   notificationButton.classList.toggle('hidden', !browserNotificationsAvailable() || Notification.permission !== 'default');
+  notificationButton.textContent = claim ? "Remind me when tomorrow's country arrives" : 'Enable browser notifications';
   notificationStatus.textContent = !browserNotificationsAvailable()
     ? 'Browser notifications are unavailable here. Challenges will still appear in your inbox.'
-    : Notification.permission === 'granted' ? 'Browser notifications are on.'
+    : Notification.permission === 'granted' ? "Browser notifications are on. You'll hear when each day's quest arrives."
       : Notification.permission === 'denied' ? 'Browser notifications are off. Challenges will still appear in your inbox.'
-        : "Tap to get an alert when each day's quest arrives or a friend challenges you.";
+        : claim ? 'One alert a day keeps your streak going. You can also continue without it.'
+          : "Tap to get an alert when each day's quest arrives or a friend challenges you.";
   if (!$('#welcome-dialog').open) $('#welcome-dialog').showModal();
   if (!existingUsername) setTimeout(() => input.focus(), 0);
 }
@@ -438,16 +450,14 @@ function openHuntScreen() {
 
 // The daily quest uses the bundled country list so every browser builds the same schedule.
 function startPendingDaily() {
-  if (!pendingDaily || !user || !username || !map?.getLayer('land')) return;
+  if (!pendingDaily || !map?.getLayer('land')) return;
   pendingDaily = false;
   if (new URLSearchParams(location.search).has('daily')) history.replaceState({}, '', location.pathname);
   startDaily();
 }
 
+// Guests can play; sign-in is asked for on the result screen, to claim the find.
 function startDaily() {
-  // The daily quest feeds public boards and maps, so it needs an account and a username.
-  if (!user) { pendingDaily = true; openAccount('daily'); return; }
-  if (!username) { pendingDaily = true; showWelcome(user); return; }
   const record = todayRecord();
   if (record && record.status !== 'playing') { openAtlas('', 'home'); return; }
   if (!map?.getLayer('land')) { showToast('The map is still loading. One moment!'); return; }
@@ -571,7 +581,7 @@ function finishDaily(state) {
         if (lastResult?.day === record.day) elements.saveStatus.textContent = 'Saved on this device. It will sync when you are back online.';
       });
   } else {
-    elements.saveStatus.textContent = won ? 'Kept on this device for now.' : '';
+    elements.saveStatus.textContent = won ? 'Kept on this device until you sign in.' : '';
   }
   renderLeaderboardGate();
 }
@@ -612,11 +622,17 @@ function renderLeaderboardGate() {
   if (!lastResult) return;
   if (lastResult.mode === 'daily') {
     const dailyWon = lastResult.status === 'won';
-    elements.leaderboardSignIn.classList.toggle('hidden', !!user && !!username);
+    const claimed = !!user && !!username;
+    const country = escapeHTML(lastResult.puzzle.country);
+    // A guest's win is claimed with the main button, so the box below only covers losses.
+    $('#result-atlas-button').innerHTML = claimed || !dailyWon ? 'Open my map <span>↗</span>'
+      : `Create a username to claim ${country} <span>↗</span>`;
+    elements.leaderboardSignIn.classList.toggle('hidden', claimed || dailyWon);
     elements.leaderboardSignIn.innerHTML = user ? 'Choose your username <span>↗</span>'
       : dailyWon ? `Sign in to claim ${escapeHTML(lastResult.puzzle.country)} <span>↗</span>` : 'Sign in to keep your streak <span>↗</span>';
-    elements.leaderboardNote.textContent = !user ? 'Daily finds are ranked each month and count extra on the all-time board.'
-      : !username ? "Choose a username to enter this month's board." : '';
+    elements.leaderboardNote.textContent = claimed ? ''
+      : dailyWon ? `Your username puts ${lastResult.puzzle.country} on your map, starts your streak and enters you on this month's board.`
+        : 'Sign in to start a streak and enter the monthly board with your next find.';
     $('#result-leaderboard').classList.remove('hidden');
     return;
   }
@@ -988,16 +1004,13 @@ function leaveHunt(track = true) {
 
 async function openAccount(purpose = 'log') {
   const multiplayer = purpose === 'multiplayer';
-  const daily = purpose === 'daily';
-  $('#account-dialog-kicker').textContent = multiplayer ? '✦   PLAY TOGETHER' : daily ? "✦   TODAY'S QUEST" : '✦   YOUR EXPLORER LOG';
-  $('#account-challenges').classList.toggle('hidden', !user || multiplayer || daily);
+  $('#account-dialog-kicker').textContent = multiplayer ? '✦   PLAY TOGETHER' : '✦   YOUR EXPLORER LOG';
+  $('#account-challenges').classList.toggle('hidden', !user || multiplayer);
   $('#account-challenge-status').textContent = '';
   if (!multiplayer) trackEvent(EVENTS.LOGS_OPENED);
   elements.accountDialog.showModal();
   if (!user) {
-    elements.accountContent.innerHTML = daily
-      ? '<h2>Sign in to play today’s quest.</h2><p>Everyone gets the same country each day. Sign in with Google to claim it for your map, keep your streak and climb this month’s board.</p><button id="dialog-sign-in" class="primary-button" type="button">Sign in with Google <span>↗</span></button>'
-      : multiplayer
+    elements.accountContent.innerHTML = multiplayer
       ? '<h2>Sign in to play together.</h2><p>Use your Google account to hide a treasure or join a friend’s hunt.</p><button id="dialog-sign-in" class="primary-button" type="button">Sign in with Google <span>↗</span></button>'
       : '<h2>Keep your discoveries.</h2><p>Sign in with Google to save each completed hunt and revisit your explorer log.</p><button id="dialog-sign-in" class="primary-button" type="button">Continue with Google <span>↗</span></button>';
     $('#dialog-sign-in').addEventListener('click', async () => {
@@ -1084,7 +1097,7 @@ $('#welcome-notifications').addEventListener('click', async () => {
     trackEvent(EVENTS.NOTIFICATIONS_PERMISSION, { permission });
     $('#welcome-notifications').classList.add('hidden');
     $('#notification-status').textContent = permission === 'granted'
-      ? 'Browser notifications are on.' : 'No problem. Challenges will still appear in your inbox.';
+      ? "Browser notifications are on. You'll hear when each day's quest arrives." : 'No problem. Challenges will still appear in your inbox.';
     if (permission === 'granted' && user) registerChallengePush(user).catch(error => console.warn('Background alerts could not start:', error));
   } catch (error) {
     console.warn('Notification permission could not be requested:', error);
@@ -1145,7 +1158,12 @@ $('#welcome-form').addEventListener('submit', async event => {
     watchInbox(user);
     renderLeaderboardGate();
     postPendingGuestEntry(user);
-    syncDaily(user).catch(() => {});
+    const claimedCountry = lastResult?.mode === 'daily' && lastResult.status === 'won' ? lastResult.puzzle.country : '';
+    syncDaily(user).then(() => {
+      if (!claimedCountry) return;
+      showToast(`${claimedCountry} is on your map.`);
+      if (!elements.result.classList.contains('hidden')) elements.saveStatus.textContent = "Claimed and entered on this month's board.";
+    }).catch(() => {});
     if (atlasView?.self) { atlasView.name = username; renderAtlas(); }
     startPendingDaily();
     if (browserNotificationsAvailable() && Notification.permission === 'granted')
@@ -1158,7 +1176,7 @@ $('#welcome-form').addEventListener('submit', async event => {
     if ($('#welcome-dialog').open) saveButton.disabled = !username && status.dataset.state !== 'available';
   }
 });
-$('#close-welcome').addEventListener('click', () => { pendingDaily = false; $('#welcome-dialog').close(); });
+$('#close-welcome').addEventListener('click', () => $('#welcome-dialog').close());
 $('#challenge-list').addEventListener('click', async event => {
   const button = event.target.closest('button[data-code]');
   if (!button || !user) return;
@@ -1176,7 +1194,11 @@ $('#challenge-list').addEventListener('click', async event => {
 $('#start-button').addEventListener('click', startHunt);
 $('#daily-button').addEventListener('click', startDaily);
 $('#home-atlas-button').addEventListener('click', () => openAtlas('', 'home'));
-$('#result-atlas-button').addEventListener('click', () => openAtlas('', 'result'));
+$('#result-atlas-button').addEventListener('click', () => {
+  // On a guest's daily win this button is the claim: sign in (or pick a username) first.
+  if (lastResult?.mode === 'daily' && lastResult.status === 'won' && (!user || !username)) elements.leaderboardSignIn.click();
+  else openAtlas('', 'result');
+});
 $('#atlas-own-button').addEventListener('click', () => openAtlas('', atlasView?.source || 'home'));
 $('#atlas-share-button').addEventListener('click', () => shareAtlas(true));
 $('#atlas-copy-button').addEventListener('click', () => shareAtlas(false));
@@ -1275,7 +1297,7 @@ $('#zoom-in').addEventListener('click', () => map?.zoomIn());
 $('#zoom-out').addEventListener('click', () => map?.zoomOut());
 $('#end-level-button').addEventListener('click', leaveHunt);
 elements.accountButton.addEventListener('click', () => openAccount());
-$('#close-account').addEventListener('click', () => { if (!user) pendingDaily = false; elements.accountDialog.close(); });
+$('#close-account').addEventListener('click', () => elements.accountDialog.close());
 elements.accountDialog.addEventListener('click', event => { if (event.target === elements.accountDialog) elements.accountDialog.close(); });
 
 dailyRecords = readDailyStore('guest');
@@ -1342,7 +1364,12 @@ watchUser(async nextUser => {
   if (nextUser) {
     sessionStorage.removeItem(RESUME_RESULT_KEY);
     if (username) postPendingGuestEntry(nextUser);
-    syncDaily(nextUser).catch(() => {});
+    const claimedCountry = username && lastResult?.mode === 'daily' && lastResult.status === 'won' ? lastResult.puzzle.country : '';
+    syncDaily(nextUser).then(() => {
+      if (!claimedCountry || user?.uid !== nextUser.uid || elements.result.classList.contains('hidden')) return;
+      showToast(`${claimedCountry} is on your map.`);
+      elements.saveStatus.textContent = "Claimed and entered on this month's board.";
+    }).catch(() => {});
     if (atlasView?.self) { atlasView.name = username; renderAtlas(); }
     else if (atlasView && username && atlasView.name === username) openAtlas('', atlasView.source);
     startPendingDaily();

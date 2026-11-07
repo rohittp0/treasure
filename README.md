@@ -10,7 +10,9 @@ Every UTC day has one **daily quest**: the same hidden country for every explore
 - **Monthly leaderboard** (`monthlyLeaderboard/{YYYY-MM}/entries/{uid}`): most countries found this month ranks first, and ties go to the least total time used. It is the default tab of the leaderboard screen.
 - **All-time leaderboard** (`leaderboard/{uid}`): the existing solo-level score. Each daily find also counts there, weighted at double the explorer's highest solo level (minimum weight 2), so it always counts more than any single level.
 - **Explorer maps** (`atlases/{username}`): the countries each explorer has claimed. Anyone can open one from a leaderboard row or a `https://hunch.rohittp.com/?atlas=<username>` link, and signed-in explorers can share their own.
-- Attempts are stored in `users/{uid}/daily/{YYYY-MM-DD}`. The document is created when the quest starts and can be finished only once. Guests can play; their results stay on the device and are claimed for the current month when they sign in.
+- Playing requires Google sign-in and a username, because results feed the public boards and maps. A guest who taps the quest is asked to sign in, and the quest starts as soon as they have a username.
+- Attempts are stored in `users/{uid}/daily/{YYYY-MM-DD}`. The document is created when the quest starts and can be finished only once.
+- **Daily alerts:** the scheduled `notifyDailyQuest` function runs at 00:05 UTC. It sends a push notification to every browser registered in `users/{uid}/pushTokens` (the same tokens friend challenges use). Explorers who found yesterday's country get a keep-your-streak message. The notification opens `https://hunch.rohittp.com/?daily=1`, which starts the quest after sign-in. A `dailyNotifications/{YYYY-MM-DD}` document stops a retried run from sending twice.
 
 These boards are casual and client-scored like the solo leaderboard. The rules enforce one attempt per day per account and keep entries self-consistent, but a modified client could still post made-up results.
 
@@ -78,7 +80,7 @@ The merge workflow needs these repository settings (**Settings → Secrets and v
 | `CHALLENGE_EMAIL_FROM` | Variable | Verified sender address for challenge emails (a function parameter) |
 | `FIREBASE_WEB_VAPID_KEY` | Variable | Optional Web Push key override for the build |
 
-The deploy service account needs these roles on project `treasurehunch`: Firebase Rules Admin, Cloud Functions Admin, Service Account User, Artifact Registry Administrator, Cloud Build Editor, Eventarc Admin, and Secret Manager Viewer. `RESEND_API_KEY` stays in Secret Manager; the workflow only references it. The workflow deploys with `--force`, so a function removed from `functions/index.js` is deleted from the project.
+The deploy service account needs these roles on project `treasurehunch`: Firebase Rules Admin, Cloud Functions Admin, Service Account User, Artifact Registry Administrator, Cloud Build Editor, Eventarc Admin, Cloud Scheduler Admin, and Secret Manager Viewer. The daily alert needs the Cloud Scheduler API enabled on the project. `RESEND_API_KEY` stays in Secret Manager; the workflow only references it. The workflow deploys with `--force`, so a function removed from `functions/index.js` is deleted from the project.
 
 The map uses Natural Earth 1:110m public-domain country outlines; source and terms: https://www.naturalearthdata.com/about/terms-of-use/. The GeoJSON is compacted to the ID, name, and label position fields used by the game. MapLibre GL JS is BSD-3-Clause licensed. The bundled map-label glyphs come from MapLibre demo tiles.
 

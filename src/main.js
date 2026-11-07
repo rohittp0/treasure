@@ -57,6 +57,8 @@ let dailyRecords = [];
 let dailySyncPromise = null;
 let leaderboardBoard = 'monthly';
 let atlasView = null;
+// Set by the daily notification link (?daily=1) or by tapping the quest before signing in.
+let pendingDaily = new URLSearchParams(location.search).has('daily');
 const PROGRESS_KEY = 'treasurehunch:solo-wins';
 const DAILY_KEY_PREFIX = 'treasurehunch:daily:';
 const PENDING_ENTRY_KEY = 'treasurehunch:pending-leaderboard';
@@ -136,7 +138,7 @@ function renderDailyHome() {
   button.classList.toggle('daily-done', !!record && record.status !== 'playing');
   if (!record) {
     $('#daily-title').textContent = "Start today's quest";
-    $('#daily-hint').textContent = `${label} · Same country for everyone`;
+    $('#daily-hint').textContent = user ? `${label} · Same country for everyone` : `${label} · Sign in to play`;
   } else if (record.status === 'playing') {
     $('#daily-title').textContent = "Resume today's quest";
     $('#daily-hint').textContent = 'Your clock is still running';
@@ -230,7 +232,7 @@ function showWelcome(player, existingUsername = '') {
     ? 'Browser notifications are unavailable here. Challenges will still appear in your inbox.'
     : Notification.permission === 'granted' ? 'Browser notifications are on.'
       : Notification.permission === 'denied' ? 'Browser notifications are off. Challenges will still appear in your inbox.'
-        : 'Tap to allow alerts when a friend challenges you, or continue without them.';
+        : "Tap to get an alert when each day's quest arrives or a friend challenges you.";
   if (!$('#welcome-dialog').open) $('#welcome-dialog').showModal();
   if (!existingUsername) setTimeout(() => input.focus(), 0);
 }
@@ -338,6 +340,7 @@ async function loadMap() {
       elements.mapLoading.classList.add('hidden');
       applyAtlasLayers();
       focusAtlas();
+      startPendingDaily();
     });
     map.on('click', collapseSheetForMap);
     map.on('dragstart', collapseSheetForMap);
@@ -434,7 +437,17 @@ function openHuntScreen() {
 }
 
 // The daily quest uses the bundled country list so every browser builds the same schedule.
+function startPendingDaily() {
+  if (!pendingDaily || !user || !username || !map?.getLayer('land')) return;
+  pendingDaily = false;
+  if (new URLSearchParams(location.search).has('daily')) history.replaceState({}, '', location.pathname);
+  startDaily();
+}
+
 function startDaily() {
+  // The daily quest feeds public boards and maps, so it needs an account and a username.
+  if (!user) { pendingDaily = true; openAccount('daily'); return; }
+  if (!username) { pendingDaily = true; showWelcome(user); return; }
   const record = todayRecord();
   if (record && record.status !== 'playing') { openAtlas('', 'home'); return; }
   if (!map?.getLayer('land')) { showToast('The map is still loading. One moment!'); return; }
@@ -975,13 +988,16 @@ function leaveHunt(track = true) {
 
 async function openAccount(purpose = 'log') {
   const multiplayer = purpose === 'multiplayer';
-  $('#account-dialog-kicker').textContent = multiplayer ? '✦   PLAY TOGETHER' : '✦   YOUR EXPLORER LOG';
-  $('#account-challenges').classList.toggle('hidden', !user || multiplayer);
+  const daily = purpose === 'daily';
+  $('#account-dialog-kicker').textContent = multiplayer ? '✦   PLAY TOGETHER' : daily ? "✦   TODAY'S QUEST" : '✦   YOUR EXPLORER LOG';
+  $('#account-challenges').classList.toggle('hidden', !user || multiplayer || daily);
   $('#account-challenge-status').textContent = '';
   if (!multiplayer) trackEvent(EVENTS.LOGS_OPENED);
   elements.accountDialog.showModal();
   if (!user) {
-    elements.accountContent.innerHTML = multiplayer
+    elements.accountContent.innerHTML = daily
+      ? '<h2>Sign in to play today’s quest.</h2><p>Everyone gets the same country each day. Sign in with Google to claim it for your map, keep your streak and climb this month’s board.</p><button id="dialog-sign-in" class="primary-button" type="button">Sign in with Google <span>↗</span></button>'
+      : multiplayer
       ? '<h2>Sign in to play together.</h2><p>Use your Google account to hide a treasure or join a friend’s hunt.</p><button id="dialog-sign-in" class="primary-button" type="button">Sign in with Google <span>↗</span></button>'
       : '<h2>Keep your discoveries.</h2><p>Sign in with Google to save each completed hunt and revisit your explorer log.</p><button id="dialog-sign-in" class="primary-button" type="button">Continue with Google <span>↗</span></button>';
     $('#dialog-sign-in').addEventListener('click', async () => {
@@ -1131,6 +1147,7 @@ $('#welcome-form').addEventListener('submit', async event => {
     postPendingGuestEntry(user);
     syncDaily(user).catch(() => {});
     if (atlasView?.self) { atlasView.name = username; renderAtlas(); }
+    startPendingDaily();
     if (browserNotificationsAvailable() && Notification.permission === 'granted')
       registerChallengePush(user).catch(error => console.warn('Background alerts could not start:', error));
   } catch (error) {
@@ -1141,7 +1158,7 @@ $('#welcome-form').addEventListener('submit', async event => {
     if ($('#welcome-dialog').open) saveButton.disabled = !username && status.dataset.state !== 'available';
   }
 });
-$('#close-welcome').addEventListener('click', () => $('#welcome-dialog').close());
+$('#close-welcome').addEventListener('click', () => { pendingDaily = false; $('#welcome-dialog').close(); });
 $('#challenge-list').addEventListener('click', async event => {
   const button = event.target.closest('button[data-code]');
   if (!button || !user) return;
@@ -1258,7 +1275,7 @@ $('#zoom-in').addEventListener('click', () => map?.zoomIn());
 $('#zoom-out').addEventListener('click', () => map?.zoomOut());
 $('#end-level-button').addEventListener('click', leaveHunt);
 elements.accountButton.addEventListener('click', () => openAccount());
-$('#close-account').addEventListener('click', () => elements.accountDialog.close());
+$('#close-account').addEventListener('click', () => { if (!user) pendingDaily = false; elements.accountDialog.close(); });
 elements.accountDialog.addEventListener('click', event => { if (event.target === elements.accountDialog) elements.accountDialog.close(); });
 
 dailyRecords = readDailyStore('guest');
@@ -1328,6 +1345,7 @@ watchUser(async nextUser => {
     syncDaily(nextUser).catch(() => {});
     if (atlasView?.self) { atlasView.name = username; renderAtlas(); }
     else if (atlasView && username && atlasView.name === username) openAtlas('', atlasView.source);
+    startPendingDaily();
     loadHunts(nextUser).then(hunts => {
       if (user?.uid !== nextUser.uid) return;
       const remoteWins = Math.max(0, ...hunts.filter(hunt => hunt.result === 'won').map(hunt => Number.isSafeInteger(hunt.level) && hunt.level > 0 ? hunt.level : 1));

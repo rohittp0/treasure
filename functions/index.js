@@ -1,4 +1,5 @@
 const { onDocumentCreated } = require('firebase-functions/v2/firestore');
+const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { defineSecret, defineString } = require('firebase-functions/params');
 const { initializeApp } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
@@ -91,4 +92,65 @@ exports.emailFriendChallenge = onDocumentCreated({
     const detail = await response.text();
     throw new Error(`Challenge email failed (${response.status}): ${detail.slice(0, 200)}`);
   }
+});
+
+const DAILY_URL = 'https://hunch.rohittp.com/?daily=1';
+const staleTokenErrors = ['messaging/registration-token-not-registered', 'messaging/invalid-registration-token'];
+const utcDay = date => date.toISOString().slice(0, 10);
+
+// Announces each new daily quest a few minutes after the UTC day rolls over.
+exports.notifyDailyQuest = onSchedule({
+  schedule: '5 0 * * *',
+  timeZone: 'Etc/UTC',
+  region: 'us-central1',
+  retryCount: 1,
+}, async () => {
+  const db = getFirestore();
+  const now = new Date();
+  const today = utcDay(now);
+  const yesterday = utcDay(new Date(now.getTime() - 86_400_000));
+  // Claim the day first so a retried run never notifies twice.
+  try {
+    await db.doc(`dailyNotifications/${today}`).create({ startedAt: now });
+  } catch (error) {
+    if (error.code === 6) return; // ALREADY_EXISTS
+    throw error;
+  }
+
+  const tokensByUser = new Map();
+  for (const tokenDoc of (await db.collectionGroup('pushTokens').get()).docs) {
+    const uid = tokenDoc.ref.parent.parent?.id;
+    if (!uid || typeof tokenDoc.data().token !== 'string') continue;
+    if (!tokensByUser.has(uid)) tokensByUser.set(uid, []);
+    if (tokensByUser.get(uid).length < 20) tokensByUser.get(uid).push(tokenDoc);
+  }
+
+  const deliveries = [];
+  for (const [uid, tokenDocs] of tokensByUser) {
+    const foundYesterday = (await db.doc(`users/${uid}/daily/${yesterday}`).get()).data()?.status === 'won';
+    const body = foundYesterday
+      ? "Today's country is hidden. Find it to keep your streak going."
+      : "Today's country is hidden. Find it to claim it for your map.";
+    for (const tokenDoc of tokenDocs) {
+      deliveries.push({
+        tokenDoc,
+        message: {
+          token: tokenDoc.data().token,
+          notification: { title: 'A new TreasureHunch quest', body },
+          webpush: { fcmOptions: { link: DAILY_URL }, notification: { tag: `daily-${today}` } },
+        },
+      });
+    }
+  }
+
+  let sent = 0;
+  for (let index = 0; index < deliveries.length; index += 500) {
+    const batch = deliveries.slice(index, index + 500);
+    const result = await getMessaging().sendEach(batch.map(delivery => delivery.message));
+    sent += result.successCount;
+    await Promise.allSettled(result.responses.map((response, position) =>
+      !response.success && staleTokenErrors.includes(response.error?.code) ? batch[position].tokenDoc.ref.delete() : null));
+  }
+  await db.doc(`dailyNotifications/${today}`).set({ recipients: tokensByUser.size, sent, finishedAt: new Date() }, { merge: true });
+  console.log(`Daily quest ${today}: ${sent} of ${deliveries.length} notifications sent to ${tokensByUser.size} explorers.`);
 });

@@ -317,9 +317,11 @@ async function loadMap() {
       map.addSource('countries', { type: 'geojson', data: countryData, generateId: false });
       map.addLayer({ id: 'land', type: 'fill', source: 'countries', paint: { 'fill-color': ['match', ['get', 'id'], ['USA', 'CAN', 'BRA', 'AUS', 'CHN', 'RUS'], '#d4ccaf', '#c4c5a8'], 'fill-opacity': 0.98 } });
       map.addLayer({ id: 'borders', type: 'line', source: 'countries', paint: { 'line-color': '#668078', 'line-width': ['interpolate', ['linear'], ['zoom'], 0, 0.45, 4, 1.4], 'line-opacity': 0.9 } });
-      map.addLayer({ id: 'atlas-country', type: 'fill', source: 'countries', filter: ['==', ['get', 'id'], ''], paint: { 'fill-color': '#d9a24f', 'fill-opacity': 0.72 } });
-      map.addLayer({ id: 'atlas-recent', type: 'fill', source: 'countries', filter: ['==', ['get', 'id'], ''], paint: { 'fill-color': '#f2c46b', 'fill-opacity': 0.92 } });
-      map.addLayer({ id: 'atlas-border', type: 'line', source: 'countries', filter: ['==', ['get', 'id'], ''], paint: { 'line-color': '#fff2c3', 'line-width': 1.4 } });
+      // Claimed countries: amber for earlier months, coral for this month, with a soft glow.
+      map.addLayer({ id: 'atlas-glow', type: 'line', source: 'countries', filter: ['==', ['get', 'id'], ''], paint: { 'line-color': '#ffc93c', 'line-width': ['interpolate', ['linear'], ['zoom'], 0, 5, 4, 10], 'line-blur': 4, 'line-opacity': 0.75 } });
+      map.addLayer({ id: 'atlas-country', type: 'fill', source: 'countries', filter: ['==', ['get', 'id'], ''], paint: { 'fill-color': '#ffb000', 'fill-opacity': 0.95 } });
+      map.addLayer({ id: 'atlas-recent', type: 'fill', source: 'countries', filter: ['==', ['get', 'id'], ''], paint: { 'fill-color': '#ff5a36', 'fill-opacity': 0.95 } });
+      map.addLayer({ id: 'atlas-border', type: 'line', source: 'countries', filter: ['==', ['get', 'id'], ''], paint: { 'line-color': '#fff8e1', 'line-width': ['interpolate', ['linear'], ['zoom'], 0, 1.2, 4, 2.4] } });
       map.addLayer({ id: 'tried-country', type: 'fill', source: 'countries', filter: ['==', ['get', 'id'], ''], paint: { 'fill-color': '#314d50', 'fill-opacity': 0.55 } });
       map.addLayer({ id: 'selected-country', type: 'fill', source: 'countries', filter: ['==', ['get', 'id'], ''], paint: { 'fill-color': '#e4a94d', 'fill-opacity': 0.83 } });
       map.addLayer({ id: 'selected-border', type: 'line', source: 'countries', filter: ['==', ['get', 'id'], ''], paint: { 'line-color': '#fff2c3', 'line-width': 2.3 } });
@@ -335,6 +337,7 @@ async function loadMap() {
       map.on('mouseleave', 'land', () => { map.getCanvas().style.cursor = ''; });
       elements.mapLoading.classList.add('hidden');
       applyAtlasLayers();
+      focusAtlas();
     });
     map.on('click', collapseSheetForMap);
     map.on('dragstart', collapseSheetForMap);
@@ -672,8 +675,44 @@ function applyAtlasLayers() {
   const ids = Object.keys(countries);
   const recent = ids.filter(id => countries[id].startsWith(`${monthKey()}-`));
   map.setFilter('atlas-country', ['in', ['get', 'id'], ['literal', ids]]);
+  map.setFilter('atlas-glow', ['in', ['get', 'id'], ['literal', ids]]);
+  // Dim unclaimed land while a map is open so claimed countries stand out.
+  map.setPaintProperty('land', 'fill-opacity', atlasView ? 0.5 : 0.98);
   map.setFilter('atlas-border', ['in', ['get', 'id'], ['literal', ids]]);
   map.setFilter('atlas-recent', ['in', ['get', 'id'], ['literal', recent]]);
+}
+
+// The map shrinks to the area beside (desktop) or above (mobile) the map card, then frames the claimed countries.
+function focusAtlas() {
+  const card = $('#atlas-screen');
+  if (!map?.getLayer('land') || !atlasView || atlasView.loading || card.classList.contains('hidden')) return;
+  const stage = map.getContainer().parentElement;
+  const rect = card.getBoundingClientRect();
+  const mobile = window.innerWidth <= 700;
+  stage.style.left = mobile ? '' : `${Math.round(rect.right + 12)}px`;
+  stage.style.bottom = mobile ? `${Math.round(window.innerHeight - rect.top + 8)}px` : '';
+  // Narrow phones need to zoom out further than a hunt allows to fit claims on different continents.
+  map.setMinZoom(0);
+  map.resize();
+  const ids = new Set(Object.keys(atlasView.countries || {}));
+  let bounds = null;
+  const extend = ([lng, lat]) => {
+    bounds = bounds ? [Math.min(bounds[0], lng), Math.min(bounds[1], lat), Math.max(bounds[2], lng), Math.max(bounds[3], lat)] : [lng, lat, lng, lat];
+  };
+  const walk = coordinates => (typeof coordinates[0] === 'number' ? extend(coordinates) : coordinates.forEach(walk));
+  for (const feature of countryData?.features || []) if (ids.has(feature.properties.id)) walk(feature.geometry.coordinates);
+  // With nothing claimed yet, or claims spanning the date line, frame the whole world instead.
+  if (!bounds || bounds[2] - bounds[0] > 300) bounds = [-165, -50, 175, 72];
+  map.fitBounds([[bounds[0], bounds[1]], [bounds[2], bounds[3]]], { padding: mobile ? 22 : { top: 100, bottom: 40, left: 40, right: 90 }, maxZoom: 3.2, duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 900 });
+}
+
+function releaseAtlasStage() {
+  const stage = map?.getContainer().parentElement;
+  if (!stage || (!stage.style.left && !stage.style.bottom)) return;
+  stage.style.left = '';
+  stage.style.bottom = '';
+  map.setMinZoom(0.5);
+  map.resize();
 }
 
 function countryName(id) {
@@ -701,13 +740,15 @@ function renderAtlas() {
     ? `<div><strong>${currentStreak(dailyRecords)}</strong><span>DAY STREAK</span></div>`
     : `<div><strong>${Math.round((ids.length / fallbackPuzzles.length) * 100)}%</strong><span>OF THE QUEST WORLD</span></div>`;
   $('#atlas-stats').innerHTML = loading || missing ? '' : `<div><strong>${ids.length}</strong><span>COUNTRIES</span></div><div><strong>${thisMonth}</strong><span>IN ${monthName(month).toUpperCase()}</span></div>${third}`;
-  $('#atlas-stats').classList.toggle('hidden', loading || missing);
+  $('#atlas-stats').classList.toggle('hidden', !!(loading || missing));
+  $('#atlas-screen').classList.toggle('atlas-empty', !!(loading || missing || !ids.length));
   $('#atlas-countries').innerHTML = ids.map(id => `<span class="atlas-chip ${countries[id].startsWith(`${month}-`) ? 'recent' : ''}">${escapeHTML(countryName(id))}</span>`).join('');
   $('#atlas-share').classList.toggle('hidden', !self || !user || !username);
   $('#atlas-sign-in').classList.toggle('hidden', !self || (!!user && !!username));
   $('#atlas-sign-in').innerHTML = user ? 'Choose a username to share your map <span aria-hidden="true">↗</span>' : 'Sign in to share your map <span aria-hidden="true">↗</span>';
   $('#atlas-own-button').classList.toggle('hidden', self);
   applyAtlasLayers();
+  requestAnimationFrame(focusAtlas);
 }
 
 async function openAtlas(handle = '', source = 'home') {
@@ -754,6 +795,8 @@ function closeAtlasView() {
   document.body.classList.remove('atlas-view');
   if (new URLSearchParams(location.search).has('atlas')) history.replaceState({}, '', location.pathname);
   applyAtlasLayers();
+  releaseAtlasStage();
+  map?.easeTo({ center: [12, 21], zoom: window.innerWidth < 700 ? 0.85 : 1.1, duration: 0 });
 }
 
 async function shareAtlas(native) {
@@ -1167,6 +1210,7 @@ elements.leaderboardSignIn.addEventListener('click', async () => {
   }
 });
 $('#play-again-button').addEventListener('click', startHunt);
+window.addEventListener('resize', () => { if (atlasView) requestAnimationFrame(focusAtlas); });
 // Keep the daily countdown and day rollover current on the home screen.
 setInterval(() => { if (!elements.home.classList.contains('hidden')) renderDailyHome(); }, 30000);
 $('#challenge-after-win').addEventListener('click', () => {
@@ -1283,6 +1327,7 @@ watchUser(async nextUser => {
     if (username) postPendingGuestEntry(nextUser);
     syncDaily(nextUser).catch(() => {});
     if (atlasView?.self) { atlasView.name = username; renderAtlas(); }
+    else if (atlasView && username && atlasView.name === username) openAtlas('', atlasView.source);
     loadHunts(nextUser).then(hunts => {
       if (user?.uid !== nextUser.uid) return;
       const remoteWins = Math.max(0, ...hunts.filter(hunt => hunt.result === 'won').map(hunt => Number.isSafeInteger(hunt.level) && hunt.level > 0 ? hunt.level : 1));

@@ -67,7 +67,18 @@ npm run build
 firebase deploy --only firestore:rules,functions,hosting --project treasurehunch
 ```
 
-Firebase Hosting serves `dist/`. The existing GitHub Actions workflow deploys Hosting on pushes to `main`; Firestore rules and Functions need the Firebase CLI deployment in the command above when they change. Hosting uses the `FIREBASE_SERVICE_ACCOUNT_TREASUREHUNCH` repository secret set up by Firebase init.
+Firebase Hosting serves `dist/`. On every push to `main`, GitHub Actions (`.github/workflows/firebase-hosting-merge.yml`) runs the unit tests and the Firestore rules tests in the emulator. If they pass, it deploys Hosting, Firestore rules and Cloud Functions. Pull requests run the rules tests and get a Hosting preview channel. The manual command above is still useful for a first deploy or a hotfix.
+
+The merge workflow needs these repository settings (**Settings → Secrets and variables → Actions**):
+
+| Name | Kind | Used for |
+| --- | --- | --- |
+| `FIREBASE_SERVICE_ACCOUNT_TREASUREHUNCH` | Secret | Hosting deploys (already set up by Firebase init) |
+| `FIREBASE_DEPLOY_SERVICE_ACCOUNT` | Secret | JSON key of the service account that deploys rules and functions |
+| `CHALLENGE_EMAIL_FROM` | Variable | Verified sender address for challenge emails (a function parameter) |
+| `FIREBASE_WEB_VAPID_KEY` | Variable | Optional Web Push key override for the build |
+
+The deploy service account needs these roles on project `treasurehunch`: Firebase Rules Admin, Cloud Functions Admin, Service Account User, Artifact Registry Administrator, Cloud Build Editor, Eventarc Admin, and Secret Manager Viewer. `RESEND_API_KEY` stays in Secret Manager; the workflow only references it. The workflow deploys with `--force`, so a function removed from `functions/index.js` is deleted from the project.
 
 The map uses Natural Earth 1:110m public-domain country outlines; source and terms: https://www.naturalearthdata.com/about/terms-of-use/. The GeoJSON is compacted to the ID, name, and label position fields used by the game. MapLibre GL JS is BSD-3-Clause licensed. The bundled map-label glyphs come from MapLibre demo tiles.
 

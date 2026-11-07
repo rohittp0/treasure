@@ -205,10 +205,17 @@ service cloud.firestore {
     }
 
     match /leaderboard/{userId} {
+      // Entries from clients released before the daily quest have no dailyFinds field.
+      function previousDailyFinds() {
+        return 'dailyFinds' in resource.data ? resource.data.dailyFinds : 0;
+      }
+      function nextDailyFinds() {
+        return 'dailyFinds' in request.resource.data ? request.resource.data.dailyFinds : 0;
+      }
       function validEntry() {
         return request.auth != null
           && request.auth.uid == userId
-          && request.resource.data.keys().hasOnly(['uid', 'name', 'averageTenths', 'levelsCompleted', 'highestLevel', 'updatedAt'])
+          && request.resource.data.keys().hasOnly(['uid', 'name', 'averageTenths', 'levelsCompleted', 'highestLevel', 'dailyFinds', 'updatedAt'])
           && request.resource.data.keys().hasAll(['uid', 'name', 'averageTenths', 'levelsCompleted', 'highestLevel', 'updatedAt'])
           && request.resource.data.uid == userId
           && request.resource.data.name is string
@@ -218,19 +225,73 @@ service cloud.firestore {
           && request.resource.data.averageTenths >= 0
           && request.resource.data.averageTenths <= 1800
           && request.resource.data.levelsCompleted is int
-          && request.resource.data.levelsCompleted > 0
+          && request.resource.data.levelsCompleted >= 0
+          && nextDailyFinds() is int
+          && nextDailyFinds() >= 0
+          && request.resource.data.levelsCompleted + nextDailyFinds() > 0
           && request.resource.data.highestLevel is int
           && request.resource.data.highestLevel >= request.resource.data.levelsCompleted
           && request.resource.data.updatedAt == request.time;
       }
       allow read: if true;
       allow create: if validEntry();
+      // A new level or daily find may raise the average; otherwise it may only improve.
       allow update: if validEntry() &&
         (!resource.data.keys().hasAll(['averageTenths', 'levelsCompleted', 'highestLevel']) ||
           (request.resource.data.levelsCompleted >= resource.data.levelsCompleted &&
             request.resource.data.highestLevel >= resource.data.highestLevel &&
+            nextDailyFinds() >= previousDailyFinds() &&
             (request.resource.data.levelsCompleted > resource.data.levelsCompleted ||
+              nextDailyFinds() > previousDailyFinds() ||
               request.resource.data.averageTenths <= resource.data.averageTenths)));
+      allow delete: if false;
+    }
+
+    // Monthly daily-quest board: most finds first, then the least total time used.
+    match /monthlyLeaderboard/{month}/entries/{userId} {
+      function validMonthly() {
+        let data = request.resource.data;
+        return request.auth != null
+          && request.auth.uid == userId
+          && month.matches('[0-9]{4}-[0-9]{2}')
+          && data.keys().hasOnly(['uid', 'name', 'month', 'found', 'played', 'timeUsed', 'rankScore', 'updatedAt'])
+          && data.keys().hasAll(['uid', 'name', 'month', 'found', 'played', 'timeUsed', 'rankScore', 'updatedAt'])
+          && data.uid == userId
+          && data.month == month
+          && data.name is string
+          && data.name == get(/databases/$(database)/documents/profiles/$(userId)).data.username
+          && data.found is int && data.played is int && data.timeUsed is int && data.rankScore is int
+          && data.found >= 0 && data.found <= data.played && data.played <= 31
+          && data.timeUsed >= 0 && data.timeUsed <= data.found * 180
+          && data.rankScore == data.found * 10000 - data.timeUsed
+          && data.updatedAt == request.time;
+      }
+      allow read: if true;
+      allow create: if validMonthly();
+      allow update: if validMonthly()
+        && request.resource.data.found >= resource.data.found
+        && request.resource.data.played >= resource.data.played;
+      allow delete: if false;
+    }
+
+    // Public explorer maps of countries collected from daily quests, keyed by username.
+    match /atlases/{username} {
+      function validAtlas() {
+        let data = request.resource.data;
+        return request.auth != null
+          && data.keys().hasOnly(['uid', 'name', 'countries', 'count', 'updatedAt'])
+          && data.keys().hasAll(['uid', 'name', 'countries', 'count', 'updatedAt'])
+          && data.uid == request.auth.uid
+          && data.name == username
+          && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.username == username
+          && data.countries is map
+          && data.countries.size() <= 400
+          && data.count == data.countries.size()
+          && data.updatedAt == request.time;
+      }
+      allow read: if true;
+      allow create: if validAtlas();
+      allow update: if validAtlas() && resource.data.uid == request.auth.uid;
       allow delete: if false;
     }
 
@@ -241,6 +302,45 @@ service cloud.firestore {
       match /hunts/{huntId} {
         allow read, create: if request.auth != null && request.auth.uid == userId;
         allow update, delete: if false;
+      }
+
+      // One daily-quest attempt per UTC day: created when it starts, finished exactly once.
+      match /daily/{day} {
+        function owner() {
+          return request.auth != null && request.auth.uid == userId;
+        }
+        function resultFields(data) {
+          return data.timeUsed is int && data.timeUsed >= 0 && data.timeUsed <= 180
+            && data.cluesUsed is int && data.cluesUsed >= 1 && data.cluesUsed <= 3
+            && data.wrongGuesses is int && data.wrongGuesses >= 0
+            && data.revealedCountry is bool;
+        }
+        allow read: if owner();
+        allow create: if owner()
+          && day.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}')
+          && request.resource.data.keys().hasOnly(['day', 'puzzleId', 'country', 'status', 'timeUsed', 'cluesUsed', 'wrongGuesses', 'revealedCountry', 'startedAt', 'endedAt'])
+          && request.resource.data.keys().hasAll(['day', 'puzzleId', 'country', 'status', 'timeUsed', 'cluesUsed', 'wrongGuesses', 'revealedCountry', 'startedAt', 'endedAt'])
+          && request.resource.data.day == day
+          && request.resource.data.puzzleId is string
+          && request.resource.data.puzzleId.matches('[A-Z]{3}')
+          && request.resource.data.country is string
+          && request.resource.data.country.size() <= 80
+          && request.resource.data.status in ['playing', 'won', 'lost']
+          && resultFields(request.resource.data)
+          && request.resource.data.startedAt == request.time
+          && (request.resource.data.status == 'playing'
+            ? request.resource.data.endedAt == null
+            : request.resource.data.endedAt == request.time);
+        allow update: if owner()
+          && resource.data.status == 'playing'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'timeUsed', 'cluesUsed', 'wrongGuesses', 'revealedCountry', 'endedAt'])
+          && request.resource.data.status in ['won', 'lost']
+          && resultFields(request.resource.data)
+          && request.resource.data.endedAt == request.time
+          // A hunt's time used includes its wall-clock time, so a late win cannot claim a fast time.
+          && (request.resource.data.status == 'lost'
+            || request.time <= resource.data.startedAt + duration.value(request.resource.data.timeUsed + 600, 's'));
+        allow delete: if false;
       }
 
       match /notifications/{code} {

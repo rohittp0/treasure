@@ -5,6 +5,7 @@ import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signI
 import { getFirestore, collection, doc, getDoc, getDocs, query, setDoc, where, orderBy, limit, runTransaction, serverTimestamp, onSnapshot, writeBatch, updateDoc, deleteDoc } from 'firebase/firestore';
 import messagingWorkerUrl from './firebase-messaging-sw.js?worker&url';
 import { scoreSoloHunts } from './leaderboard.js';
+import { scoreMonth, validDailyRecord } from './daily.js';
 import { ROUND_SECONDS } from './game.js';
 
 const app = initializeApp({
@@ -154,7 +155,8 @@ export async function loadLeaderboard() {
 
 export async function enterLeaderboard(user) {
   if (!user) return false;
-  const score = scoreSoloHunts(await loadHunts(user));
+  const [hunts, daily] = await Promise.all([loadHunts(user), loadDailyRecords(user)]);
+  const score = scoreSoloHunts(hunts, daily);
   if (!score) return false;
   const reference = doc(db, 'leaderboard', user.uid);
   return runTransaction(db, async transaction => {
@@ -165,7 +167,8 @@ export async function enterLeaderboard(user) {
     if (previous.exists() && previous.data().name === username &&
         previous.data().averageTenths === score.averageTenths &&
         previous.data().levelsCompleted === score.levelsCompleted &&
-        previous.data().highestLevel === score.highestLevel) {
+        previous.data().highestLevel === score.highestLevel &&
+        (previous.data().dailyFinds ?? 0) === score.dailyFinds) {
       return false;
     }
     transaction.set(reference, {
@@ -176,6 +179,112 @@ export async function enterLeaderboard(user) {
     });
     return true;
   });
+}
+
+// Daily quest: one attempt per explorer per UTC day, kept in users/{uid}/daily/{YYYY-MM-DD}.
+const dailyRef = (uid, day) => doc(db, 'users', uid, 'daily', day);
+const dailyFields = record => ({
+  timeUsed: record.timeUsed,
+  cluesUsed: record.cluesUsed,
+  wrongGuesses: record.wrongGuesses,
+  revealedCountry: record.revealedCountry,
+});
+
+function dailyFromSnapshot(data) {
+  return {
+    ...data,
+    startedAt: data.startedAt?.toMillis?.() ?? null,
+    endedAt: data.endedAt?.toMillis?.() ?? null,
+  };
+}
+
+export async function loadDailyRecords(user) {
+  if (!user) return [];
+  const result = await getDocs(collection(db, 'users', user.uid, 'daily'));
+  return result.docs.map(snapshot => dailyFromSnapshot(snapshot.data()));
+}
+
+// Records the start of today's attempt. Returns the stored record if one already exists.
+export async function startDailyRecord(user, record) {
+  const reference = dailyRef(user.uid, record.day);
+  return runTransaction(db, async transaction => {
+    const existing = await transaction.get(reference);
+    if (existing.exists()) return dailyFromSnapshot(existing.data());
+    transaction.set(reference, {
+      day: record.day, puzzleId: record.puzzleId, country: record.country, status: 'playing',
+      timeUsed: 0, cluesUsed: 1, wrongGuesses: 0, revealedCountry: false,
+      startedAt: serverTimestamp(), endedAt: null,
+    });
+    return null;
+  });
+}
+
+// Finishes today's attempt. A finished record is never overwritten.
+export async function finishDailyRecord(user, record) {
+  if (!validDailyRecord(record)) throw new Error('This daily result is incomplete.');
+  const reference = dailyRef(user.uid, record.day);
+  return runTransaction(db, async transaction => {
+    const existing = await transaction.get(reference);
+    if (existing.exists() && existing.data().status !== 'playing') return dailyFromSnapshot(existing.data());
+    if (existing.exists()) {
+      transaction.update(reference, { status: record.status, ...dailyFields(record), endedAt: serverTimestamp() });
+    } else {
+      transaction.set(reference, {
+        day: record.day, puzzleId: record.puzzleId, country: record.country, status: record.status,
+        ...dailyFields(record), startedAt: serverTimestamp(), endedAt: serverTimestamp(),
+      });
+    }
+    return null;
+  });
+}
+
+const monthlyRef = (month, uid) => doc(db, 'monthlyLeaderboard', month, 'entries', uid);
+
+export async function loadMonthlyLeaderboard(month) {
+  const result = await getDocs(query(collection(db, 'monthlyLeaderboard', month, 'entries'), orderBy('rankScore', 'desc'), limit(50)));
+  return result.docs.map(snapshot => snapshot.data()).filter(entry => entry.found > 0);
+}
+
+export async function enterMonthlyLeaderboard(user, records, month) {
+  if (!user) return false;
+  const score = scoreMonth(records, month);
+  if (!score.played) return false;
+  const reference = monthlyRef(month, user.uid);
+  return runTransaction(db, async transaction => {
+    const profile = await transaction.get(profileRef(user.uid));
+    if (!profile.exists()) throw new Error('Choose a username before entering the leaderboard.');
+    const username = profile.data().username;
+    const previous = await transaction.get(reference);
+    if (previous.exists()) {
+      const old = previous.data();
+      if (old.name === username && old.found === score.found && old.played === score.played && old.timeUsed === score.timeUsed) return false;
+      // Never replace a better entry with a stale view of the month.
+      if (old.found > score.found || old.played > score.played) return false;
+    }
+    transaction.set(reference, { uid: user.uid, name: username, ...score, updatedAt: serverTimestamp() });
+    return true;
+  });
+}
+
+// Public explorer maps, addressed by username so share links work for signed-out visitors.
+const atlasRef = username => doc(db, 'atlases', username);
+
+export async function saveAtlas(user, username, countries) {
+  if (!user || !username) return false;
+  const reference = atlasRef(username);
+  const snapshot = await getDoc(reference);
+  const ids = Object.keys(countries);
+  if (snapshot.exists() && snapshot.data().count === ids.length &&
+      ids.every(id => snapshot.data().countries?.[id] === countries[id])) return false;
+  await setDoc(reference, { uid: user.uid, name: username, countries, count: ids.length, updatedAt: serverTimestamp() });
+  return true;
+}
+
+export async function loadAtlas(username) {
+  const handle = String(username || '').trim().replace(/^@/, '').toLowerCase();
+  if (!/^[a-z][a-z0-9_]{2,19}$/.test(handle)) return null;
+  const snapshot = await getDoc(atlasRef(handle));
+  return snapshot.exists() ? snapshot.data() : null;
 }
 
 const friendRef = code => doc(db, 'friendHunts', code);

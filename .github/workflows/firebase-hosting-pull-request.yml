@@ -8,6 +8,23 @@ permissions:
   contents: read
   pull-requests: write
 jobs:
+  # Needs no secrets, so it also runs for pull requests from forks.
+  rules_tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci
+      - name: Firestore rules tests (emulator)
+        run: npx --yes firebase-tools@14 emulators:exec --only firestore --project demo-treasure-friend-tests 'node tests/friend-rules.rules.mjs'
+
   build_and_preview:
     if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest

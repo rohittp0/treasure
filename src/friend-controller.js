@@ -46,6 +46,8 @@ export function createFriendController({ getUser, getUsername, getMap, getCountr
     $('#home-screen').classList.toggle('hidden', selector !== '#home-screen');
     $('#result-screen').classList.add('hidden');
     $('#leaderboard-screen').classList.add('hidden');
+    $('#atlas-screen')?.classList.add('hidden');
+    document.body.classList.remove('atlas-view');
     $('#game-panel').classList.toggle('hidden', selector !== '#game-panel');
     $('#game-hud').classList.toggle('hidden', selector !== '#game-panel');
     for (const screen of friendScreens) $(screen).classList.toggle('hidden', selector !== screen);

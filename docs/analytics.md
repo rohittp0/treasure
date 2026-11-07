@@ -42,10 +42,12 @@ Selections can instead lead to `selection_cancelled`; seekers can open additiona
 | `poster_exported` | Poster is shared or downloaded; `method=native/download`, hunt stats. Cancellation is excluded. |
 | `logs_opened` | User opens My logs |
 | `history_result_opened` | User successfully opens a challenge from My logs |
-| `leaderboard_viewed` | Leaderboard opened from a button; `source=home/result` |
+| `leaderboard_viewed` | Leaderboard opened from a button; `source=home/result`, `board=monthly/all_time` (also sent when switching tabs, with `source=tab`) |
+| `atlas_viewed` | An explorer map is opened; `owner=self/other`, `source=home/result/leaderboard/link`, `countries` collected |
+| `atlas_shared` | The explorer shares their map link; `method=native/clipboard`, `countries` collected |
 | `notifications_permission` | Notification permission prompt resolves; `permission` |
 
-Common properties include `account_status=guest/signed_in`, `mode=solo/multiplayer`, `role`, and applicable hunt statistics. Time used includes paid clue, reveal and wrong-guess costs. Legacy friend hunts remain 120 seconds; current hunts use 180 seconds.
+Daily-quest hunts reuse the hunt events with `mode=daily` and add `streak` on `hunt_completed`. Common properties include `account_status=guest/signed_in`, `mode=solo/daily/multiplayer`, `role`, and applicable hunt statistics. Time used includes paid clue, reveal and wrong-guess costs. Legacy friend hunts remain 120 seconds; current hunts use 180 seconds.
 
 Multiplayer `won`/`lost` describes the **seeker**. A timeout is `outcome=lost`, `winner_role=hider`. `personal_win` on `result_viewed` describes the current viewer. Hiders and historical viewers do not emit a second `hunt_completed` conversion. Completed-hunt and result-view events are deduplicated by hunt/viewer within the current page lifecycle. Multiplayer completion waits for acknowledged writes, and action events precede the final completion/result events even when listeners deliver the result before a transaction promise resolves.
 

@@ -27,8 +27,21 @@ Seconds deducted from the hunt's remaining time to pay for a wrong guess, anothe
 **Country-name reveal**:
 Help that names the hidden country after all three clues have been opened.
 
+**Daily quest**:
+The one hunt of the UTC day, with the same hidden country for every seeker. Each seeker gets one attempt.
+
+**Claim**:
+Finding the daily quest's country adds it to the seeker's explorer map. Countries are claimed only through daily quests.
+
+**Explorer map**:
+A public world map of the countries a seeker has claimed. It can be shared by link.
+_Avoid_: Atlas (used in code only)
+
+**Monthly leaderboard**:
+The main public ranking: the most daily-quest countries found this month, with ties broken by the least total time used.
+
 **Leaderboard**:
-A public ranking of each signed-in seeker's best successful hunt, ordered by seconds remaining.
+The all-time ranking: the weighted average time used across won solo levels and daily-quest finds. A daily find weighs double the seeker's highest solo level.
 
 **Hider**:
 The player who chooses a hidden country and challenges a seeker to find it.

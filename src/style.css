@@ -296,3 +296,37 @@ button,a,input,textarea{touch-action:manipulation}
 @media(max-width:700px){.friend-result{left:12px;top:calc(50% + 25px);transform:translateY(-50%);max-height:calc(100dvh - 90px);width:calc(100vw - 24px);padding:23px 25px 24px}.friend-result .friend-illustration{max-height:185px}.friend-result h2{font-size:31px}.friend-result .result-story{font-size:15px}.friend-result .result-explanation{margin-bottom:12px}.friend-result .result-brand{margin-bottom:12px}.friend-result .result-cost-note{margin:7px 0 9px}}
 @media(max-width:360px){.friend-result h2{font-size:27px}}
 @media(prefers-reduced-motion:reduce){.friend-result h2,.friend-result .result-stats{animation:none}}
+
+/* Daily quest, monthly board tabs and explorer maps. */
+.daily-button{min-height:64px;text-align:left}
+.daily-button-copy{display:flex;flex-direction:column;gap:3px;min-width:0}
+.daily-button-copy strong{font-size:15px;font-weight:700;font-family:inherit}
+.daily-button .daily-button-copy small{font-size:11px;font-weight:500;opacity:.88;font-family:inherit}
+.daily-button.daily-done{background:#2f5b58}
+.daily-button.daily-done:hover{background:#264c49}
+.daily-streak{margin:9px 0 2px;color:#8a6542;font-size:11px;font-weight:700;letter-spacing:.4px}
+.home-start+.daily-streak+.multiplayer-button{margin-top:12px}
+.home-links{display:grid;grid-template-columns:1fr 1fr;gap:8px;width:265px;margin-top:7px}
+.home-links .home-leaderboard-button{width:auto;margin:0}
+.board-tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin:14px 0 0;padding:4px;border:1px solid #bda273;border-radius:6px;background:#efe1c1}
+.board-tab{min-height:40px;border:0;border-radius:4px;background:transparent;color:#6e6a55;font-size:12px;font-weight:700;letter-spacing:.3px}
+.board-tab[aria-selected=true]{background:#c87948;color:#fff9e8;box-shadow:0 3px 8px #794b2e2e}
+.board-tab:not([aria-selected=true]):hover{background:#f8eedb}
+button.leaderboard-row{width:100%;border:0;border-top:1px solid #ccb99372;background:transparent;color:inherit;text-align:left;font:inherit;cursor:pointer}
+button.leaderboard-row:hover{background:#f4e7cb}
+.leaderboard-hint{margin:-6px 0 6px;font-size:11px!important;color:#8a8e7b!important}
+.atlas-screen{width:min(420px,calc(100vw - 48px))}
+.atlas-stats{margin:14px 0 12px;padding:13px 0}
+.atlas-countries{display:flex;flex-wrap:wrap;gap:6px;max-height:150px;overflow-y:auto;margin:0 0 12px}
+.atlas-chip{padding:5px 9px;border:1px solid #c3a978;border-radius:20px;background:#fbf2dc;color:#5b5240;font-size:11px;font-weight:600}
+.atlas-chip.recent{background:#f2c46b;border-color:#c99645;color:#3f2e17}
+.atlas-share{margin:4px 0 6px}
+.atlas-screen .atlas-wide{width:100%;margin:6px 0 0}
+.atlas-view .map-stamp{display:none}
+@media(max-width:700px){
+  .home-links{width:100%}
+  .atlas-screen{left:12px;right:12px;top:auto;bottom:12px;transform:none;width:auto;max-height:min(52dvh,460px)}
+  .atlas-screen h2{font-size:27px;margin:6px 0}
+  .atlas-countries{max-height:84px}
+  .daily-button{min-height:58px}
+}

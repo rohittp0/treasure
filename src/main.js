@@ -6,7 +6,8 @@ import mapWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import './style.css';
 import fallbackPuzzles from '../data/countries.json';
 import { choosePuzzle, createGame, difficultyForLevel, CLUE_COST, REVEAL_COST } from './game.js';
-import { loadFriendHunts, watchUser, login, logout, loadPuzzles, saveHunt, loadHunts, loadLeaderboard, enterLeaderboard, loadProfile, claimUsername, isUsernameAvailable, watchChallenges, markChallengeRead, registerChallengePush } from './firebase.js';
+import { loadFriendHunts, watchUser, login, logout, loadPuzzles, saveHunt, loadHunts, loadLeaderboard, enterLeaderboard, loadProfile, claimUsername, isUsernameAvailable, watchChallenges, markChallengeRead, registerChallengePush, loadDailyRecords, startDailyRecord, finishDailyRecord, loadMonthlyLeaderboard, enterMonthlyLeaderboard, saveAtlas, loadAtlas } from './firebase.js';
+import { dayKey, monthKey, daysInMonth, msUntilNextDay, dailyPuzzle, currentStreak, scoreMonth, atlasFromRecords, mergeDailyRecords, validDailyRecord } from './daily.js';
 import { createFriendController } from './friend-controller.js';
 
 maplibregl.setWorkerUrl(mapWorkerUrl);
@@ -51,7 +52,13 @@ let leaderboardOpenedHere = false;
 let leaderboardLoadVersion = 0;
 let usernameCheckVersion = 0;
 let usernameCheckTimer;
+let activeMode = 'solo';
+let dailyRecords = [];
+let dailySyncPromise = null;
+let leaderboardBoard = 'monthly';
+let atlasView = null;
 const PROGRESS_KEY = 'treasurehunch:solo-wins';
+const DAILY_KEY_PREFIX = 'treasurehunch:daily:';
 const PENDING_ENTRY_KEY = 'treasurehunch:pending-leaderboard';
 const RESUME_RESULT_KEY = 'treasurehunch:resume-result';
 let completedWins = readCompletedWins();
@@ -73,7 +80,78 @@ function rememberCompletedWins() {
 function updateHomeStatus() {
   const nextLevel = completedWins + 1;
   const difficulty = difficultyForLevel(nextLevel);
-  elements.homeStatus.textContent = `${puzzles.length} places to discover · Level ${String(nextLevel).padStart(2, '0')} · ${difficulty[0].toUpperCase()}${difficulty.slice(1)}`;
+  $('#solo-hint').textContent = `Level ${String(nextLevel).padStart(2, '0')} · ${difficulty[0].toUpperCase()}${difficulty.slice(1)}`;
+  elements.homeStatus.textContent = `${puzzles.length} places to discover · A new daily country at 00:00 UTC`;
+}
+
+// Daily records live on this device per account ('guest' before sign-in) and in Firestore once signed in.
+function dailyOwner() {
+  return user?.uid || 'guest';
+}
+
+function readDailyStore(owner = dailyOwner()) {
+  try {
+    const stored = JSON.parse(localStorage.getItem(`${DAILY_KEY_PREFIX}${owner}`) || '[]');
+    return Array.isArray(stored) ? stored.filter(record => record && typeof record.day === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeDailyStore(records, owner = dailyOwner()) {
+  try { localStorage.setItem(`${DAILY_KEY_PREFIX}${owner}`, JSON.stringify(records.slice(-400))); } catch { /* The quest still plays without storage. */ }
+}
+
+function rememberDailyRecord(record) {
+  const others = readDailyStore().filter(item => item.day !== record.day);
+  writeDailyStore([...others, record].sort((a, b) => a.day.localeCompare(b.day)));
+  dailyRecords = [...dailyRecords.filter(item => item.day !== record.day), record].sort((a, b) => a.day.localeCompare(b.day));
+}
+
+function todayRecord() {
+  return dailyRecords.find(record => record.day === dayKey());
+}
+
+function formatCountdown(ms) {
+  const minutes = Math.max(1, Math.ceil(ms / 60000));
+  const hours = Math.floor(minutes / 60);
+  return hours ? `${hours}h ${String(minutes % 60).padStart(2, '0')}m` : `${minutes}m`;
+}
+
+function formatDuration(seconds) {
+  const minutes = Math.floor(seconds / 60);
+  return minutes ? `${minutes}m ${String(seconds % 60).padStart(2, '0')}s` : `${seconds}s`;
+}
+
+function monthName(month = monthKey()) {
+  return new Date(`${month}-01T00:00:00Z`).toLocaleString('en', { month: 'long', timeZone: 'UTC' });
+}
+
+function renderDailyHome() {
+  const record = todayRecord();
+  const today = dayKey();
+  const nextIn = formatCountdown(msUntilNextDay());
+  const label = new Date(`${today}T00:00:00Z`).toLocaleDateString('en', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+  const button = $('#daily-button');
+  button.classList.toggle('daily-done', !!record && record.status !== 'playing');
+  if (!record) {
+    $('#daily-title').textContent = "Start today's quest";
+    $('#daily-hint').textContent = `${label} · Same country for everyone`;
+  } else if (record.status === 'playing') {
+    $('#daily-title').textContent = "Resume today's quest";
+    $('#daily-hint').textContent = 'Your clock is still running';
+  } else {
+    $('#daily-title').textContent = record.status === 'won' ? `${record.country} is on your map` : 'The trail went cold today';
+    $('#daily-hint').textContent = `Next country in ${nextIn} · Open your map`;
+  }
+  const month = scoreMonth(dailyRecords, monthKey());
+  const streak = currentStreak(dailyRecords);
+  const dayOfMonth = Number(today.slice(8, 10));
+  $('#daily-streak').textContent = `✦ ${streak ? `${streak}-day streak` : 'Start a streak today'} · ${month.found} of ${dayOfMonth} found in ${monthName()}`;
+}
+
+function huntParameters(state) {
+  return activeMode === 'daily' ? soloEventParameters(state, undefined, 'daily') : soloEventParameters(state, activeLevel);
 }
 
 function renderUsername() {
@@ -212,7 +290,7 @@ function selectMapCountry(country) {
     if (state.tried.includes(country.id)) showToast('You already ruled that country out.');
     return;
   }
-  trackEvent(EVENTS.COUNTRY_SELECTED, { ...soloEventParameters(state, activeLevel), method: 'map' });
+  trackEvent(EVENTS.COUNTRY_SELECTED, { ...huntParameters(state), method: 'map' });
   selectedMapId = country.id;
   map.setFilter('selected-country', ['==', ['get', 'id'], country.id]);
   renderSelection(state);
@@ -239,6 +317,9 @@ async function loadMap() {
       map.addSource('countries', { type: 'geojson', data: countryData, generateId: false });
       map.addLayer({ id: 'land', type: 'fill', source: 'countries', paint: { 'fill-color': ['match', ['get', 'id'], ['USA', 'CAN', 'BRA', 'AUS', 'CHN', 'RUS'], '#d4ccaf', '#c4c5a8'], 'fill-opacity': 0.98 } });
       map.addLayer({ id: 'borders', type: 'line', source: 'countries', paint: { 'line-color': '#668078', 'line-width': ['interpolate', ['linear'], ['zoom'], 0, 0.45, 4, 1.4], 'line-opacity': 0.9 } });
+      map.addLayer({ id: 'atlas-country', type: 'fill', source: 'countries', filter: ['==', ['get', 'id'], ''], paint: { 'fill-color': '#d9a24f', 'fill-opacity': 0.72 } });
+      map.addLayer({ id: 'atlas-recent', type: 'fill', source: 'countries', filter: ['==', ['get', 'id'], ''], paint: { 'fill-color': '#f2c46b', 'fill-opacity': 0.92 } });
+      map.addLayer({ id: 'atlas-border', type: 'line', source: 'countries', filter: ['==', ['get', 'id'], ''], paint: { 'line-color': '#fff2c3', 'line-width': 1.4 } });
       map.addLayer({ id: 'tried-country', type: 'fill', source: 'countries', filter: ['==', ['get', 'id'], ''], paint: { 'fill-color': '#314d50', 'fill-opacity': 0.55 } });
       map.addLayer({ id: 'selected-country', type: 'fill', source: 'countries', filter: ['==', ['get', 'id'], ''], paint: { 'fill-color': '#e4a94d', 'fill-opacity': 0.83 } });
       map.addLayer({ id: 'selected-border', type: 'line', source: 'countries', filter: ['==', ['get', 'id'], ''], paint: { 'line-color': '#fff2c3', 'line-width': 2.3 } });
@@ -253,6 +334,7 @@ async function loadMap() {
       map.on('mouseenter', 'land', () => { map.getCanvas().style.cursor = game || ['hiding', 'seeker'].includes(friend.mode) ? 'pointer' : 'grab'; });
       map.on('mouseleave', 'land', () => { map.getCanvas().style.cursor = ''; });
       elements.mapLoading.classList.add('hidden');
+      applyAtlasLayers();
     });
     map.on('click', collapseSheetForMap);
     map.on('dragstart', collapseSheetForMap);
@@ -319,13 +401,19 @@ function startHunt() {
   if (!map?.getLayer('land')) { showToast('The map is still loading. One moment!'); return; }
   if (friend.mode !== 'idle') friend.home();
   clearVictory();
+  closeAtlasView();
+  activeMode = 'solo';
   activeLevel = completedWins + 1;
   const lastId = sessionStorage.getItem('treasurehunch:last-country') || '';
   const puzzle = choosePuzzle(puzzles, lastId, Math.random, activeLevel);
   sessionStorage.setItem('treasurehunch:last-country', puzzle.id);
   $('#level-label').textContent = `LEVEL ${String(activeLevel).padStart(2, '0')} · ${difficultyForLevel(activeLevel).toUpperCase()} HUNT`;
   game = createGame(puzzle);
-  trackEvent(EVENTS.HUNT_STARTED, soloEventParameters(game.snapshot(), activeLevel));
+  trackEvent(EVENTS.HUNT_STARTED, huntParameters(game.snapshot()));
+  openHuntScreen();
+}
+
+function openHuntScreen() {
   saved = false;
   lastResult = null;
   clearMapSelection();
@@ -340,6 +428,136 @@ function startHunt() {
   ticker = setInterval(renderGame, 200);
   renderGame();
   map.resize();
+}
+
+// The daily quest uses the bundled country list so every browser builds the same schedule.
+function startDaily() {
+  const record = todayRecord();
+  if (record && record.status !== 'playing') { openAtlas('', 'home'); return; }
+  if (!map?.getLayer('land')) { showToast('The map is still loading. One moment!'); return; }
+  if (friend.mode !== 'idle') friend.home();
+  clearVictory();
+  closeAtlasView();
+  const today = dayKey();
+  const puzzle = dailyPuzzle(fallbackPuzzles, today);
+  activeMode = 'daily';
+  game = createGame(puzzle, undefined, record?.puzzleId === puzzle.id ? record : null);
+  const state = game.snapshot();
+  const label = new Date(`${today}T00:00:00Z`).toLocaleDateString('en', { day: 'numeric', month: 'short', timeZone: 'UTC' }).toUpperCase();
+  $('#level-label').textContent = `DAILY QUEST · ${label} · ${(puzzle.difficulty || 'medium').toUpperCase()}`;
+  saveDailyProgress(state);
+  if (!record) trackEvent(EVENTS.HUNT_STARTED, huntParameters(state));
+  openHuntScreen();
+  const player = user;
+  if (player && !record) {
+    startDailyRecord(player, { day: today, puzzleId: puzzle.id, country: puzzle.country }).then(remote => {
+      if (!remote || user?.uid !== player.uid || activeMode !== 'daily' || !game) return;
+      if (remote.status !== 'playing') {
+        // Today's quest was already finished on another device.
+        rememberDailyRecord(remote);
+        leaveHunt(false);
+        renderDailyHome();
+        showToast("You've already played today's quest on another device.");
+      } else if (Number.isFinite(remote.startedAt)) {
+        game = createGame(puzzle, undefined, { ...game.snapshot(), startedAt: remote.startedAt });
+        saveDailyProgress(game.snapshot());
+      }
+    }).catch(error => console.warn('Could not record the daily start:', error));
+  }
+}
+
+function saveDailyProgress(state) {
+  if (activeMode !== 'daily' || state.status !== 'playing') return;
+  rememberDailyRecord({
+    day: dayKey(state.startedAt), puzzleId: state.puzzle.id, country: state.puzzle.country, status: 'playing',
+    startedAt: state.startedAt, costSeconds: state.costSeconds, cluesVisible: state.cluesVisible,
+    revealedCountry: state.revealedCountry, wrongGuesses: state.wrongGuesses, tried: state.tried,
+  });
+}
+
+function dailyResultRecord(state) {
+  return {
+    day: state.day || dayKey(state.startedAt), puzzleId: state.puzzle.id, country: state.puzzle.country,
+    status: state.status === 'won' ? 'won' : 'lost',
+    timeUsed: Math.min(state.roundSeconds, Math.max(0, state.roundSeconds - state.remaining)),
+    cluesUsed: state.cluesVisible, wrongGuesses: state.wrongGuesses, revealedCountry: state.revealedCountry,
+    startedAt: state.startedAt,
+  };
+}
+
+// Brings Firestore, this device and the public boards in line with each other.
+function syncDaily(player) {
+  if (!player) return Promise.resolve();
+  if (dailySyncPromise) return dailySyncPromise;
+  dailySyncPromise = (async () => {
+    const remote = await loadDailyRecords(player);
+    const remoteByDay = new Map(remote.map(record => [record.day, record]));
+    const local = [...readDailyStore('guest'), ...readDailyStore(player.uid)];
+    const month = monthKey();
+    for (const record of local) {
+      if (!validDailyRecord(record) || !record.day.startsWith(month) || (remoteByDay.get(record.day)?.status ?? 'playing') !== 'playing') continue;
+      await finishDailyRecord(player, record);
+      remoteByDay.set(record.day, record);
+    }
+    if (user?.uid !== player.uid) return;
+    const merged = mergeDailyRecords([...remoteByDay.values()], local);
+    writeDailyStore(merged, player.uid);
+    try { localStorage.removeItem(`${DAILY_KEY_PREFIX}guest`); } catch { /* Nothing to clear. */ }
+    dailyRecords = merged;
+    renderDailyHome();
+    if (atlasView?.self) renderAtlas();
+    if (!username) return;
+    await Promise.all([
+      enterMonthlyLeaderboard(player, merged, month),
+      saveAtlas(player, username, atlasFromRecords(merged)),
+      merged.some(record => record.status === 'won') ? enterLeaderboard(player) : null,
+    ]);
+    await refreshLeaderboard();
+  })().catch(error => {
+    console.warn('Daily quest sync failed:', error);
+    throw error;
+  }).finally(() => { dailySyncPromise = null; });
+  return dailySyncPromise;
+}
+
+function finishDaily(state) {
+  const fresh = !!game;
+  const won = state.status === 'won';
+  const record = dailyResultRecord(state);
+  if (fresh || !dailyRecords.some(item => item.day === record.day && item.status !== 'playing')) rememberDailyRecord(record);
+  const streak = currentStreak(dailyRecords);
+  lastResult = { ...state, mode: 'daily', day: record.day };
+  if (fresh) trackEvent(EVENTS.HUNT_COMPLETED, { ...soloEventParameters(state, undefined, 'daily'), outcome: won ? 'won' : 'lost', winner_role: won ? 'seeker' : 'none', streak });
+  game = null;
+  showResultScreen(state);
+  const month = scoreMonth(dailyRecords, monthKey());
+  $('#challenge-after-win').classList.add('hidden');
+  $('#result-atlas-button').classList.remove('hidden');
+  $('#result-leaderboard-button').classList.remove('hidden');
+  $('#play-again-button').classList.remove('primary-button');
+  $('#play-again-button').innerHTML = 'Play solo levels <span>↗</span>';
+  $('#result-eyebrow').textContent = `DAILY QUEST · ${won ? 'COUNTRY CLAIMED' : 'THE TRAIL WENT COLD'}`;
+  $('#result-title').textContent = won ? `${state.puzzle.country} is yours.` : 'Missed this one.';
+  $('#result-copy').textContent = won
+    ? `Found in ${record.timeUsed} ${record.timeUsed === 1 ? 'second' : 'seconds'} and claimed for your map. ${month.found} ${month.found === 1 ? 'country' : 'countries'} found in ${monthName()}.`
+    : `Today's treasure was hiding in ${state.puzzle.country}. A new country arrives in ${formatCountdown(msUntilNextDay())}.`;
+  $('#result-stats').innerHTML = `<div><strong>${won ? `${record.timeUsed}s` : '—'}</strong><span>TIME USED</span></div><div><strong>${streak}</strong><span>DAY STREAK</span></div><div><strong>${month.found}</strong><span>FOUND THIS MONTH</span></div>`;
+  if (won) playVictory(elements.result);
+  renderDailyHome();
+  if (user) {
+    elements.saveStatus.textContent = 'Saving to your map…';
+    const player = user;
+    finishDailyRecord(player, record)
+      .then(() => syncDaily(player))
+      .then(() => { if (lastResult?.day === record.day) elements.saveStatus.textContent = username ? 'Saved to your map and this month\'s board.' : 'Saved. Choose a username to enter the monthly board.'; })
+      .catch(error => {
+        console.error(error);
+        if (lastResult?.day === record.day) elements.saveStatus.textContent = 'Saved on this device. It will sync when you are back online.';
+      });
+  } else {
+    elements.saveStatus.textContent = won ? 'Kept on this device for now.' : '';
+  }
+  renderLeaderboardGate();
 }
 
 function huntRecord(state) {
@@ -376,6 +594,16 @@ function rememberPendingGuestHunt(hunt) {
 
 function renderLeaderboardGate() {
   if (!lastResult) return;
+  if (lastResult.mode === 'daily') {
+    const dailyWon = lastResult.status === 'won';
+    elements.leaderboardSignIn.classList.toggle('hidden', !!user && !!username);
+    elements.leaderboardSignIn.innerHTML = user ? 'Choose your username <span>↗</span>'
+      : dailyWon ? `Sign in to claim ${escapeHTML(lastResult.puzzle.country)} <span>↗</span>` : 'Sign in to keep your streak <span>↗</span>';
+    elements.leaderboardNote.textContent = !user ? 'Daily finds are ranked each month and count extra on the all-time board.'
+      : !username ? "Choose a username to enter this month's board." : '';
+    $('#result-leaderboard').classList.remove('hidden');
+    return;
+  }
   const won = lastResult.status === 'won';
   const pending = pendingGuestHunts().length > 0;
   elements.leaderboardSignIn.classList.toggle('hidden', !!user && !!username && !pending && !leaderboardSyncFailed);
@@ -389,16 +617,41 @@ function renderLeaderboardGate() {
   $('#result-leaderboard').classList.toggle('hidden', !won && !!user && !!username && !pending && !leaderboardSyncFailed);
 }
 
+function renderBoardTabs() {
+  const monthly = leaderboardBoard === 'monthly';
+  $('#board-monthly').setAttribute('aria-selected', String(monthly));
+  $('#board-all-time').setAttribute('aria-selected', String(!monthly));
+  const month = monthKey();
+  const daysLeft = daysInMonth(month) - Number(dayKey().slice(8, 10));
+  $('#leaderboard-title').innerHTML = monthly ? `${monthName(month)} <em>quest.</em>` : 'All-time <em>leaderboard.</em>';
+  $('#leaderboard-description').textContent = monthly
+    ? `Most daily countries found this month wins; ties go to the least total time used. A missed day is a missed country. ${daysLeft ? `${daysLeft} ${daysLeft === 1 ? 'day' : 'days'} left.` : 'Final day!'}`
+    : "Each solo level's best win counts once and level N weighs N. Every daily find counts double your highest level. Lower average times rank higher.";
+  $('#leaderboard-heading-score').textContent = monthly ? 'FOUND · TIME USED' : 'WEIGHTED TIME USED';
+}
+
 async function refreshLeaderboard() {
   if (elements.leaderboardScreen.classList.contains('hidden')) return;
   const version = ++leaderboardLoadVersion;
+  const monthly = leaderboardBoard === 'monthly';
+  renderBoardTabs();
   elements.leaderboardRows.textContent = 'Loading the leaderboard…';
   try {
-    const leaders = await loadLeaderboard();
+    const leaders = monthly ? await loadMonthlyLeaderboard(monthKey()) : await loadLeaderboard();
     if (version !== leaderboardLoadVersion) return;
-    elements.leaderboardRows.innerHTML = leaders.length
-      ? leaders.map((entry, index) => `<div class="leaderboard-row"><span class="leaderboard-rank">${String(index + 1).padStart(2, '0')}</span><span class="leaderboard-player"><strong>@${escapeHTML(entry.name)}</strong><small>${Number(entry.levelsCompleted)} ${entry.levelsCompleted === 1 ? 'level' : 'levels'} · reached level ${Number(entry.highestLevel)}</small></span><strong class="leaderboard-score">${(Number(entry.averageTenths) / 10).toFixed(1)}s<small>AVG</small></strong></div>`).join('')
-      : '<p class="leaderboard-empty">No finds yet. The first place is yours to claim.</p>';
+    const row = (entry, index, detail, score) => `<button class="leaderboard-row" type="button" data-atlas="${escapeHTML(entry.name)}" aria-label="Open @${escapeHTML(entry.name)}'s map"><span class="leaderboard-rank">${String(index + 1).padStart(2, '0')}</span><span class="leaderboard-player"><strong>@${escapeHTML(entry.name)}</strong><small>${detail}</small></span>${score}</button>`;
+    elements.leaderboardRows.innerHTML = !leaders.length
+      ? `<p class="leaderboard-empty">${monthly ? "No finds this month yet. Today's country could put you first." : 'No finds yet. The first place is yours to claim.'}</p>`
+      : monthly
+        ? leaders.map((entry, index) => row(entry, index, `${Number(entry.played)} ${entry.played === 1 ? 'day' : 'days'} played · ${formatDuration(Number(entry.timeUsed))} used`, `<strong class="leaderboard-score">${Number(entry.found)}<small>FOUND</small></strong>`)).join('')
+        : leaders.map((entry, index) => {
+          const levels = Number(entry.levelsCompleted);
+          const finds = Number(entry.dailyFinds || 0);
+          const parts = [];
+          if (levels) parts.push(`${levels} ${levels === 1 ? 'level' : 'levels'} · reached level ${Number(entry.highestLevel)}`);
+          if (finds) parts.push(`${finds} daily ${finds === 1 ? 'find' : 'finds'}`);
+          return row(entry, index, parts.join(' · '), `<strong class="leaderboard-score">${(Number(entry.averageTenths) / 10).toFixed(1)}s<small>AVG</small></strong>`);
+        }).join('');
   } catch (error) {
     if (version !== leaderboardLoadVersion) return;
     console.error(error);
@@ -406,9 +659,129 @@ async function refreshLeaderboard() {
   }
 }
 
+function setLeaderboardBoard(board) {
+  if (board === leaderboardBoard) return;
+  leaderboardBoard = board;
+  trackEvent(EVENTS.LEADERBOARD_VIEWED, { source: 'tab', board: board === 'monthly' ? 'monthly' : 'all_time' });
+  refreshLeaderboard();
+}
+
+function applyAtlasLayers() {
+  if (!map?.getLayer('atlas-country')) return;
+  const countries = atlasView?.countries || {};
+  const ids = Object.keys(countries);
+  const recent = ids.filter(id => countries[id].startsWith(`${monthKey()}-`));
+  map.setFilter('atlas-country', ['in', ['get', 'id'], ['literal', ids]]);
+  map.setFilter('atlas-border', ['in', ['get', 'id'], ['literal', ids]]);
+  map.setFilter('atlas-recent', ['in', ['get', 'id'], ['literal', recent]]);
+}
+
+function countryName(id) {
+  return fallbackPuzzles.find(puzzle => puzzle.id === id)?.country
+    || countryData?.features.find(feature => feature.properties.id === id)?.properties.name || id;
+}
+
+function atlasLink(handle) {
+  return `${location.origin}/?atlas=${encodeURIComponent(handle)}`;
+}
+
+function renderAtlas() {
+  if (!atlasView) return;
+  if (atlasView.self) atlasView.countries = atlasFromRecords(dailyRecords);
+  const { self, name, countries = {}, loading, missing } = atlasView;
+  const ids = Object.keys(countries).sort((a, b) => countries[b].localeCompare(countries[a]));
+  const month = monthKey();
+  const thisMonth = ids.filter(id => countries[id].startsWith(`${month}-`)).length;
+  $('#atlas-title').innerHTML = self ? 'Your <em>world.</em>' : `@${escapeHTML(name)}'s <em>world.</em>`;
+  $('#atlas-copy').textContent = loading ? 'Unrolling the map…'
+    : missing ? `@${name} hasn't started a map yet.`
+      : self ? (ids.length ? 'Every daily country you find is claimed here. Missed days stay blank.' : "Find today's country to claim your first place on the map.")
+        : `${ids.length} ${ids.length === 1 ? 'country' : 'countries'} claimed from daily quests.`;
+  const third = self
+    ? `<div><strong>${currentStreak(dailyRecords)}</strong><span>DAY STREAK</span></div>`
+    : `<div><strong>${Math.round((ids.length / fallbackPuzzles.length) * 100)}%</strong><span>OF THE QUEST WORLD</span></div>`;
+  $('#atlas-stats').innerHTML = loading || missing ? '' : `<div><strong>${ids.length}</strong><span>COUNTRIES</span></div><div><strong>${thisMonth}</strong><span>IN ${monthName(month).toUpperCase()}</span></div>${third}`;
+  $('#atlas-stats').classList.toggle('hidden', loading || missing);
+  $('#atlas-countries').innerHTML = ids.map(id => `<span class="atlas-chip ${countries[id].startsWith(`${month}-`) ? 'recent' : ''}">${escapeHTML(countryName(id))}</span>`).join('');
+  $('#atlas-share').classList.toggle('hidden', !self || !user || !username);
+  $('#atlas-sign-in').classList.toggle('hidden', !self || (!!user && !!username));
+  $('#atlas-sign-in').innerHTML = user ? 'Choose a username to share your map <span aria-hidden="true">↗</span>' : 'Sign in to share your map <span aria-hidden="true">↗</span>';
+  $('#atlas-own-button').classList.toggle('hidden', self);
+  applyAtlasLayers();
+}
+
+async function openAtlas(handle = '', source = 'home') {
+  const normalized = String(handle || '').trim().replace(/^@/, '').toLowerCase();
+  const self = !normalized || normalized === username;
+  const returnTo = !elements.leaderboardScreen.classList.contains('hidden') ? 'leaderboard'
+    : !elements.result.classList.contains('hidden') ? 'result'
+      : atlasView?.returnTo || 'home';
+  if (friend.mode !== 'idle') friend.home();
+  leaderboardOpenedHere = false;
+  clearVictory();
+  elements.home.classList.add('hidden');
+  elements.result.classList.add('hidden');
+  elements.leaderboardScreen.classList.add('hidden');
+  $('#atlas-screen').classList.remove('hidden');
+  document.body.classList.add('atlas-view');
+  $('#atlas-status').textContent = '';
+  const version = Symbol('atlas');
+  atlasView = { self, name: self ? username : normalized, countries: {}, loading: !self, version, returnTo, source };
+  history.replaceState({}, '', self && username ? `?atlas=${username}` : self ? location.pathname : `?atlas=${normalized}`);
+  renderAtlas();
+  if (self) {
+    trackEvent(EVENTS.ATLAS_VIEWED, { owner: 'self', source, countries: Object.keys(atlasView.countries).length });
+    return;
+  }
+  try {
+    const atlas = await loadAtlas(normalized);
+    if (atlasView?.version !== version) return;
+    atlasView = { ...atlasView, loading: false, missing: !atlas, countries: atlas?.countries || {} };
+    trackEvent(EVENTS.ATLAS_VIEWED, { owner: 'other', source, countries: Object.keys(atlasView.countries).length });
+  } catch (error) {
+    console.error(error);
+    if (atlasView?.version !== version) return;
+    atlasView = { ...atlasView, loading: false, missing: true };
+    $('#atlas-status').textContent = 'This map could not be loaded. Try again shortly.';
+  }
+  renderAtlas();
+}
+
+function closeAtlasView() {
+  if (!atlasView) return;
+  atlasView = null;
+  $('#atlas-screen').classList.add('hidden');
+  document.body.classList.remove('atlas-view');
+  if (new URLSearchParams(location.search).has('atlas')) history.replaceState({}, '', location.pathname);
+  applyAtlasLayers();
+}
+
+async function shareAtlas(native) {
+  if (!username) return;
+  const link = atlasLink(username);
+  const countries = Object.keys(atlasView?.countries || {}).length;
+  if (native && navigator.share) {
+    try {
+      await navigator.share({ title: 'My TreasureHunch map', text: `I've claimed ${countries} ${countries === 1 ? 'country' : 'countries'} on TreasureHunch. Can you find today's?`, url: link });
+      trackEvent(EVENTS.ATLAS_SHARED, { method: 'native', countries });
+      return;
+    } catch (error) {
+      if (error.name === 'AbortError') return;
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(link);
+    trackEvent(EVENTS.ATLAS_SHARED, { method: 'clipboard', countries });
+    $('#atlas-status').textContent = 'Map link copied.';
+  } catch {
+    $('#atlas-status').textContent = link;
+  }
+}
+
 function showLeaderboard() {
   if (!elements.leaderboardScreen.classList.contains('hidden')) return;
   clearVictory();
+  closeAtlasView();
   elements.home.classList.add('hidden');
   elements.result.classList.add('hidden');
   elements.leaderboardScreen.classList.remove('hidden');
@@ -423,7 +796,8 @@ function restoreFromLeaderboard() {
 }
 
 function openLeaderboard() {
-  trackEvent(EVENTS.LEADERBOARD_VIEWED, { source: elements.result.classList.contains('hidden') ? 'home' : 'result' });
+  leaderboardBoard = lastResult && !elements.result.classList.contains('hidden') && lastResult.mode !== 'daily' ? 'all_time' : 'monthly';
+  trackEvent(EVENTS.LEADERBOARD_VIEWED, { source: elements.result.classList.contains('hidden') ? 'home' : 'result', board: leaderboardBoard });
   leaderboardReturn = elements.result.classList.contains('hidden') ? 'home' : 'result';
   leaderboardOpenedHere = true;
   location.hash = 'leaderboard';
@@ -485,10 +859,28 @@ function postPendingGuestEntry(player) {
   return pendingEntryPromise;
 }
 
+function showResultScreen(state) {
+  clearMapSelection();
+  renderSelection(state);
+  document.body.classList.remove('in-game', 'solo-game');
+  $('#end-level-button').classList.add('hidden');
+  setSheetCollapsed(false);
+  elements.hud.classList.add('hidden');
+  elements.home.classList.add('hidden');
+  elements.game.classList.add('hidden');
+  elements.leaderboardScreen.classList.add('hidden');
+  closeAtlasView();
+  elements.result.classList.remove('hidden');
+  elements.result.classList.remove('victory');
+  $('#result-art').textContent = state.status === 'won' ? '✦' : '⌛';
+  $('#result-fact').textContent = state.puzzle.fact;
+}
+
 function finish(state) {
   clearInterval(ticker);
   if (saved) return;
   saved = true;
+  if (state.mode === 'daily' || (game && activeMode === 'daily')) { finishDaily(state); return; }
   const won = state.status === 'won';
   const resultLevel = state.level || activeLevel;
   state.level = resultLevel;
@@ -499,27 +891,17 @@ function finish(state) {
   }
   lastResult = state;
   if (game) trackEvent(EVENTS.HUNT_COMPLETED, { ...soloEventParameters(state, resultLevel), outcome: won ? 'won' : 'lost', winner_role: won ? 'seeker' : 'none' });
-  clearMapSelection();
-  renderSelection(state);
-  document.body.classList.remove('in-game', 'solo-game');
-  $('#end-level-button').classList.add('hidden');
-  setSheetCollapsed(false);
-  elements.hud.classList.add('hidden');
-  elements.home.classList.add('hidden');
-  elements.game.classList.add('hidden');
-  elements.leaderboardScreen.classList.add('hidden');
-  elements.result.classList.remove('hidden');
-  elements.result.classList.remove('victory');
+  showResultScreen(state);
+  $('#result-atlas-button').classList.add('hidden');
+  $('#play-again-button').innerHTML = 'Hunt again <span>↗</span>';
   $('#challenge-after-win').classList.toggle('hidden', !won);
   $('#result-leaderboard-button').classList.toggle('hidden', !won);
   $('#play-again-button').classList.toggle('primary-button', !won);
-  $('#result-art').textContent = won ? '✦' : '⌛';
   $('#result-eyebrow').textContent = `LEVEL ${String(resultLevel).padStart(2, '0')} · ${won ? 'TREASURE FOUND' : 'THE TRAIL WENT COLD'}`;
   $('#result-title').textContent = won ? 'Beautifully found.' : 'The world is still waiting.';
   const timeUsed = Math.max(0, (state.roundSeconds ?? 120) - state.remaining);
   $('#result-copy').textContent = won ? `You found ${state.puzzle.country} using ${timeUsed} seconds. Level ${resultLevel + 1} is ready.` : `The treasure was hiding in ${state.puzzle.country}. Try level ${resultLevel} again with a new country.`;
   $('#result-stats').innerHTML = `<div><strong>${won ? timeUsed : state.remaining}s</strong><span>${won ? 'TIME USED' : 'ON THE CLOCK'}</span></div><div><strong>${state.cluesVisible}/3</strong><span>CLUES OPENED</span></div><div><strong>${state.wrongGuesses}</strong><span>WRONG GUESSES</span></div>`;
-  $('#result-fact').textContent = state.puzzle.fact;
   if (won) playVictory(elements.result);
   elements.saveStatus.textContent = user && username ? 'Saving this hunt…' : won
     ? user ? 'Choose a username to keep this winning find.' : 'Sign in to keep this winning find.'
@@ -530,8 +912,10 @@ function finish(state) {
   refreshLeaderboard();
 }
 
-function leaveHunt() {
-  if (game?.snapshot().status === 'playing') trackEvent(EVENTS.HUNT_ABANDONED, soloEventParameters(game.snapshot(), activeLevel));
+function leaveHunt(track = true) {
+  const dailyRunning = activeMode === 'daily' && game?.snapshot().status === 'playing';
+  if (track && game?.snapshot().status === 'playing') trackEvent(EVENTS.HUNT_ABANDONED, huntParameters(game.snapshot()));
+  if (track && dailyRunning) showToast("Today's clock keeps running. Resume from the home screen.");
   clearVictory();
   clearInterval(ticker);
   game = null;
@@ -543,6 +927,7 @@ function leaveHunt() {
   elements.game.classList.add('hidden');
   elements.selection.classList.add('hidden');
   elements.home.classList.remove('hidden');
+  renderDailyHome();
 }
 
 async function openAccount(purpose = 'log') {
@@ -598,7 +983,7 @@ async function openAccount(purpose = 'log') {
     try {
       await friend.joinCode(entry.dataset.hunt, 'history');
       trackEvent(EVENTS.HISTORY_OPENED, { mode: 'multiplayer' });
-      if (game?.snapshot().status === 'playing') trackEvent(EVENTS.HUNT_ABANDONED, { ...soloEventParameters(game.snapshot(), activeLevel), source: 'history' });
+      if (game?.snapshot().status === 'playing') trackEvent(EVENTS.HUNT_ABANDONED, { ...huntParameters(game.snapshot()), source: 'history' });
       clearInterval(ticker);
       game = null;
       elements.accountDialog.close();
@@ -701,6 +1086,8 @@ $('#welcome-form').addEventListener('submit', async event => {
     watchInbox(user);
     renderLeaderboardGate();
     postPendingGuestEntry(user);
+    syncDaily(user).catch(() => {});
+    if (atlasView?.self) { atlasView.name = username; renderAtlas(); }
     if (browserNotificationsAvailable() && Notification.permission === 'granted')
       registerChallengePush(user).catch(error => console.warn('Background alerts could not start:', error));
   } catch (error) {
@@ -727,6 +1114,29 @@ $('#challenge-list').addEventListener('click', async event => {
 });
 
 $('#start-button').addEventListener('click', startHunt);
+$('#daily-button').addEventListener('click', startDaily);
+$('#home-atlas-button').addEventListener('click', () => openAtlas('', 'home'));
+$('#result-atlas-button').addEventListener('click', () => openAtlas('', 'result'));
+$('#atlas-own-button').addEventListener('click', () => openAtlas('', atlasView?.source || 'home'));
+$('#atlas-share-button').addEventListener('click', () => shareAtlas(true));
+$('#atlas-copy-button').addEventListener('click', () => shareAtlas(false));
+$('#atlas-sign-in').addEventListener('click', () => {
+  if (user) showWelcome(user);
+  else login().catch(error => { console.error(error); showToast('Sign-in could not start. Please try again.'); });
+});
+$('#atlas-back-button').addEventListener('click', () => {
+  const returnTo = atlasView?.returnTo || 'home';
+  closeAtlasView();
+  if (returnTo === 'leaderboard') { leaderboardOpenedHere = false; location.hash = 'leaderboard'; showLeaderboard(); }
+  else if (returnTo === 'result' && lastResult) elements.result.classList.remove('hidden');
+  else { elements.home.classList.remove('hidden'); renderDailyHome(); }
+});
+$('#board-monthly').addEventListener('click', () => setLeaderboardBoard('monthly'));
+$('#board-all-time').addEventListener('click', () => setLeaderboardBoard('all_time'));
+elements.leaderboardRows.addEventListener('click', event => {
+  const row = event.target.closest('[data-atlas]');
+  if (row) openAtlas(row.dataset.atlas, 'leaderboard');
+});
 $('#multiplayer-button').addEventListener('click', () => friend.openLobby());
 $('#home-leaderboard-button').addEventListener('click', openLeaderboard);
 $('#result-leaderboard-button').addEventListener('click', openLeaderboard);
@@ -742,6 +1152,7 @@ elements.leaderboardSignIn.addEventListener('click', async () => {
   if (!lastResult) return;
   if (user) {
     if (!username) showWelcome(user);
+    else if (lastResult.mode === 'daily') syncDaily(user).catch(() => {});
     else postPendingGuestEntry(user);
     return;
   }
@@ -756,6 +1167,8 @@ elements.leaderboardSignIn.addEventListener('click', async () => {
   }
 });
 $('#play-again-button').addEventListener('click', startHunt);
+// Keep the daily countdown and day rollover current on the home screen.
+setInterval(() => { if (!elements.home.classList.contains('hidden')) renderDailyHome(); }, 30000);
 $('#challenge-after-win').addEventListener('click', () => {
   if (!lastResult || lastResult.status !== 'won') return;
   clearVictory();
@@ -767,19 +1180,21 @@ $('#unlock-button').addEventListener('click', () => {
   if (friend.mode === 'seeker') return friend.unlock();
   if (!game) return;
   const before = game.snapshot(); const after = game.unlock();
-  if (after.cluesVisible > before.cluesVisible) trackEvent(EVENTS.CLUE_OPENED, { ...soloEventParameters(after, activeLevel), clue_number: after.cluesVisible, cost_seconds: CLUE_COST });
+  if (after.cluesVisible > before.cluesVisible) trackEvent(EVENTS.CLUE_OPENED, { ...huntParameters(after), clue_number: after.cluesVisible, cost_seconds: CLUE_COST });
+  saveDailyProgress(after);
   renderGame();
 });
 $('#reveal-button').addEventListener('click', () => {
   if (friend.mode === 'seeker') return friend.reveal();
   if (!game) return;
   const before = game.snapshot(); const after = game.reveal();
-  if (!before.revealedCountry && after.revealedCountry) trackEvent(EVENTS.COUNTRY_REVEALED, { ...soloEventParameters(after, activeLevel), cost_seconds: REVEAL_COST });
+  if (!before.revealedCountry && after.revealedCountry) trackEvent(EVENTS.COUNTRY_REVEALED, { ...huntParameters(after), cost_seconds: REVEAL_COST });
+  saveDailyProgress(after);
   renderGame();
 });
 $('#cancel-button').addEventListener('click', () => {
   if (friend.mode === 'seeker') return friend.cancelSelection();
-  if (game?.snapshot().selected) trackEvent(EVENTS.SELECTION_CANCELLED, soloEventParameters(game.snapshot(), activeLevel));
+  if (game?.snapshot().selected) trackEvent(EVENTS.SELECTION_CANCELLED, huntParameters(game.snapshot()));
   game?.cancel(); clearMapSelection(); renderGame();
 });
 $('#guess-button').addEventListener('click', () => {
@@ -787,11 +1202,12 @@ $('#guess-button').addEventListener('click', () => {
   if (!game) return;
   const before = game.snapshot();
   const after = game.guess();
-  if (before.selected && (after.status === 'won' || after.wrongGuesses > before.wrongGuesses)) trackEvent(EVENTS.GUESS_SUBMITTED, { ...soloEventParameters(after, activeLevel), outcome: after.status === 'won' ? 'correct' : 'wrong', cost_seconds: after.status === 'won' ? 0 : 5 });
+  if (before.selected && (after.status === 'won' || after.wrongGuesses > before.wrongGuesses)) trackEvent(EVENTS.GUESS_SUBMITTED, { ...huntParameters(after), outcome: after.status === 'won' ? 'correct' : 'wrong', cost_seconds: after.status === 'won' ? 0 : 5 });
   if (after.status === 'playing' && before.selected) {
     clearMapSelection();
     showToast(`${before.selected.country} isn't the one. −5 seconds.`);
   }
+  saveDailyProgress(after);
   renderGame();
 });
 $('#zoom-in').addEventListener('click', () => map?.zoomIn());
@@ -801,8 +1217,14 @@ elements.accountButton.addEventListener('click', () => openAccount());
 $('#close-account').addEventListener('click', () => elements.accountDialog.close());
 elements.accountDialog.addEventListener('click', event => { if (event.target === elements.accountDialog) elements.accountDialog.close(); });
 
+dailyRecords = readDailyStore('guest');
+renderDailyHome();
 loadMap();
 loadPuzzleSet();
+{
+  const sharedAtlas = new URLSearchParams(location.search).get('atlas');
+  if (sharedAtlas && !new URLSearchParams(location.search).get('hunt')) openAtlas(sharedAtlas, 'link');
+}
 if (location.hash === '#leaderboard') showLeaderboard();
 try {
   const resumed = sessionStorage.getItem(RESUME_RESULT_KEY);
@@ -822,6 +1244,8 @@ watchUser(async nextUser => {
   username = '';
   leaderboardSyncFailed = false;
   renderUsername();
+  dailyRecords = nextUser ? mergeDailyRecords(readDailyStore(nextUser.uid), readDailyStore('guest')) : readDailyStore('guest');
+  renderDailyHome();
   stopChallenges?.();
   stopChallenges = null;
   $('#account-challenges').classList.toggle('hidden', !nextUser);
@@ -857,6 +1281,8 @@ watchUser(async nextUser => {
   if (nextUser) {
     sessionStorage.removeItem(RESUME_RESULT_KEY);
     if (username) postPendingGuestEntry(nextUser);
+    syncDaily(nextUser).catch(() => {});
+    if (atlasView?.self) { atlasView.name = username; renderAtlas(); }
     loadHunts(nextUser).then(hunts => {
       if (user?.uid !== nextUser.uid) return;
       const remoteWins = Math.max(0, ...hunts.filter(hunt => hunt.result === 'won').map(hunt => Number.isSafeInteger(hunt.level) && hunt.level > 0 ? hunt.level : 1));

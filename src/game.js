@@ -17,15 +17,16 @@ export function choosePuzzle(puzzles, previousId = '', random = Math.random, lev
   return choices[Math.floor(random() * choices.length)];
 }
 
-export function createGame(puzzle, clock = () => Date.now()) {
-  const startedAt = clock();
-  let cost = 0;
-  let cluesVisible = 1;
+// `saved` resumes an earlier attempt (used by the daily quest after a page reload).
+export function createGame(puzzle, clock = () => Date.now(), saved = null) {
+  const startedAt = Number.isFinite(saved?.startedAt) ? saved.startedAt : clock();
+  let cost = Number.isInteger(saved?.costSeconds) && saved.costSeconds >= 0 ? saved.costSeconds : 0;
+  let cluesVisible = [1, 2, 3].includes(saved?.cluesVisible) ? saved.cluesVisible : 1;
   let selected = null;
-  let revealedCountry = false;
+  let revealedCountry = cluesVisible === 3 && saved?.revealedCountry === true;
   let status = 'playing';
-  let wrongGuesses = 0;
-  const tried = new Set();
+  let wrongGuesses = Number.isInteger(saved?.wrongGuesses) && saved.wrongGuesses >= 0 ? saved.wrongGuesses : 0;
+  const tried = new Set(Array.isArray(saved?.tried) ? saved.tried.filter(id => typeof id === 'string') : []);
 
   function remaining() {
     return Math.max(0, Math.ceil((startedAt + ROUND_SECONDS * 1000 - clock() - cost * 1000) / 1000));
@@ -48,6 +49,7 @@ export function createGame(puzzle, clock = () => Date.now()) {
       wrongGuesses,
       tried: [...tried],
       startedAt,
+      costSeconds: cost,
     };
   }
 

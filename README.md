@@ -2,6 +2,18 @@
 
 A mobile-first solo geography hunt. The player has three minutes to locate a hidden country on a MapLibre world map. The first clue is free; the next two cost 20 seconds each. A wrong confirmed guess costs 5 seconds. After opening all clues, the player can pay 30 seconds to reveal the country name, then find it on the map to win. The map stays full screen during a hunt, with a floating timer and clues that minimise as the player explores.
 
+## Daily quest and explorer maps
+
+Every UTC day has one **daily quest**: the same hidden country for every explorer, with the usual three clues and three-minute timer. Each explorer gets one attempt per day. Leaving or reloading keeps the clock running, and the attempt can be resumed from the home screen. Finding the country **claims** it for the explorer's map. A missed or lost day is a missed country.
+
+- The country comes from `dailyPuzzle()` in `src/daily.js`. It uses a seeded shuffle of the bundled `data/countries.json` for each month, so no country repeats within a month and every browser agrees. Adding or removing countries reshuffles the rest of the current month, so change the list at the start of a month.
+- **Monthly leaderboard** (`monthlyLeaderboard/{YYYY-MM}/entries/{uid}`): most countries found this month ranks first, and ties go to the least total time used. It is the default tab of the leaderboard screen.
+- **All-time leaderboard** (`leaderboard/{uid}`): the existing solo-level score. Each daily find also counts there, weighted at double the explorer's highest solo level (minimum weight 2), so it always counts more than any single level.
+- **Explorer maps** (`atlases/{username}`): the countries each explorer has claimed. Anyone can open one from a leaderboard row or a `https://hunch.rohittp.com/?atlas=<username>` link, and signed-in explorers can share their own.
+- Attempts are stored in `users/{uid}/daily/{YYYY-MM-DD}`. The document is created when the quest starts and can be finished only once. Guests can play; their results stay on the device and are claimed for the current month when they sign in.
+
+These boards are casual and client-scored like the solo leaderboard. The rules enforce one attempt per day per account and keep entries self-consistent, but a modified client could still post made-up results.
+
 Hunts have easy, medium and hard country pools. The first two winning levels draw easy countries, levels 3–5 draw medium countries, and level 6 onward draws hard countries. Losing keeps the player on the same level. Solo progress is kept on this device; signed-in players also save completed hunts to Firestore, and their winning hunt count can restore progress on another device.
 
 Solo hunts start without an account. After a win, the player can open the public leaderboard and sign in with Google to enter it. The score is the weighted average seconds used across won levels, including time spent on clues and wrong guesses. Each level contributes its best winning time once; level N has weight N, so later, harder levels count more. Lower averages rank higher. Guest wins stay in the browser session until sign-in.
@@ -28,10 +40,10 @@ Home and hunt-invite links share a generic social preview that keeps the hidden 
 - [data/countries.json](data/countries.json) is the editorial source for 44 countries and 132 clues, each country marked easy, medium or hard. [data/CLUE-SOURCES.md](data/CLUE-SOURCES.md) records the references.
 - `node scripts/seed-firestore.mjs` checks the data without writing. `node scripts/seed-firestore.mjs --write` publishes it to the `puzzles` collection in project `treasurehunch`, using the currently signed-in Firebase CLI account.
 - Public clients can read active puzzles and leaderboard entries. Only a signed-in player can read their own profile and hunt history under `users/{uid}` or write their own leaderboard entry. Puzzle writes require a privileged Firebase CLI account; the browser cannot edit them.
-- Signed-in players save completed hunts in `users/{uid}/hunts`. Guest wins are kept in the current browser session until sign-in.
+- Signed-in players save completed hunts in `users/{uid}/hunts` and daily attempts in `users/{uid}/daily`. Monthly leaderboard entries and explorer maps are publicly readable. Guest wins are kept in the current browser session until sign-in.
 - The leaderboard is a casual client-scored feature. Competitive anti-cheat would require server-validated rounds.
 - A friend hunt stores the hidden country and pin in a separate Firestore document. Rules only let the hider read it until the seeker pays for the reveal or the hunt ends. Guess transitions are checked against that document by Firestore rules. This is a casual game: rejected writes can still be probed by a modified client, so friend scores deliberately stay off the leaderboard.
-- Run `npm run test:rules` with Java and the Firebase CLI installed to verify friend-hunt rules in the Firestore emulator.
+- Run `npm run test:rules` with Java and the Firebase CLI installed to verify friend-hunt, daily-quest, monthly leaderboard and explorer-map rules in the Firestore emulator.
 
 ### Challenge delivery setup
 

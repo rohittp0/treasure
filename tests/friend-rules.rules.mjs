@@ -200,6 +200,42 @@ try {
   await assertSucceeds(setDoc(doc(seeker, tokenPath), { token: 'fcm-registration-token-12345', createdAt: serverTimestamp() }));
   await assertFails(getDoc(doc(stranger, tokenPath)));
   await assertFails(setDoc(doc(stranger, tokenPath), { token: 'stolen-registration-token', createdAt: serverTimestamp() }));
+  // All-time board: daily finds may raise the average, and can be the only results.
+  await assertSucceeds(updateDoc(leader, { averageTenths: 1795, dailyFinds: 1, updatedAt: serverTimestamp() }));
+  await assertFails(updateDoc(leader, { averageTenths: 1799, dailyFinds: 0, updatedAt: serverTimestamp() }));
+  await assertFails(updateDoc(leader, { averageTenths: 1799, updatedAt: serverTimestamp() }));
+
+  // Daily quest: one attempt per day, finished once.
+  const today = '2026-11-07';
+  const dailyPath = `users/seeker/daily/${today}`;
+  const dailyStart = { day: today, puzzleId: 'AUS', country: 'Australia', status: 'playing', timeUsed: 0, cluesUsed: 1,
+    wrongGuesses: 0, revealedCountry: false, startedAt: serverTimestamp(), endedAt: null };
+  await assertFails(setDoc(doc(stranger, dailyPath), dailyStart));
+  await assertFails(setDoc(doc(seeker, dailyPath), { ...dailyStart, day: '2026-11-08' }));
+  await assertSucceeds(setDoc(doc(seeker, dailyPath), dailyStart));
+  await assertFails(getDoc(doc(stranger, dailyPath)));
+  await assertFails(updateDoc(doc(seeker, dailyPath), { puzzleId: 'FRA' }));
+  await assertSucceeds(updateDoc(doc(seeker, dailyPath), { status: 'won', timeUsed: 42, cluesUsed: 2, wrongGuesses: 1, revealedCountry: false, endedAt: serverTimestamp() }));
+  await assertFails(updateDoc(doc(seeker, dailyPath), { status: 'lost', timeUsed: 180, endedAt: serverTimestamp() }));
+  await assertSucceeds(setDoc(doc(seeker, 'users/seeker/daily/2026-11-06'), { ...dailyStart, day: '2026-11-06', status: 'lost', timeUsed: 180, endedAt: serverTimestamp() }));
+
+  // Monthly board: entries are public, owned and internally consistent.
+  const monthlyPath = 'monthlyLeaderboard/2026-11/entries/seeker';
+  const monthly = { uid: 'seeker', name: 'mapfinder', month: '2026-11', found: 1, played: 2, timeUsed: 42, rankScore: 9958, updatedAt: serverTimestamp() };
+  await assertFails(setDoc(doc(seeker, monthlyPath), { ...monthly, rankScore: 99999 }));
+  await assertFails(setDoc(doc(seeker, monthlyPath), { ...monthly, name: 'mapmaker' }));
+  await assertFails(setDoc(doc(hider, monthlyPath), monthly));
+  await assertSucceeds(setDoc(doc(seeker, monthlyPath), monthly));
+  await assertFails(setDoc(doc(seeker, monthlyPath), { ...monthly, found: 0, timeUsed: 0, rankScore: 0 }));
+  await assertSucceeds(getDocs(collection(environment.unauthenticatedContext().firestore(), 'monthlyLeaderboard/2026-11/entries')));
+
+  // Explorer maps: public to read, written only by the username's owner.
+  const atlas = { uid: 'seeker', name: 'mapfinder', countries: { AUS: today }, count: 1, updatedAt: serverTimestamp() };
+  await assertFails(setDoc(doc(hider, 'atlases/mapfinder'), { ...atlas, uid: 'hider' }));
+  await assertFails(setDoc(doc(seeker, 'atlases/mapfinder'), { ...atlas, count: 2 }));
+  await assertSucceeds(setDoc(doc(seeker, 'atlases/mapfinder'), atlas));
+  await assertSucceeds(getDoc(doc(environment.unauthenticatedContext().firestore(), 'atlases/mapfinder')));
+  console.log('Daily quest rules: one attempt per day, monthly board and explorer maps passed.');
   console.log('Friend hunt rules: username claims, direct challenges, private answer, join, time costs, guesses, reveal, and finish passed.');
 } finally {
   await environment.cleanup();

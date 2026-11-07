@@ -12,11 +12,13 @@ export const EVENTS = Object.freeze({
   INVITE_SHARED: 'invite_shared', RESULT_VIEWED: 'result_viewed', REMATCH_STARTED: 'rematch_started',
   POSTER_EXPORTED: 'poster_exported', LOGS_OPENED: 'logs_opened', HISTORY_OPENED: 'history_result_opened',
   LEADERBOARD_VIEWED: 'leaderboard_viewed', NOTIFICATIONS_PERMISSION: 'notifications_permission',
+  ATLAS_VIEWED: 'atlas_viewed', ATLAS_SHARED: 'atlas_shared',
 });
 const eventNames = new Set(Object.values(EVENTS));
 const allowedParameters = new Set(['mode', 'role', 'level', 'difficulty', 'round_seconds', 'time_used',
   'time_remaining', 'clues_opened', 'wrong_guesses', 'outcome', 'winner_role', 'personal_win', 'source',
-  'method', 'targeted', 'revealed', 'clue_number', 'cost_seconds', 'permission', 'account_status']);
+  'method', 'targeted', 'revealed', 'clue_number', 'cost_seconds', 'permission', 'account_status',
+  'board', 'owner', 'streak', 'countries']);
 const metaStandardEvents = { page_view: 'PageView', sign_up: 'CompleteRegistration' };
 
 export function cleanEventParameters(parameters = {}) {
@@ -123,8 +125,8 @@ function applyPosthogUser() {
     }
   } catch { /* Analytics must never interrupt a hunt. */ }
 }
-export const soloEventParameters = (state, level) => ({
-  mode: 'solo', role: 'seeker', level, difficulty: state.puzzle?.difficulty,
+export const soloEventParameters = (state, level, mode = 'solo') => ({
+  mode, role: 'seeker', level, difficulty: state.puzzle?.difficulty,
   round_seconds: state.roundSeconds ?? 120,
   time_used: Math.max(0, (state.roundSeconds ?? 120) - state.remaining), time_remaining: state.remaining,
   clues_opened: state.cluesVisible, wrong_guesses: state.wrongGuesses, revealed: state.revealedCountry,

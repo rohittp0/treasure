@@ -67,11 +67,13 @@
           <div class="home-eyebrow"><span class="eyebrow-line"></span> A LITTLE WORLD ADVENTURE <span class="eyebrow-line"></span></div>
           <div class="home-ornament" aria-hidden="true">✦</div>
           <h1 id="home-title">Every place<br />has a <em>story.</em></h1>
-          <p class="home-copy">Three clues. One hidden country. Follow your hunch and find the treasure before the clock runs out.</p>
+          <p class="home-copy">One hidden country a day, the same for every explorer. Find it to claim it for your map and climb this month's board.</p>
           <p id="home-username" class="home-username hidden"></p>
-          <button id="start-button" class="primary-button home-start" type="button">Start a solo hunt <span aria-hidden="true">↗</span></button>
+          <button id="daily-button" class="primary-button home-start daily-button" type="button"><span class="daily-button-copy"><strong id="daily-title">Today's quest</strong><small id="daily-hint">Same country for everyone</small></span><span aria-hidden="true">↗</span></button>
+          <p id="daily-streak" class="daily-streak" role="status"></p>
+          <button id="start-button" class="multiplayer-button" type="button"><span><strong>Solo levels</strong><small id="solo-hint">Level 01 · Easy</small></span><span aria-hidden="true">↗</span></button>
           <button id="multiplayer-button" class="multiplayer-button" type="button"><span><strong>Play with a friend</strong><small id="multiplayer-hint">Sign in required</small></span><span aria-hidden="true">↗</span></button>
-          <button id="home-leaderboard-button" class="home-leaderboard-button" type="button">View leaderboard <span aria-hidden="true">↗</span></button>
+          <div class="home-links"><button id="home-leaderboard-button" class="home-leaderboard-button" type="button">Leaderboard <span aria-hidden="true">↗</span></button><button id="home-atlas-button" class="home-leaderboard-button" type="button">My map <span aria-hidden="true">↗</span></button></div>
           <div class="home-rule"><span>01 <b>READ THE CLUE</b></span><i></i><span>02 <b>EXPLORE THE MAP</b></span><i></i><span>03 <b>FIND THE COUNTRY</b></span></div>
           <p id="home-status" class="home-status" role="status">Loading your adventures…</p>
         </section>
@@ -168,14 +170,32 @@
 
         <div id="selection-card" class="selection-card hidden" role="status"><div class="selection-symbol">✦</div><div class="selection-copy"><span>YOUR PIN IS ON</span><strong id="selection-name">Country</strong></div><button id="cancel-button" class="selection-cancel" type="button" aria-label="Cancel selection">×</button><button id="guess-button" class="selection-guess" type="button">Guess this country <span>→</span></button></div>
 
-        <section id="result-screen" class="result-screen hidden" aria-labelledby="result-title"><div id="result-art" class="result-art">✦</div><p id="result-eyebrow" class="result-eyebrow">TREASURE FOUND</p><h2 id="result-title">Beautifully found.</h2><p id="result-copy"></p><div id="result-stats" class="result-stats"></div><div id="result-leaderboard" class="result-leaderboard"><button id="result-leaderboard-button" class="leaderboard-entry-button hidden" type="button">View leaderboard <span aria-hidden="true">↗</span></button><button id="leaderboard-sign-in" class="leaderboard-sign-in hidden" type="button">Sign in to enter the leaderboard <span>↗</span></button><p id="leaderboard-note" class="leaderboard-note"></p></div><p id="result-fact" class="result-fact"></p><button id="challenge-after-win" class="primary-button result-challenge hidden" type="button">Challenge a friend <span>↗</span></button><button id="play-again-button" class="result-replay" type="button">Hunt again <span>↗</span></button><p id="save-status" class="save-status" role="status"></p></section>
+        <section id="result-screen" class="result-screen hidden" aria-labelledby="result-title"><div id="result-art" class="result-art">✦</div><p id="result-eyebrow" class="result-eyebrow">TREASURE FOUND</p><h2 id="result-title">Beautifully found.</h2><p id="result-copy"></p><div id="result-stats" class="result-stats"></div><div id="result-leaderboard" class="result-leaderboard"><button id="result-leaderboard-button" class="leaderboard-entry-button hidden" type="button">View leaderboard <span aria-hidden="true">↗</span></button><button id="leaderboard-sign-in" class="leaderboard-sign-in hidden" type="button">Sign in to enter the leaderboard <span>↗</span></button><p id="leaderboard-note" class="leaderboard-note"></p></div><p id="result-fact" class="result-fact"></p><button id="result-atlas-button" class="primary-button result-challenge hidden" type="button">Open my map <span>↗</span></button><button id="challenge-after-win" class="primary-button result-challenge hidden" type="button">Challenge a friend <span>↗</span></button><button id="play-again-button" class="result-replay" type="button">Hunt again <span>↗</span></button><p id="save-status" class="save-status" role="status"></p></section>
 
         <section id="leaderboard-screen" class="friend-card leaderboard-screen hidden" aria-labelledby="leaderboard-title">
           <p class="kicker">✦ &nbsp; THE EXPLORERS' HALL</p>
-          <h2 id="leaderboard-title">World <em>leaderboard.</em></h2>
-          <p>Each level's best win counts once. Level 2 weighs twice as much as level 1; lower average times rank higher.</p>
-          <div class="leaderboard"><div class="leaderboard-heading"><span>✦ &nbsp; TOP EXPLORERS</span><small>WEIGHTED TIME USED</small></div><div id="leaderboard-rows" class="leaderboard-rows" role="status">Loading the leaderboard…</div></div>
+          <div class="board-tabs" role="tablist" aria-label="Leaderboards"><button id="board-monthly" class="board-tab" type="button" role="tab" aria-selected="true">This month</button><button id="board-all-time" class="board-tab" type="button" role="tab" aria-selected="false">All time</button></div>
+          <h2 id="leaderboard-title">Monthly <em>quest.</em></h2>
+          <p id="leaderboard-description">Most daily countries found this month wins. Ties go to the least total time used. A missed day is a missed country.</p>
+          <div class="leaderboard"><div class="leaderboard-heading"><span id="leaderboard-heading-label">✦ &nbsp; TOP EXPLORERS</span><small id="leaderboard-heading-score">COUNTRIES FOUND</small></div><div id="leaderboard-rows" class="leaderboard-rows" role="status">Loading the leaderboard…</div></div>
+          <p class="leaderboard-hint">Tap an explorer to see their map.</p>
           <button id="leaderboard-back-button" class="text-button" type="button">← Back</button>
+        </section>
+
+        <section id="atlas-screen" class="friend-card atlas-screen hidden" aria-labelledby="atlas-title">
+          <p class="kicker">✦ &nbsp; EXPLORER'S MAP</p>
+          <h2 id="atlas-title">Your <em>world.</em></h2>
+          <p id="atlas-copy">Every daily country you find is claimed on your map.</p>
+          <div id="atlas-stats" class="account-stats atlas-stats"></div>
+          <div id="atlas-countries" class="atlas-countries"></div>
+          <div id="atlas-share" class="friend-share-actions atlas-share hidden">
+            <button id="atlas-share-button" class="primary-button" type="button">Share my map <span aria-hidden="true">↗</span></button>
+            <button id="atlas-copy-button" class="secondary-button" type="button">Copy link <span aria-hidden="true">⧉</span></button>
+          </div>
+          <button id="atlas-sign-in" class="secondary-button atlas-wide hidden" type="button">Sign in to share your map <span aria-hidden="true">↗</span></button>
+          <button id="atlas-own-button" class="secondary-button atlas-wide hidden" type="button">Open my map <span aria-hidden="true">↗</span></button>
+          <p id="atlas-status" class="friend-status" role="status"></p>
+          <button id="atlas-back-button" class="text-button" type="button">← Back</button>
         </section>
 
         <div id="victory-effects" class="victory-effects" aria-hidden="true"></div>

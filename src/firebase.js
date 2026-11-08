@@ -238,6 +238,12 @@ export async function finishDailyRecord(user, record) {
   });
 }
 
+// The daily quest list for one month: { month, days: [puzzle, …] }, one entry per day.
+export async function loadDailySchedule(month) {
+  const snapshot = await getDoc(doc(db, 'dailyQuests', month));
+  return snapshot.exists() ? snapshot.data().days : null;
+}
+
 const monthlyRef = (month, uid) => doc(db, 'monthlyLeaderboard', month, 'entries', uid);
 
 export async function loadMonthlyLeaderboard(month) {

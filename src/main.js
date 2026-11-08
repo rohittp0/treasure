@@ -5,9 +5,10 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import mapWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import './style.css';
 import fallbackPuzzles from '../data/countries.json';
+import bundledDailySchedules from '../data/daily-quests.json';
 import { choosePuzzle, createGame, difficultyForLevel, CLUE_COST, REVEAL_COST } from './game.js';
-import { loadFriendHunts, watchUser, login, logout, loadPuzzles, saveHunt, loadHunts, loadLeaderboard, enterLeaderboard, loadProfile, claimUsername, isUsernameAvailable, watchChallenges, markChallengeRead, registerChallengePush, loadDailyRecords, startDailyRecord, finishDailyRecord, loadMonthlyLeaderboard, enterMonthlyLeaderboard, saveAtlas, loadAtlas } from './firebase.js';
-import { dayKey, monthKey, daysInMonth, msUntilNextDay, dailyPuzzle, currentStreak, scoreMonth, atlasFromRecords, mergeDailyRecords, validDailyRecord } from './daily.js';
+import { loadFriendHunts, watchUser, login, logout, loadPuzzles, saveHunt, loadHunts, loadLeaderboard, enterLeaderboard, loadProfile, claimUsername, isUsernameAvailable, watchChallenges, markChallengeRead, registerChallengePush, loadDailySchedule, loadDailyRecords, startDailyRecord, finishDailyRecord, loadMonthlyLeaderboard, enterMonthlyLeaderboard, saveAtlas, loadAtlas } from './firebase.js';
+import { dayKey, monthKey, daysInMonth, msUntilNextDay, dailyQuest, validDailySchedule, currentStreak, scoreMonth, atlasFromRecords, mergeDailyRecords, validDailyRecord } from './daily.js';
 import { createFriendController } from './friend-controller.js';
 
 maplibregl.setWorkerUrl(mapWorkerUrl);
@@ -59,11 +60,45 @@ let leaderboardBoard = 'monthly';
 let atlasView = null;
 // Set by the daily notification link (?daily=1); the quest starts once the map is ready.
 let pendingDaily = new URLSearchParams(location.search).has('daily');
+// Daily lists by month; the bundled copy is replaced by Firestore's once it loads.
+const dailySchedules = { ...bundledDailySchedules };
+let dailyScheduleMonth = '';
 const PROGRESS_KEY = 'treasurehunch:solo-wins';
+const FOUND_KEY = 'treasurehunch:solo-found';
 const DAILY_KEY_PREFIX = 'treasurehunch:daily:';
 const PENDING_ENTRY_KEY = 'treasurehunch:pending-leaderboard';
 const RESUME_RESULT_KEY = 'treasurehunch:resume-result';
 let completedWins = readCompletedWins();
+let soloFoundIds = readSoloFound();
+
+function readSoloFound() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(FOUND_KEY) || '[]');
+    return new Set(Array.isArray(stored) ? stored.filter(id => typeof id === 'string') : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function rememberSoloFound(ids) {
+  for (const id of ids) soloFoundIds.add(id);
+  try { localStorage.setItem(FOUND_KEY, JSON.stringify([...soloFoundIds])); } catch { /* Selection still works without storage. */ }
+}
+
+async function loadDailyList(month = monthKey()) {
+  dailyScheduleMonth = month;
+  try {
+    const days = await loadDailySchedule(month);
+    if (validDailySchedule(days, month)) dailySchedules[month] = days;
+  } catch (error) {
+    console.warn('Using the bundled daily list:', error);
+  }
+  renderDailyHome();
+}
+
+function dailyCountryCount() {
+  return new Set(Object.values(dailySchedules).flat().map(puzzle => puzzle.id)).size;
+}
 let activeLevel = completedWins + 1;
 
 function readCompletedWins() {
@@ -83,7 +118,7 @@ function updateHomeStatus() {
   const nextLevel = completedWins + 1;
   const difficulty = difficultyForLevel(nextLevel);
   $('#solo-hint').textContent = `Level ${String(nextLevel).padStart(2, '0')} · ${difficulty[0].toUpperCase()}${difficulty.slice(1)}`;
-  elements.homeStatus.textContent = `${puzzles.length} places to discover · A new daily country at 00:00 UTC`;
+  elements.homeStatus.textContent = `${puzzles.length + dailyCountryCount()} places to discover · A new daily country at 00:00 UTC`;
 }
 
 // Daily records live on this device per account ('guest' before sign-in) and in Firestore once signed in.
@@ -423,7 +458,7 @@ function startHunt() {
   activeMode = 'solo';
   activeLevel = completedWins + 1;
   const lastId = sessionStorage.getItem('treasurehunch:last-country') || '';
-  const puzzle = choosePuzzle(puzzles, lastId, Math.random, activeLevel);
+  const puzzle = choosePuzzle(puzzles, lastId, Math.random, activeLevel, [...soloFoundIds]);
   sessionStorage.setItem('treasurehunch:last-country', puzzle.id);
   $('#level-label').textContent = `LEVEL ${String(activeLevel).padStart(2, '0')} · ${difficultyForLevel(activeLevel).toUpperCase()} HUNT`;
   game = createGame(puzzle);
@@ -465,7 +500,9 @@ function startDaily() {
   clearVictory();
   closeAtlasView();
   const today = dayKey();
-  const puzzle = dailyPuzzle(fallbackPuzzles, today);
+  // A resumed attempt keeps its country even if the list changed after it started.
+  const scheduled = dailyQuest(dailySchedules, today);
+  const puzzle = record ? Object.values(dailySchedules).flat().find(item => item.id === record.puzzleId) || scheduled : scheduled;
   activeMode = 'daily';
   game = createGame(puzzle, undefined, record?.puzzleId === puzzle.id ? record : null);
   const state = game.snapshot();
@@ -745,7 +782,8 @@ function releaseAtlasStage() {
 }
 
 function countryName(id) {
-  return fallbackPuzzles.find(puzzle => puzzle.id === id)?.country
+  return Object.values(dailySchedules).flat().find(puzzle => puzzle.id === id)?.country
+    || puzzles.find(puzzle => puzzle.id === id)?.country
     || countryData?.features.find(feature => feature.properties.id === id)?.properties.name || id;
 }
 
@@ -767,7 +805,7 @@ function renderAtlas() {
         : `${ids.length} ${ids.length === 1 ? 'country' : 'countries'} claimed from daily quests.`;
   const third = self
     ? `<div><strong>${currentStreak(dailyRecords)}</strong><span>DAY STREAK</span></div>`
-    : `<div><strong>${Math.round((ids.length / fallbackPuzzles.length) * 100)}%</strong><span>OF THE QUEST WORLD</span></div>`;
+    : `<div><strong>${Math.round((ids.length / (countryData?.features.length || 177)) * 100)}%</strong><span>OF THE WORLD</span></div>`;
   $('#atlas-stats').innerHTML = loading || missing ? '' : `<div><strong>${ids.length}</strong><span>COUNTRIES</span></div><div><strong>${thisMonth}</strong><span>IN ${monthName(month).toUpperCase()}</span></div>${third}`;
   $('#atlas-stats').classList.toggle('hidden', !!(loading || missing));
   $('#atlas-screen').classList.toggle('atlas-empty', !!(loading || missing || !ids.length));
@@ -959,6 +997,7 @@ function finish(state) {
   if (won && game) {
     completedWins += 1;
     rememberCompletedWins();
+    rememberSoloFound([state.puzzle.id]);
     updateHomeStatus();
   }
   lastResult = state;
@@ -1251,7 +1290,10 @@ elements.leaderboardSignIn.addEventListener('click', async () => {
 $('#play-again-button').addEventListener('click', startHunt);
 window.addEventListener('resize', () => { if (atlasView) requestAnimationFrame(focusAtlas); });
 // Keep the daily countdown and day rollover current on the home screen.
-setInterval(() => { if (!elements.home.classList.contains('hidden')) renderDailyHome(); }, 30000);
+setInterval(() => {
+  if (dailyScheduleMonth !== monthKey()) loadDailyList();
+  if (!elements.home.classList.contains('hidden')) renderDailyHome();
+}, 30000);
 $('#challenge-after-win').addEventListener('click', () => {
   if (!lastResult || lastResult.status !== 'won') return;
   clearVictory();
@@ -1302,6 +1344,7 @@ elements.accountDialog.addEventListener('click', event => { if (event.target ===
 
 dailyRecords = readDailyStore('guest');
 renderDailyHome();
+loadDailyList();
 loadMap();
 loadPuzzleSet();
 {
@@ -1375,6 +1418,7 @@ watchUser(async nextUser => {
     startPendingDaily();
     loadHunts(nextUser).then(hunts => {
       if (user?.uid !== nextUser.uid) return;
+      rememberSoloFound(hunts.filter(hunt => hunt.result === 'won' && typeof hunt.puzzleId === 'string').map(hunt => hunt.puzzleId));
       const remoteWins = Math.max(0, ...hunts.filter(hunt => hunt.result === 'won').map(hunt => Number.isSafeInteger(hunt.level) && hunt.level > 0 ? hunt.level : 1));
       if (remoteWins > completedWins) {
         completedWins = remoteWins;

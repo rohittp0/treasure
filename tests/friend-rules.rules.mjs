@@ -235,6 +235,13 @@ try {
   await assertFails(setDoc(doc(seeker, 'atlases/mapfinder'), { ...atlas, count: 2 }));
   await assertSucceeds(setDoc(doc(seeker, 'atlases/mapfinder'), atlas));
   await assertSucceeds(getDoc(doc(environment.unauthenticatedContext().firestore(), 'atlases/mapfinder')));
+  // Daily quest lists: public to read, never written by clients.
+  await environment.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'dailyQuests/2026-11'), { month: '2026-11', days: [] });
+  });
+  await assertSucceeds(getDoc(doc(environment.unauthenticatedContext().firestore(), 'dailyQuests/2026-11')));
+  await assertFails(setDoc(doc(seeker, 'dailyQuests/2026-11'), { month: '2026-11', days: [] }));
+  await assertFails(setDoc(doc(seeker, 'dailyQuests/2026-12'), { month: '2026-12', days: [] }));
   console.log('Daily quest rules: one attempt per day, monthly board and explorer maps passed.');
   console.log('Friend hunt rules: username claims, direct challenges, private answer, join, time costs, guesses, reveal, and finish passed.');
 } finally {

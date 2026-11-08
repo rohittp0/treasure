@@ -526,5 +526,245 @@
       "Dhaka is its capital. Select the compact country almost surrounded by India, at the northern end of the Bay of Bengal."
     ],
     "fact": "The Sundarbans is a mangrove landscape of tidal waterways and islands shared with neighboring India."
+  },
+  {
+    "id": "SWZ",
+    "country": "Eswatini",
+    "iso2": "SZ",
+    "clues": [
+      "One of the world's last absolute monarchies, where the annual reed dance draws thousands. It changed its English name in 2018.",
+      "A small landlocked kingdom in southern Africa, almost surrounded by South Africa, with Mozambique on its eastern side.",
+      "Mbabane and Lobamba share capital duties. Find the tiny kingdom wedged between northeastern South Africa and Mozambique."
+    ],
+    "fact": "It was renamed from Swaziland in 2018, marking 50 years of independence.",
+    "difficulty": "expert"
+  },
+  {
+    "id": "LSO",
+    "country": "Lesotho",
+    "iso2": "LS",
+    "clues": [
+      "Riders wrap themselves in colourful woollen blankets against the cold in this kingdom, where every inch of land sits high in the mountains.",
+      "A mountain kingdom in southern Africa that is completely surrounded by a single neighbouring country.",
+      "Maseru is its capital. Find the round enclave entirely inside South Africa, east of its centre."
+    ],
+    "fact": "Its lowest point is about 1,400 metres above sea level, the highest low point of any country.",
+    "difficulty": "expert"
+  },
+  {
+    "id": "DJI",
+    "country": "Djibouti",
+    "iso2": "DJ",
+    "clues": [
+      "Salt caravans, volcanic plains and whale sharks gathering offshore each winter mark this tiny desert nation.",
+      "A small country on the Horn of Africa, guarding the strait where the Red Sea meets the Gulf of Aden.",
+      "Its capital shares the country's name. Look between Eritrea, Ethiopia and Somaliland, across the strait from Yemen."
+    ],
+    "fact": "Lake Assal lies about 155 metres below sea level, the lowest point on the African continent.",
+    "difficulty": "expert"
+  },
+  {
+    "id": "ERI",
+    "country": "Eritrea",
+    "iso2": "ER",
+    "clues": [
+      "Its capital is famed for Italian-era Art Deco and modernist buildings, including a petrol station shaped like an aeroplane.",
+      "Look along the Red Sea coast in the Horn of Africa, directly north of Ethiopia.",
+      "Asmara is its capital. Find the strip of Red Sea coast between Sudan and Djibouti."
+    ],
+    "fact": "Asmara was added to the UNESCO World Heritage List in 2017 as a modernist city of Africa.",
+    "difficulty": "expert"
+  },
+  {
+    "id": "BTN",
+    "country": "Bhutan",
+    "iso2": "BT",
+    "clues": [
+      "This kingdom measures progress by Gross National Happiness and calls itself the Land of the Thunder Dragon.",
+      "A small mountain kingdom in the eastern Himalayas, squeezed between China to the north and India to the south.",
+      "Thimphu is its capital. Find it east of Sikkim, between Tibet and northeast India."
+    ],
+    "fact": "It describes itself as carbon negative: its forests absorb more carbon than the country emits.",
+    "difficulty": "expert"
+  },
+  {
+    "id": "BRN",
+    "country": "Brunei",
+    "iso2": "BN",
+    "clues": [
+      "Oil wealth funds this sultanate, where a golden-domed mosque rises beside a village of houses built on stilts over the water.",
+      "A tiny sultanate on the northern coast of Borneo, facing the South China Sea.",
+      "Bandar Seri Begawan is its capital. Find the two small pieces on Borneo's north coast, surrounded by Malaysia's Sarawak."
+    ],
+    "fact": "Kampong Ayer, its water village of stilt houses, has been lived in for centuries and is sometimes called the Venice of the East.",
+    "difficulty": "expert"
+  },
+  {
+    "id": "TLS",
+    "country": "East Timor",
+    "iso2": "TL",
+    "clues": [
+      "One of the world's youngest countries, it became independent in 2002 and uses the US dollar.",
+      "It occupies half of an island in maritime Southeast Asia, north of Australia, at the eastern end of the Lesser Sunda Islands.",
+      "Dili is its capital. Find the eastern half of Timor island, between Indonesia's islands and Australia's north coast."
+    ],
+    "fact": "Portuguese is one of its two official languages, alongside Tetum.",
+    "difficulty": "expert"
+  },
+  {
+    "id": "GNB",
+    "country": "Guinea-Bissau",
+    "iso2": "GW",
+    "clues": [
+      "Hippos swim in salt water around the Bijagós islands off its coast, where sea turtles nest on quiet beaches.",
+      "A small country on West Africa's Atlantic coast, between Senegal and Guinea.",
+      "Bissau is its capital. Look just south of Senegal's Casamance region, on a coast fringed with many islands."
+    ],
+    "fact": "Cashew nuts are its biggest export, grown on many small family farms.",
+    "difficulty": "expert"
+  },
+  {
+    "id": "GNQ",
+    "country": "Equatorial Guinea",
+    "iso2": "GQ",
+    "clues": [
+      "It is the only country in Africa where Spanish is an official language.",
+      "A small Central African country made of a mainland piece and volcanic islands in the Gulf of Guinea.",
+      "Bioko island holds Malabo, its long-time capital. The mainland part lies between Cameroon and Gabon."
+    ],
+    "fact": "Its territory includes the volcanic island of Bioko and the mainland region of Río Muni.",
+    "difficulty": "expert"
+  },
+  {
+    "id": "BDI",
+    "country": "Burundi",
+    "iso2": "BI",
+    "clues": [
+      "Royal drummers pound huge drums in a ritual dance recognised by UNESCO, in a country on the shore of a deep African lake.",
+      "A small landlocked country in the African Great Lakes region, directly south of Rwanda.",
+      "Gitega is its political capital. Find it between Rwanda, Tanzania and the DR Congo, at the northeast end of Lake Tanganyika."
+    ],
+    "fact": "It moved its political capital from Bujumbura to Gitega in 2019.",
+    "difficulty": "expert"
+  },
+  {
+    "id": "MDA",
+    "country": "Moldova",
+    "iso2": "MD",
+    "clues": [
+      "Its underground wine cellars at Mileștii Mici hold the world's largest wine collection, according to Guinness World Records.",
+      "A small landlocked country in Eastern Europe, between Romania and Ukraine.",
+      "Chișinău is its capital. Look just east of Romania, wrapped by Ukraine on its other sides."
+    ],
+    "fact": "The Mileștii Mici cellars stretch for about 200 kilometres of underground galleries.",
+    "difficulty": "expert"
+  },
+  {
+    "id": "MKD",
+    "country": "North Macedonia",
+    "iso2": "MK",
+    "clues": [
+      "Lake Ohrid, one of Europe's oldest and deepest lakes, is shared with its western neighbour.",
+      "A landlocked Balkan country north of Greece, with Albania to the west and Bulgaria to the east.",
+      "Skopje is its capital. Find it directly north of Greece, between Albania and Bulgaria, south of Serbia and Kosovo."
+    ],
+    "fact": "It added a compass direction to its name in 2019 under an agreement with Greece.",
+    "difficulty": "expert"
+  },
+  {
+    "id": "MNE",
+    "country": "Montenegro",
+    "iso2": "ME",
+    "clues": [
+      "The fjord-like Bay of Kotor and dark, forested peaks that inspired its name meet on the Adriatic.",
+      "A small Balkan country on the Adriatic coast, between Croatia's southern tip and Albania.",
+      "Podgorica is its capital. Look on the Adriatic, south of Bosnia and Herzegovina and north of Albania."
+    ],
+    "fact": "It uses the euro even though it is not a member of the European Union.",
+    "difficulty": "expert"
+  },
+  {
+    "id": "KGZ",
+    "country": "Kyrgyzstan",
+    "iso2": "KG",
+    "clues": [
+      "Nomads pitch yurts on high summer pastures here, and a huge alpine lake never freezes in winter.",
+      "A mountainous, landlocked country in Central Asia, dominated by the Tian Shan range.",
+      "Bishkek is its capital. Find it west of China, between Kazakhstan to the north and Tajikistan to the south."
+    ],
+    "fact": "Issyk-Kul is slightly salty and stays unfrozen in winter despite sitting about 1,600 metres up.",
+    "difficulty": "expert"
+  },
+  {
+    "id": "TJK",
+    "country": "Tajikistan",
+    "iso2": "TJ",
+    "clues": [
+      "The Pamir Highway climbs through the 'Roof of the World' here, where mountains cover over 90 percent of the land.",
+      "A landlocked Central Asian country bordering Afghanistan to the south and China to the east.",
+      "Dushanbe is its capital. Find it north of Afghanistan, between Uzbekistan, Kyrgyzstan and China."
+    ],
+    "fact": "Its capital's name, Dushanbe, means 'Monday', after a market once held on that day.",
+    "difficulty": "expert"
+  },
+  {
+    "id": "TKM",
+    "country": "Turkmenistan",
+    "iso2": "TM",
+    "clues": [
+      "A burning gas crater nicknamed the Door to Hell has glowed in its desert for decades.",
+      "A desert country in Central Asia on the eastern shore of the Caspian Sea.",
+      "Ashgabat is its capital. Find it east of the Caspian Sea, north of Iran and Afghanistan."
+    ],
+    "fact": "The Karakum Desert covers about 70 percent of the country.",
+    "difficulty": "expert"
+  },
+  {
+    "id": "SUR",
+    "country": "Suriname",
+    "iso2": "SR",
+    "clues": [
+      "Dutch is the official language of this rainforest nation, one of the most heavily forested countries on Earth.",
+      "A small country on South America's northeast coast, between Guyana and French Guiana.",
+      "Paramaribo is its capital. Look on the Atlantic coast of South America, east of Guyana and north of Brazil."
+    ],
+    "fact": "Paramaribo's wooden colonial centre is a UNESCO World Heritage Site.",
+    "difficulty": "expert"
+  },
+  {
+    "id": "VUT",
+    "country": "Vanuatu",
+    "iso2": "VU",
+    "clues": [
+      "Land divers here leap from tall wooden towers with vines tied to their ankles, a ritual that inspired bungee jumping.",
+      "A Y-shaped chain of about 80 islands in the South Pacific, in Melanesia.",
+      "Port Vila is its capital. Find the island chain west of Fiji and north of New Caledonia."
+    ],
+    "fact": "Mount Yasur on Tanna island is one of the world's most accessible active volcanoes.",
+    "difficulty": "expert"
+  },
+  {
+    "id": "SLB",
+    "country": "Solomon Islands",
+    "iso2": "SB",
+    "clues": [
+      "Guadalcanal, scene of a major World War II campaign, is the largest island of this Pacific nation.",
+      "A double chain of islands in Melanesia, east of Papua New Guinea.",
+      "Honiara is its capital. Look in the South Pacific, east of Papua New Guinea and northwest of Vanuatu."
+    ],
+    "fact": "Shell money made from strings of shell beads is still used in traditional ceremonies on some islands.",
+    "difficulty": "expert"
+  },
+  {
+    "id": "GMB",
+    "country": "The Gambia",
+    "iso2": "GM",
+    "clues": [
+      "A narrow ribbon of land follows one great river inland, and birdwatchers flock to its creeks and mangroves.",
+      "The smallest country on mainland Africa, in West Africa, almost entirely surrounded by Senegal.",
+      "Banjul is its capital. Find the thin strip along a river that cuts into Senegal from the Atlantic coast."
+    ],
+    "fact": "The country is no more than about 50 kilometres wide along its whole length.",
+    "difficulty": "expert"
   }
 ]

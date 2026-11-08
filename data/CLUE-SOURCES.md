@@ -67,3 +67,27 @@ Editorial notes:
 - Iguaçu is described as a frontier landscape; the waterfalls are shared with Argentina.
 - Capital and major-city names are now deliberate recognition aids in the paid clues, including Nairobi for Kenya.
 - ISO alpha-3 identifiers are keys for matching map features; Tanzania uses TZA, Madagascar MDG, Cambodia KHM, and Vietnam VNM.
+
+## Expert solo countries and daily quest lists (added 8 November 2026)
+
+Twenty expert solo countries (levels 11–30) and 61 daily quest countries (November and December 2026) follow the same pattern. The first clue is a cultural or natural hook, the second gives the region, and the third names the capital or a major city with a near-explicit map location. Expert first clues leave out the region, which makes them harder. No clue names its country; `scripts/seed-firestore.mjs` checks this.
+
+These entries were written from general geography knowledge. Unlike the original 44, they have **not yet been checked one by one against primary sources**. Review them against the [CIA World Factbook](https://www.cia.gov/the-world-factbook/), the [UNESCO World Heritage List](https://whc.unesco.org/en/list/) and national tourism sites before relying on them. Facts that would most benefit from a check:
+
+| ID | Detail to confirm |
+| --- | --- |
+| BTN | Carbon-negative status |
+| GNB | Cashew nuts as the largest export |
+| MDA | Mileștii Mici: Guinness record and about 200 km of galleries |
+| SLB | Shell money still used in ceremonies |
+| GMB | Width of about 50 km along its length |
+| LAO | "Most heavily bombed country per person" claim |
+| ALB | About 170,000 Cold War bunkers |
+| PNG | More than 800 languages |
+| LTU | More than 100,000 crosses on the Hill of Crosses |
+| EST | First online voting in a national parliamentary election (2007) |
+| LUX | Free public transport since 2020 |
+
+Expert: SWZ, LSO, DJI, ERI, BTN, BRN, TLS, GNB, GNQ, BDI, MDA, MKD, MNE, KGZ, TJK, TKM, SUR, VUT, SLB, GMB.
+Daily, November 2026: THA, NLD, CUB, IRL, JAM, CHE, RUS, PHL, NAM, AUT, CRI, JOR, DNK, BOL, MYS, HRV, BWA, LKA, POL, PAN, UZB, TUN, BEL, URY, GEO, ZWE, HUN, ARE, SEN, FJI.
+Daily, December 2026: CZE, VEN, MMR, UGA, ROU, DOM, OMN, EST, MOZ, GTM, LAO, ALB, ZMB, KAZ, SVN, PRY, RWA, ARM, MLI, LUX, HND, QAT, DZA, BGR, PNG, NIC, CMR, LVA, AZE, BLZ, LTU.

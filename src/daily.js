@@ -50,11 +50,24 @@ export function monthSchedule(puzzles, month) {
   return ordered;
 }
 
-export function dailyPuzzle(puzzles, day = dayKey()) {
-  if (!puzzles.length) throw new Error('No daily quest is available.');
-  const schedule = monthSchedule(puzzles, day.slice(0, 7));
+// The daily list is its own set of countries, separate from solo levels. Each month has a list in
+// Firestore (dailyQuests/{YYYY-MM}, mirrored in data/daily-quests.json) with one country per day.
+export function dailyQuest(schedules, day = dayKey()) {
+  const month = day.slice(0, 7);
   const dayOfMonth = Number(day.slice(8, 10));
+  const listed = schedules?.[month];
+  if (Array.isArray(listed) && listed[dayOfMonth - 1]) return listed[dayOfMonth - 1];
+  // A month with no list yet reuses every daily country seen so far, shuffled for that month.
+  const pool = [...new Map(Object.values(schedules || {}).flat().map(puzzle => [puzzle.id, puzzle])).values()];
+  if (!pool.length) throw new Error('No daily quest is available.');
+  const schedule = monthSchedule(pool, month);
   return schedule[(dayOfMonth - 1) % schedule.length];
+}
+
+export function validDailySchedule(days, month) {
+  return Array.isArray(days) && days.length === daysInMonth(month) && days.every(puzzle =>
+    puzzle && /^[A-Z]{3}$/.test(puzzle.id) && typeof puzzle.country === 'string' &&
+    Array.isArray(puzzle.clues) && puzzle.clues.length === 3 && puzzle.clues.every(clue => typeof clue === 'string'));
 }
 
 export function validDailyRecord(record) {

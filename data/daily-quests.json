@@ -1,0 +1,738 @@
+{
+  "2026-11": [
+    {
+      "id": "THA",
+      "country": "Thailand",
+      "iso2": "TH",
+      "clues": [
+        "Pad thai, tuk-tuks and golden temples set the scene in this Southeast Asian kingdom.",
+        "Look in mainland Southeast Asia for a country shaped a bit like an elephant's head, its trunk reaching down toward Malaysia.",
+        "Bangkok is its capital. Find it west of Cambodia and Laos, with Myanmar along its western side."
+      ],
+      "fact": "It is the only Southeast Asian country that was never colonised by a European power.",
+      "difficulty": "easy"
+    },
+    {
+      "id": "NLD",
+      "country": "Netherlands",
+      "iso2": "NL",
+      "clues": [
+        "Windmills, tulip fields and more bicycles than people: much of this European country lies below sea level.",
+        "Look on the North Sea coast of western Europe, north of Belgium and west of Germany.",
+        "Amsterdam is its capital, though the government sits in The Hague. Find the low country between Belgium and northern Germany."
+      ],
+      "fact": "About a quarter of the country lies below sea level, protected by dikes, dunes and pumps.",
+      "difficulty": "easy"
+    },
+    {
+      "id": "CUB",
+      "country": "Cuba",
+      "iso2": "CU",
+      "clues": [
+        "Vintage 1950s cars, cigars and salsa fill the streets of this Caribbean island nation.",
+        "The largest island in the Caribbean, lying just south of Florida.",
+        "Havana is its capital. Find the long island stretching west to east between the Gulf of Mexico and Jamaica."
+      ],
+      "fact": "Old Havana and its fortifications are a UNESCO World Heritage Site.",
+      "difficulty": "easy"
+    },
+    {
+      "id": "IRL",
+      "country": "Ireland",
+      "iso2": "IE",
+      "clues": [
+        "Green fields, Celtic music and the towering Cliffs of Moher greet visitors to this island country in northwest Europe.",
+        "An island in the Atlantic, just west of Great Britain.",
+        "Dublin is its capital. It covers most of the island west of Great Britain, but not the northeast corner."
+      ],
+      "fact": "Halloween traces its roots to Samhain, an ancient Celtic festival celebrated here.",
+      "difficulty": "easy"
+    },
+    {
+      "id": "JAM",
+      "country": "Jamaica",
+      "iso2": "JM",
+      "clues": [
+        "Reggae, Bob Marley and Blue Mountain coffee all come from this Caribbean island.",
+        "A Caribbean island south of Cuba and west of Hispaniola.",
+        "Kingston is its capital. Find the island just south of eastern Cuba."
+      ],
+      "fact": "Usain Bolt, the world's fastest sprinter, grew up in its Trelawny parish.",
+      "difficulty": "easy"
+    },
+    {
+      "id": "CHE",
+      "country": "Switzerland",
+      "iso2": "CH",
+      "clues": [
+        "Cheese fondue, chocolate, precise watches and Alpine peaks define this small European country.",
+        "A landlocked country in the Alps, surrounded by France, Germany, Austria and Italy.",
+        "Bern is its federal city. Find it north of Italy and east of France, with Lake Geneva on its southwest edge."
+      ],
+      "fact": "It has four national languages: German, French, Italian and Romansh.",
+      "difficulty": "easy"
+    },
+    {
+      "id": "RUS",
+      "country": "Russia",
+      "iso2": "RU",
+      "clues": [
+        "Onion-domed cathedrals, ballet and the Trans-Siberian Railway belong to the world's largest country.",
+        "It spans eastern Europe and all of northern Asia, from the Baltic Sea to the Pacific.",
+        "Moscow is its capital. Find the enormous country across the top of Asia, north of Kazakhstan, Mongolia and China."
+      ],
+      "fact": "It stretches across 11 time zones.",
+      "difficulty": "easy"
+    },
+    {
+      "id": "PHL",
+      "country": "Philippines",
+      "iso2": "PH",
+      "clues": [
+        "Colourful jeepneys, mountain rice terraces and more than 7,000 islands make up this Southeast Asian nation.",
+        "An island nation in the western Pacific, east of Vietnam across the South China Sea.",
+        "Manila is its capital. Find the scattered islands north of Borneo and south of Taiwan."
+      ],
+      "fact": "Bohol's Chocolate Hills are more than 1,200 cone-shaped hills that turn brown in the dry season.",
+      "difficulty": "medium"
+    },
+    {
+      "id": "NAM",
+      "country": "Namibia",
+      "iso2": "NA",
+      "clues": [
+        "Towering red dunes at Sossusvlei and the shipwrecks of the Skeleton Coast lie in this southern African country.",
+        "On Africa's southwest Atlantic coast, north of South Africa and west of Botswana.",
+        "Windhoek is its capital. Find the large country with a desert coast between Angola and South Africa."
+      ],
+      "fact": "The Namib is considered one of the oldest deserts on Earth.",
+      "difficulty": "medium"
+    },
+    {
+      "id": "AUT",
+      "country": "Austria",
+      "iso2": "AT",
+      "clues": [
+        "Mozart, Alpine villages, schnitzel and grand imperial palaces belong to this central European country.",
+        "A landlocked Alpine country east of Switzerland and south of Germany.",
+        "Vienna is its capital. Find it between Germany, Italy, Hungary and the Czech Republic."
+      ],
+      "fact": "Mozart was born in Salzburg in 1756.",
+      "difficulty": "easy"
+    },
+    {
+      "id": "CRI",
+      "country": "Costa Rica",
+      "iso2": "CR",
+      "clues": [
+        "Sloths, misty cloud forests and the motto 'pura vida' welcome travellers to this Central American country.",
+        "A small country in Central America with coasts on both the Caribbean and the Pacific.",
+        "San José is its capital. Find it between Nicaragua to the north and Panama to the south."
+      ],
+      "fact": "It abolished its army in 1948.",
+      "difficulty": "medium"
+    },
+    {
+      "id": "JOR",
+      "country": "Jordan",
+      "iso2": "JO",
+      "clues": [
+        "Petra, a city carved into rose-red cliffs, and the desert valley of Wadi Rum are its treasures.",
+        "A Middle Eastern country with a short coastline on the Gulf of Aqaba.",
+        "Amman is its capital. Find it east of the Dead Sea, bordered by Saudi Arabia, Iraq and Syria."
+      ],
+      "fact": "The Dead Sea on its western border is the lowest point on land, about 430 metres below sea level.",
+      "difficulty": "medium"
+    },
+    {
+      "id": "DNK",
+      "country": "Denmark",
+      "iso2": "DK",
+      "clues": [
+        "LEGO bricks, cosy hygge and Viking history all come from this Scandinavian country.",
+        "A peninsula and hundreds of islands in northern Europe, just north of Germany.",
+        "Copenhagen is its capital. Find the peninsula pointing north from Germany toward Norway and Sweden."
+      ],
+      "fact": "LEGO was founded in the town of Billund in 1932.",
+      "difficulty": "medium"
+    },
+    {
+      "id": "BOL",
+      "country": "Bolivia",
+      "iso2": "BO",
+      "clues": [
+        "The vast, mirror-like salt flat of Salar de Uyuni lies in this high Andean country.",
+        "A landlocked country in central South America, with the high Andes in its west.",
+        "La Paz is its seat of government and Sucre its constitutional capital. Find it west of Brazil, between Peru and Paraguay."
+      ],
+      "fact": "Salar de Uyuni is the world's largest salt flat, covering more than 10,000 square kilometres.",
+      "difficulty": "medium"
+    },
+    {
+      "id": "MYS",
+      "country": "Malaysia",
+      "iso2": "MY",
+      "clues": [
+        "The twin Petronas Towers and spicy nasi lemak are icons of this Southeast Asian country.",
+        "It comes in two parts: one on a peninsula south of Thailand, the other on northern Borneo.",
+        "Kuala Lumpur is its capital. Find the peninsula between Thailand and Singapore, plus the northern coast of Borneo."
+      ],
+      "fact": "The Petronas Towers were the world's tallest buildings from 1998 to 2004.",
+      "difficulty": "medium"
+    },
+    {
+      "id": "HRV",
+      "country": "Croatia",
+      "iso2": "HR",
+      "clues": [
+        "Walled Dubrovnik, the lakes and waterfalls of Plitvice and over a thousand Adriatic islands lie in this European country.",
+        "A crescent-shaped country on the Adriatic Sea in southeastern Europe.",
+        "Zagreb is its capital. Find the boomerang shape wrapped around Bosnia and Herzegovina, across the sea from Italy."
+      ],
+      "fact": "The word 'cravat' comes from the neckerchiefs worn by its soldiers in 17th-century France.",
+      "difficulty": "medium"
+    },
+    {
+      "id": "BWA",
+      "country": "Botswana",
+      "iso2": "BW",
+      "clues": [
+        "The Okavango Delta floods into the desert here each year, drawing elephants, lions and hippos.",
+        "A landlocked country in southern Africa, directly north of South Africa.",
+        "Gaborone is its capital. Find it between Namibia, South Africa and Zimbabwe."
+      ],
+      "fact": "It is home to the world's largest population of African elephants.",
+      "difficulty": "medium"
+    },
+    {
+      "id": "LKA",
+      "country": "Sri Lanka",
+      "iso2": "LK",
+      "clues": [
+        "Tea plantations, the rock fortress of Sigiriya and stilt fishermen belong to this South Asian island.",
+        "A teardrop-shaped island in the Indian Ocean.",
+        "Colombo is its commercial capital. Find the island just off the southeast tip of India."
+      ],
+      "fact": "It was known as Ceylon until 1972.",
+      "difficulty": "medium"
+    },
+    {
+      "id": "POL",
+      "country": "Poland",
+      "iso2": "PL",
+      "clues": [
+        "Pierogi dumplings, the composer Chopin and a medieval salt mine with underground chapels come from here.",
+        "A large central European country on the Baltic coast, east of Germany.",
+        "Warsaw is its capital. Find it between Germany and Belarus, north of the Czech Republic and Slovakia."
+      ],
+      "fact": "The Wieliczka salt mine near Kraków has chapels and statues carved from rock salt.",
+      "difficulty": "medium"
+    },
+    {
+      "id": "PAN",
+      "country": "Panama",
+      "iso2": "PA",
+      "clues": [
+        "Huge ships cross between two oceans through the famous canal in this country.",
+        "The narrow S-shaped country that links Central America and South America.",
+        "Its capital city shares the country's name. Find the isthmus between Costa Rica and Colombia."
+      ],
+      "fact": "Locks lift ships crossing the canal up to Gatun Lake, about 26 metres above sea level.",
+      "difficulty": "medium"
+    },
+    {
+      "id": "UZB",
+      "country": "Uzbekistan",
+      "iso2": "UZ",
+      "clues": [
+        "Blue-tiled mosques and madrasas line Samarkand's Registan square, a jewel of the Silk Road.",
+        "A doubly landlocked country in Central Asia.",
+        "Tashkent is its capital. Find it between Kazakhstan and Turkmenistan, north of Afghanistan."
+      ],
+      "fact": "It is one of only two doubly landlocked countries in the world, along with Liechtenstein.",
+      "difficulty": "hard"
+    },
+    {
+      "id": "TUN",
+      "country": "Tunisia",
+      "iso2": "TN",
+      "clues": [
+        "The ruins of ancient Carthage and desert villages used as Star Wars sets are found in this North African country.",
+        "The northernmost country in Africa, on the Mediterranean between Algeria and Libya.",
+        "Its capital shares a name with the country. Find the small country on the Mediterranean, east of Algeria."
+      ],
+      "fact": "The desert town of Tataouine lent its name to Luke Skywalker's home planet, Tatooine.",
+      "difficulty": "medium"
+    },
+    {
+      "id": "BEL",
+      "country": "Belgium",
+      "iso2": "BE",
+      "clues": [
+        "Waffles, fries, chocolate and the comic-book reporter Tintin all come from this small European country.",
+        "A small country on the North Sea coast, between France and the Netherlands.",
+        "Brussels is its capital and home to many EU institutions. Find it between France, Germany, Luxembourg and the Netherlands."
+      ],
+      "fact": "Tintin's creator, Hergé, was born near Brussels in 1907.",
+      "difficulty": "medium"
+    },
+    {
+      "id": "URY",
+      "country": "Uruguay",
+      "iso2": "UY",
+      "clues": [
+        "Mate tea, tango and long Atlantic beaches mark this small South American nation.",
+        "A small country in southeastern South America on the Río de la Plata.",
+        "Montevideo is its capital. Find it south of Brazil, across the river from Buenos Aires."
+      ],
+      "fact": "It hosted and won the first FIFA World Cup, in 1930.",
+      "difficulty": "hard"
+    },
+    {
+      "id": "GEO",
+      "country": "Georgia",
+      "iso2": "GE",
+      "clues": [
+        "Cheesy, boat-shaped khachapuri bread and wine aged in buried clay jars are local favourites in this Caucasus country.",
+        "A country in the Caucasus on the eastern shore of the Black Sea.",
+        "Tbilisi is its capital. Find it south of Russia's Caucasus mountains, north of Turkey and Armenia."
+      ],
+      "fact": "Archaeologists have found evidence of winemaking here dating back about 8,000 years.",
+      "difficulty": "hard"
+    },
+    {
+      "id": "ZWE",
+      "country": "Zimbabwe",
+      "iso2": "ZW",
+      "clues": [
+        "Victoria Falls thunders on its border, and the stone walls of an ancient city gave this country its name.",
+        "A landlocked country in southern Africa, between the Zambezi and Limpopo rivers.",
+        "Harare is its capital. Find it north of South Africa, between Zambia, Mozambique and Botswana."
+      ],
+      "fact": "Great Zimbabwe's stone walls were built without mortar between the 11th and 15th centuries.",
+      "difficulty": "medium"
+    },
+    {
+      "id": "HUN",
+      "country": "Hungary",
+      "iso2": "HU",
+      "clues": [
+        "Thermal baths, paprika-spiced goulash and the Rubik's Cube all come from this central European country.",
+        "A landlocked country in central Europe on the Danube, east of Austria.",
+        "Budapest is its capital. Find it between Austria, Slovakia, Romania and Serbia."
+      ],
+      "fact": "The Rubik's Cube was invented in Budapest by Ernő Rubik in 1974.",
+      "difficulty": "medium"
+    },
+    {
+      "id": "ARE",
+      "country": "United Arab Emirates",
+      "iso2": "AE",
+      "clues": [
+        "The Burj Khalifa, the world's tallest building, rises from the desert in this Gulf federation.",
+        "A federation of seven emirates on the Arabian Peninsula, along the Persian Gulf.",
+        "Abu Dhabi is its capital and Dubai its largest city. Find it at the eastern end of the Gulf, beside Oman and Saudi Arabia."
+      ],
+      "fact": "The Burj Khalifa is about 828 metres tall.",
+      "difficulty": "medium"
+    },
+    {
+      "id": "SEN",
+      "country": "Senegal",
+      "iso2": "SN",
+      "clues": [
+        "The pink waters of Lake Retba and the rhythms of mbalax music are found in this West African country.",
+        "The westernmost country of mainland Africa, on the Atlantic coast.",
+        "Dakar is its capital. Find it on the Atlantic coast north of Guinea-Bissau, wrapped around The Gambia."
+      ],
+      "fact": "Dakar was for decades the finishing line of the Paris–Dakar rally.",
+      "difficulty": "hard"
+    },
+    {
+      "id": "FJI",
+      "country": "Fiji",
+      "iso2": "FJ",
+      "clues": [
+        "Coral reefs, kava ceremonies and a hearty 'Bula!' greeting welcome visitors to this Pacific nation.",
+        "An archipelago of more than 300 islands in the South Pacific, in Melanesia.",
+        "Suva is its capital. Find the islands north of New Zealand and east of Vanuatu, near the 180° line."
+      ],
+      "fact": "The 180° meridian passes through its islands.",
+      "difficulty": "hard"
+    }
+  ],
+  "2026-12": [
+    {
+      "id": "CZE",
+      "country": "Czech Republic",
+      "iso2": "CZ",
+      "clues": [
+        "A medieval astronomical clock, fairytale castles and the original pilsner beer belong to this central European country.",
+        "A landlocked country in central Europe, east of Germany and north of Austria.",
+        "Prague is its capital. Find it between Germany, Poland, Slovakia and Austria."
+      ],
+      "fact": "Prague's astronomical clock has been running since 1410.",
+      "difficulty": "medium"
+    },
+    {
+      "id": "VEN",
+      "country": "Venezuela",
+      "iso2": "VE",
+      "clues": [
+        "Angel Falls, the world's tallest uninterrupted waterfall, plunges from a tabletop mountain here.",
+        "A country on South America's northern Caribbean coast.",
+        "Caracas is its capital. Find it east of Colombia, west of Guyana and north of Brazil."
+      ],
+      "fact": "Angel Falls drops about 979 metres.",
+      "difficulty": "medium"
+    },
+    {
+      "id": "MMR",
+      "country": "Myanmar",
+      "iso2": "MM",
+      "clues": [
+        "Thousands of ancient temples dot the plains of Bagan, and the golden Shwedagon Pagoda glows at night.",
+        "The largest country in mainland Southeast Asia, facing the Bay of Bengal and the Andaman Sea.",
+        "Naypyidaw is its capital and Yangon its largest city. Find it between Bangladesh, India, China and Thailand."
+      ],
+      "fact": "Bagan has more than 2,000 surviving temples and pagodas.",
+      "difficulty": "hard"
+    },
+    {
+      "id": "UGA",
+      "country": "Uganda",
+      "iso2": "UG",
+      "clues": [
+        "Mountain gorillas live in the Bwindi forest here, and the Nile begins its long journey north from its lakeshore.",
+        "A landlocked East African country on the northern shore of Lake Victoria.",
+        "Kampala is its capital. Find it west of Kenya, north of Tanzania and Rwanda."
+      ],
+      "fact": "Bwindi Impenetrable National Park shelters around half of the world's mountain gorillas.",
+      "difficulty": "medium"
+    },
+    {
+      "id": "ROU",
+      "country": "Romania",
+      "iso2": "RO",
+      "clues": [
+        "Bran Castle, linked to the Dracula legend, and painted monasteries lie in this European country.",
+        "A country in southeastern Europe with the Carpathian Mountains and a Black Sea coast.",
+        "Bucharest is its capital. Find it north of Bulgaria, between Hungary, Ukraine and Moldova."
+      ],
+      "fact": "The Danube Delta, where the river meets the Black Sea, is one of Europe's largest wetlands.",
+      "difficulty": "medium"
+    },
+    {
+      "id": "DOM",
+      "country": "Dominican Republic",
+      "iso2": "DO",
+      "clues": [
+        "Merengue music, baseball stars and the white-sand beaches of Punta Cana define this Caribbean nation.",
+        "It shares the island of Hispaniola with Haiti.",
+        "Santo Domingo is its capital. Find the eastern two-thirds of Hispaniola, east of Cuba and west of Puerto Rico."
+      ],
+      "fact": "Santo Domingo is the oldest continuously inhabited city founded by Europeans in the Americas.",
+      "difficulty": "medium"
+    },
+    {
+      "id": "OMN",
+      "country": "Oman",
+      "iso2": "OM",
+      "clues": [
+        "Frankincense trees, the rugged fjords of Musandam and whitewashed forts mark this Arabian sultanate.",
+        "A country on the southeastern corner of the Arabian Peninsula, facing the Arabian Sea.",
+        "Muscat is its capital. Find it at the eastern tip of Arabia, beside the UAE, Saudi Arabia and Yemen."
+      ],
+      "fact": "The Land of Frankincense sites in its Dhofar region are a UNESCO World Heritage Site.",
+      "difficulty": "hard"
+    },
+    {
+      "id": "EST",
+      "country": "Estonia",
+      "iso2": "EE",
+      "clues": [
+        "A digital pioneer where citizens can vote online, with a medieval walled old town in its capital.",
+        "The northernmost of the three Baltic states, across the gulf from Finland.",
+        "Tallinn is its capital. Find it south of Finland, north of Latvia and west of Russia."
+      ],
+      "fact": "In 2007 it became the first country to allow online voting in a national parliamentary election.",
+      "difficulty": "hard"
+    },
+    {
+      "id": "MOZ",
+      "country": "Mozambique",
+      "iso2": "MZ",
+      "clues": [
+        "The coral islands of the Bazaruto archipelago and Portuguese-influenced peri-peri dishes come from this country.",
+        "A long country on Africa's southeast coast, across a channel from Madagascar.",
+        "Maputo is its capital. Find the coastal country between Tanzania and South Africa, facing Madagascar."
+      ],
+      "fact": "Its flag is one of the few in the world to feature a modern rifle.",
+      "difficulty": "hard"
+    },
+    {
+      "id": "GTM",
+      "country": "Guatemala",
+      "iso2": "GT",
+      "clues": [
+        "Maya pyramids rise above the jungle at Tikal, and volcanoes ring Lake Atitlán in this country.",
+        "A country in northern Central America, directly south of Mexico.",
+        "Its capital shares the country's name. Find it south of Mexico, west of Belize and Honduras."
+      ],
+      "fact": "Tikal was one of the largest cities of the ancient Maya civilisation.",
+      "difficulty": "hard"
+    },
+    {
+      "id": "LAO",
+      "country": "Laos",
+      "iso2": "LA",
+      "clues": [
+        "Saffron-robed monks collect alms at dawn in Luang Prabang, and the Mekong winds through this country.",
+        "The only landlocked country in Southeast Asia.",
+        "Vientiane is its capital. Find it between Thailand and Vietnam, south of China."
+      ],
+      "fact": "It is often described as the most heavily bombed country per person in history.",
+      "difficulty": "hard"
+    },
+    {
+      "id": "ALB",
+      "country": "Albania",
+      "iso2": "AL",
+      "clues": [
+        "Thousands of concrete Cold War bunkers and turquoise Ionian beaches are found in this Balkan country.",
+        "A small Balkan country on the Adriatic and Ionian seas, across from the heel of Italy.",
+        "Tirana is its capital. Find it north of Greece, south of Montenegro and west of North Macedonia."
+      ],
+      "fact": "About 170,000 bunkers were built here during the Cold War.",
+      "difficulty": "hard"
+    },
+    {
+      "id": "ZMB",
+      "country": "Zambia",
+      "iso2": "ZM",
+      "clues": [
+        "At the Devil's Pool, swimmers peer over the edge of Victoria Falls from this country's side.",
+        "A landlocked country in south-central Africa, north of the Zambezi river.",
+        "Lusaka is its capital. Find it between Angola, the DR Congo, Tanzania, Malawi and Zimbabwe."
+      ],
+      "fact": "Walking safaris were pioneered in its South Luangwa National Park.",
+      "difficulty": "hard"
+    },
+    {
+      "id": "KAZ",
+      "country": "Kazakhstan",
+      "iso2": "KZ",
+      "clues": [
+        "Wild apple forests grow in its mountains, and rockets lift off into space from the Baikonur Cosmodrome.",
+        "The world's largest landlocked country, in Central Asia.",
+        "Astana is its capital. Find the huge country between Russia and Uzbekistan, west of China."
+      ],
+      "fact": "Yuri Gagarin, the first human in space, launched from Baikonur in 1961.",
+      "difficulty": "medium"
+    },
+    {
+      "id": "SVN",
+      "country": "Slovenia",
+      "iso2": "SI",
+      "clues": [
+        "Lake Bled's island church and the vast Postojna caves are highlights of this small Alpine country.",
+        "A small central European country with a short Adriatic coastline.",
+        "Ljubljana is its capital. Find it between Italy, Austria, Hungary and Croatia."
+      ],
+      "fact": "Postojna Cave is home to the olm, a blind salamander that can live for about 100 years.",
+      "difficulty": "hard"
+    },
+    {
+      "id": "PRY",
+      "country": "Paraguay",
+      "iso2": "PY",
+      "clues": [
+        "The huge Itaipú dam and a flag with a different emblem on each side belong to this South American country.",
+        "A landlocked country in the heart of South America.",
+        "Asunción is its capital. Find it between Argentina, Brazil and Bolivia."
+      ],
+      "fact": "Guaraní is an official language and is spoken by most of the population.",
+      "difficulty": "hard"
+    },
+    {
+      "id": "RWA",
+      "country": "Rwanda",
+      "iso2": "RW",
+      "clues": [
+        "Known as the land of a thousand hills, it is home to mountain gorillas in its volcano forests.",
+        "A small landlocked country in East Africa's Great Lakes region, directly south of Uganda.",
+        "Kigali is its capital. Find it between Uganda, Tanzania, Burundi and the DR Congo."
+      ],
+      "fact": "It banned plastic bags in 2008, one of the first countries to do so.",
+      "difficulty": "hard"
+    },
+    {
+      "id": "ARM",
+      "country": "Armenia",
+      "iso2": "AM",
+      "clues": [
+        "Mount Ararat looms over the capital of the first nation to adopt Christianity as its state religion.",
+        "A landlocked country in the South Caucasus.",
+        "Yerevan is its capital. Find it between Georgia, Azerbaijan, Turkey and Iran."
+      ],
+      "fact": "Its alphabet was created around 405 AD by the scholar Mesrop Mashtots.",
+      "difficulty": "hard"
+    },
+    {
+      "id": "MLI",
+      "country": "Mali",
+      "iso2": "ML",
+      "clues": [
+        "The Great Mosque of Djenné is the world's largest mud-brick building, and Timbuktu was a legendary centre of learning.",
+        "A large landlocked country in West Africa, stretching north into the Sahara.",
+        "Bamako is its capital. Find it between Mauritania, Algeria, Niger, Burkina Faso and Senegal."
+      ],
+      "fact": "Mansa Musa, its 14th-century emperor, is often called one of the richest people in history.",
+      "difficulty": "hard"
+    },
+    {
+      "id": "LUX",
+      "country": "Luxembourg",
+      "iso2": "LU",
+      "clues": [
+        "One of the smallest and richest countries in Europe, a Grand Duchy with a capital perched on fortress cliffs.",
+        "A tiny landlocked country in western Europe.",
+        "Its capital shares the country's name. Find it squeezed between Belgium, France and Germany."
+      ],
+      "fact": "In 2020 it became the first country to make all public transport free.",
+      "difficulty": "hard"
+    },
+    {
+      "id": "HND",
+      "country": "Honduras",
+      "iso2": "HN",
+      "clues": [
+        "The Maya ruins of Copán and the coral reefs of the Bay Islands are found in this Central American country.",
+        "A Central American country with a long Caribbean coastline.",
+        "Tegucigalpa is its capital. Find it between Guatemala, El Salvador and Nicaragua."
+      ],
+      "fact": "The Bay Islands sit on the Mesoamerican Barrier Reef, the second-largest reef system in the world.",
+      "difficulty": "hard"
+    },
+    {
+      "id": "QAT",
+      "country": "Qatar",
+      "iso2": "QA",
+      "clues": [
+        "Futuristic skylines rise above desert and sea in this small Gulf state, rich in natural gas.",
+        "A small peninsula jutting north into the Persian Gulf from Arabia.",
+        "Doha is its capital. Find the thumb-shaped peninsula east of Saudi Arabia, near Bahrain."
+      ],
+      "fact": "In 2022 it became the first Middle Eastern country to host the FIFA World Cup.",
+      "difficulty": "hard"
+    },
+    {
+      "id": "DZA",
+      "country": "Algeria",
+      "iso2": "DZ",
+      "clues": [
+        "Africa's largest country by area, with Saharan sand seas and the ancient rock art of Tassili n'Ajjer.",
+        "A huge North African country on the Mediterranean, between Morocco and Tunisia.",
+        "Algiers is its capital. Find it east of Morocco, west of Tunisia and Libya, stretching deep into the Sahara."
+      ],
+      "fact": "More than 80 percent of its land is covered by the Sahara.",
+      "difficulty": "medium"
+    },
+    {
+      "id": "BGR",
+      "country": "Bulgaria",
+      "iso2": "BG",
+      "clues": [
+        "Rose oil from the Valley of Roses, tangy yoghurt and the Cyrillic script all have deep roots in this Balkan country.",
+        "A country in southeastern Europe on the western shore of the Black Sea.",
+        "Sofia is its capital. Find it south of Romania and north of Greece and Turkey."
+      ],
+      "fact": "It produces a large share of the world's rose oil, used in perfumes.",
+      "difficulty": "hard"
+    },
+    {
+      "id": "PNG",
+      "country": "Papua New Guinea",
+      "iso2": "PG",
+      "clues": [
+        "More than 800 languages are spoken here, more than in any other country.",
+        "It covers the eastern half of the island of New Guinea, north of Australia.",
+        "Port Moresby is its capital. Find the eastern half of New Guinea, just across the Torres Strait from Australia."
+      ],
+      "fact": "Its rainforests are home to dozens of species of birds-of-paradise.",
+      "difficulty": "hard"
+    },
+    {
+      "id": "NIC",
+      "country": "Nicaragua",
+      "iso2": "NI",
+      "clues": [
+        "Sharks swim in its great freshwater lake, and travellers sandboard down the Cerro Negro volcano.",
+        "The largest country in Central America.",
+        "Managua is its capital. Find it between Honduras and Costa Rica."
+      ],
+      "fact": "Bull sharks travel up the San Juan River from the Caribbean into its largest lake.",
+      "difficulty": "hard"
+    },
+    {
+      "id": "CMR",
+      "country": "Cameroon",
+      "iso2": "CM",
+      "clues": [
+        "Called 'Africa in miniature' for its beaches, rainforests, savannas and a towering coastal volcano.",
+        "A Central African country on the Gulf of Guinea, east of Nigeria.",
+        "Yaoundé is its capital. Find it between Nigeria, Chad, the Central African Republic and Gabon."
+      ],
+      "fact": "Both French and English are official languages.",
+      "difficulty": "hard"
+    },
+    {
+      "id": "LVA",
+      "country": "Latvia",
+      "iso2": "LV",
+      "clues": [
+        "Art nouveau facades and a huge song and dance festival held every five years are prides of this Baltic country.",
+        "The middle of the three Baltic states, on the Baltic Sea.",
+        "Riga is its capital. Find it between Estonia and Lithuania, west of Russia."
+      ],
+      "fact": "Riga has one of the largest collections of art nouveau buildings in the world.",
+      "difficulty": "hard"
+    },
+    {
+      "id": "AZE",
+      "country": "Azerbaijan",
+      "iso2": "AZ",
+      "clues": [
+        "Called the Land of Fire, it has hillsides where natural gas burns endlessly, like Yanar Dag.",
+        "A country in the South Caucasus on the western shore of the Caspian Sea.",
+        "Baku is its capital. Find it on the Caspian, between Russia, Georgia, Armenia and Iran."
+      ],
+      "fact": "Baku's modern Flame Towers are lit at night to look like giant flickering flames.",
+      "difficulty": "hard"
+    },
+    {
+      "id": "BLZ",
+      "country": "Belize",
+      "iso2": "BZ",
+      "clues": [
+        "The Great Blue Hole, a giant underwater sinkhole, lies off the coast of this Central American country.",
+        "A small country on the Caribbean coast of Central America, south of Mexico's Yucatán.",
+        "Belmopan is its capital. Find it east of Guatemala, just south of Mexico."
+      ],
+      "fact": "It is the only Central American country where English is the official language.",
+      "difficulty": "hard"
+    },
+    {
+      "id": "LTU",
+      "country": "Lithuania",
+      "iso2": "LT",
+      "clues": [
+        "Basketball is almost a national religion here, and the Hill of Crosses holds more than 100,000 crosses.",
+        "The southernmost and largest of the three Baltic states.",
+        "Vilnius is its capital. Find it north of Poland, south of Latvia and west of Belarus."
+      ],
+      "fact": "Vilnius has one of the largest surviving medieval old towns in Northern Europe.",
+      "difficulty": "hard"
+    }
+  ]
+}

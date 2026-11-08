@@ -6,6 +6,8 @@ const japan = { id: 'JPN', country: 'Japan', difficulty: 'easy', clues: ['a', 'b
 const italy = { id: 'ITA', country: 'Italy', difficulty: 'easy', clues: ['a', 'b', 'c'] };
 const peru = { id: 'PER', country: 'Peru', difficulty: 'medium', clues: ['a', 'b', 'c'] };
 const nepal = { id: 'NPL', country: 'Nepal', difficulty: 'hard', clues: ['a', 'b', 'c'] };
+const bhutan = { id: 'BTN', country: 'Bhutan', difficulty: 'expert', clues: ['a', 'b', 'c'] };
+const lesotho = { id: 'LSO', country: 'Lesotho', difficulty: 'expert', clues: ['a', 'b', 'c'] };
 
 test('last puzzle is avoided when another is available', () => {
   assert.equal(choosePuzzle([japan, italy], 'JPN', () => 0).id, 'ITA');
@@ -20,6 +22,18 @@ test('wins progress from easy to medium to hard country pools', () => {
   assert.equal(choosePuzzle([japan, peru, nepal], '', () => 0, 1).id, 'JPN');
   assert.equal(choosePuzzle([japan, peru, nepal], '', () => 0, 3).id, 'PER');
   assert.equal(choosePuzzle([japan, peru, nepal], '', () => 0, 6).id, 'NPL');
+});
+
+test('levels 6–10 are hard and level 11 onward is the expert tier', () => {
+  assert.equal(difficultyForLevel(10), 'hard');
+  assert.equal(difficultyForLevel(11), 'expert');
+  assert.equal(difficultyForLevel(30), 'expert');
+  assert.equal(choosePuzzle([nepal, bhutan], '', () => 0, 11).id, 'BTN');
+});
+
+test('countries already found are skipped until the pool runs out', () => {
+  assert.equal(choosePuzzle([bhutan, lesotho], '', () => 0, 11, ['BTN']).id, 'LSO');
+  assert.equal(choosePuzzle([bhutan, lesotho], 'BTN', () => 0, 11, ['BTN', 'LSO']).id, 'LSO');
 });
 
 test('selection is free; wrong guess costs five seconds and cannot be repeated', () => {

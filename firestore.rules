@@ -36,6 +36,12 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Daily quest lists, one document per month. Published with scripts/seed-firestore.mjs.
+    match /dailyQuests/{month} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     match /friendHunts/{code} {
       function fields() {
         return ['hiderUid', 'hiderName', 'targetUid', 'targetUsername', 'seekerUid', 'seekerName', 'clues',

@@ -3,17 +3,25 @@ export const WRONG_GUESS_COST = 5;
 export const CLUE_COST = 20;
 export const REVEAL_COST = 30;
 
+// Levels 1–2 easy, 3–5 medium, 6–10 hard, and 11 onward expert (20 expert countries cover levels 11–30).
+export const EXPERT_FROM_LEVEL = 11;
+
 export function difficultyForLevel(level) {
   if (level <= 2) return 'easy';
   if (level <= 5) return 'medium';
-  return 'hard';
+  if (level < EXPERT_FROM_LEVEL) return 'hard';
+  return 'expert';
 }
 
-export function choosePuzzle(puzzles, previousId = '', random = Math.random, level = 1) {
+// Prefers countries the explorer has not found yet, so every level up to the end of a pool is new.
+export function choosePuzzle(puzzles, previousId = '', random = Math.random, level = 1, foundIds = []) {
   if (!puzzles.length) throw new Error('No hunts are available.');
   const matching = puzzles.filter(puzzle => puzzle.difficulty === difficultyForLevel(level));
   const pool = matching.length ? matching : puzzles;
-  const choices = pool.length > 1 ? pool.filter(puzzle => puzzle.id !== previousId) : pool;
+  const found = new Set(foundIds);
+  const fresh = pool.filter(puzzle => !found.has(puzzle.id));
+  const candidates = fresh.length ? fresh : pool;
+  const choices = candidates.length > 1 ? candidates.filter(puzzle => puzzle.id !== previousId) : candidates;
   return choices[Math.floor(random() * choices.length)];
 }
 

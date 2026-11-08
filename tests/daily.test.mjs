@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import puzzles from '../data/countries.json' with { type: 'json' };
-import { dayKey, monthKey, daysInMonth, dailyPuzzle, monthSchedule, currentStreak, scoreMonth, atlasFromRecords, mergeDailyRecords, msUntilNextDay } from '../src/daily.js';
+import schedules from '../data/daily-quests.json' with { type: 'json' };
+import { dayKey, monthKey, daysInMonth, dailyQuest, validDailySchedule, monthSchedule, currentStreak, scoreMonth, atlasFromRecords, mergeDailyRecords, msUntilNextDay } from '../src/daily.js';
 import { createGame } from '../src/game.js';
 
 test('day and month keys use UTC', () => {
@@ -12,11 +13,23 @@ test('day and month keys use UTC', () => {
   assert.equal(msUntilNextDay(Date.UTC(2026, 10, 7, 23, 0)), 3_600_000);
 });
 
-test('every browser gets the same country and a month never repeats one', () => {
-  const shuffledInput = [...puzzles].reverse();
-  assert.equal(dailyPuzzle(puzzles, '2026-11-07').id, dailyPuzzle(shuffledInput, '2026-11-07').id);
-  const month = Array.from({ length: 30 }, (_, index) => dailyPuzzle(puzzles, `2026-11-${String(index + 1).padStart(2, '0')}`).id);
-  assert.equal(new Set(month).size, 30);
+test('each day takes its country from that month\'s list', () => {
+  assert.equal(dailyQuest(schedules, '2026-11-01').id, schedules['2026-11'][0].id);
+  assert.equal(dailyQuest(schedules, '2026-12-31').id, schedules['2026-12'][30].id);
+  for (const [month, days] of Object.entries(schedules)) assert.ok(validDailySchedule(days, month), month);
+});
+
+test('the daily list never repeats a country and is separate from solo levels', () => {
+  const daily = Object.values(schedules).flat().map(puzzle => puzzle.id);
+  assert.equal(new Set(daily).size, daily.length);
+  const solo = new Set(puzzles.map(puzzle => puzzle.id));
+  assert.deepEqual(daily.filter(id => solo.has(id)), []);
+});
+
+test('a month without a list still gets a stable, non-repeating schedule', () => {
+  const january = Array.from({ length: 31 }, (_, index) => dailyQuest(schedules, `2027-01-${String(index + 1).padStart(2, '0')}`).id);
+  assert.equal(new Set(january).size, 31);
+  assert.equal(dailyQuest(schedules, '2027-01-05').id, dailyQuest({ ...schedules }, '2027-01-05').id);
   assert.notDeepEqual(monthSchedule(puzzles, '2026-11').map(p => p.id), monthSchedule(puzzles, '2026-12').map(p => p.id));
 });
 

@@ -301,8 +301,56 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // WhatsApp verification state is server-only: one-time-code challenges, send limits and the
+    // number → explorer index are written by Cloud Functions with the Admin SDK.
+    match /otpChallenges/{challengeId} {
+      allow read, write: if false;
+    }
+    match /otpRateLimits/{document=**} {
+      allow read, write: if false;
+    }
+    match /whatsappPhones/{phone} {
+      allow read, write: if false;
+    }
+    // Daily alert message SID → recipient marker, for Twilio status callbacks.
+    match /whatsappMessages/{messageSid} {
+      allow read, write: if false;
+    }
+
     match /users/{userId} {
-      allow read, create, update: if request.auth != null && request.auth.uid == userId;
+      function owner() {
+        return request.auth != null && request.auth.uid == userId;
+      }
+      function changed() {
+        return request.resource.data.diff(resource.data).affectedKeys();
+      }
+      // Only the server creates users/{uid}.whatsapp and writes its phone and verifiedAt.
+      // The owner may switch the daily quest alert on (after verification) or off, and update their time zone.
+      function validWhatsAppChange() {
+        let before = resource.data.whatsapp;
+        let after = request.resource.data.whatsapp;
+        let keys = after.diff(before).affectedKeys();
+        let wasOn = before.get('optIn', false) == true;
+        return 'whatsapp' in resource.data && before is map
+          && 'whatsapp' in request.resource.data && after is map
+          && keys.hasOnly(['optIn', 'optInAt', 'optOutAt', 'timeZone'])
+          && (!keys.hasAny(['timeZone']) || (after.timeZone is string && after.timeZone.size() <= 64))
+          && (!keys.hasAny(['optIn'])
+            ? !keys.hasAny(['optInAt', 'optOutAt'])
+            : after.optIn is bool && (after.optIn
+              // Turning on: the number must be verified, and optOutAt may only be cleared.
+              ? !wasOn && 'verifiedAt' in before && after.optInAt == request.time
+                && (!keys.hasAny(['optOutAt']) || after.optOutAt == null)
+              // Turning off: stamp optOutAt and leave optInAt alone.
+              : wasOn && after.optOutAt == request.time && !keys.hasAny(['optInAt'])));
+      }
+      allow read: if owner();
+      allow create: if owner()
+        && !('whatsapp' in request.resource.data)
+        && (!('whatsappPromptSnoozedAt' in request.resource.data) || request.resource.data.whatsappPromptSnoozedAt == request.time);
+      allow update: if owner()
+        && (!changed().hasAny(['whatsappPromptSnoozedAt']) || request.resource.data.whatsappPromptSnoozedAt == request.time)
+        && (!changed().hasAny(['whatsapp']) || validWhatsAppChange());
       allow delete: if false;
 
       match /hunts/{huntId} {

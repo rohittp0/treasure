@@ -26,9 +26,13 @@ jobs:
           distribution: temurin
           java-version: '21'
       - run: npm ci
+      - run: npm ci
+        working-directory: functions
       - run: npm test
       - name: Firestore rules tests (emulator)
         run: npx --yes firebase-tools@14 emulators:exec --only firestore --project demo-treasure-friend-tests 'node tests/friend-rules.rules.mjs'
+      - name: WhatsApp function tests (emulator, Twilio mocked)
+        run: npx --yes firebase-tools@14 emulators:exec --only firestore --project demo-treasure-friend-tests 'node --test tests/*.emulator.mjs'
 
   deploy_hosting:
     needs: test
@@ -74,10 +78,14 @@ jobs:
         with:
           credentials_json: ${{ secrets.FIREBASE_DEPLOY_SERVICE_ACCOUNT }}
       # The functions read CHALLENGE_EMAIL_FROM as a parameter; CI cannot answer the deploy prompt for it.
+      # The committed file already holds the WhatsApp parameters, so only this line is replaced.
       - name: Write function parameters
-        run: printf 'CHALLENGE_EMAIL_FROM=%s\n' "$EMAIL_FROM" > functions/.env.treasurehunch
+        run: |
+          grep -v '^CHALLENGE_EMAIL_FROM=' functions/.env.treasurehunch > functions/.env.params || true
+          { printf 'CHALLENGE_EMAIL_FROM=%s\n' "$EMAIL_FROM"; cat functions/.env.params; } > functions/.env.treasurehunch
+          rm functions/.env.params
         env:
           EMAIL_FROM: ${{ vars.CHALLENGE_EMAIL_FROM }}
-      # RESEND_API_KEY stays in Secret Manager; the deploy only references it.
+      # RESEND_API_KEY, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and OTP_HMAC_KEY stay in Secret Manager; the deploy only references them.
       - name: Deploy Firestore rules and Cloud Functions
         run: npx --yes firebase-tools@14 deploy --only firestore:rules,functions --project treasurehunch --non-interactive --force

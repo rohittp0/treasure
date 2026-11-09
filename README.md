@@ -14,7 +14,7 @@ Every UTC day has one **daily quest**: the same hidden country for every explore
 - **Explorer maps** (`atlases/{username}`): the countries each explorer has claimed. Anyone can open one from a leaderboard row or a `https://hunch.rohittp.com/?atlas=<username>` link, and signed-in explorers can share their own.
 - Guests can play straight away. A guest's win shows **Create a username to claim {country}**, which uses the normal sign-up: Google sign-in, then the username dialog, which also asks for notification permission. The country is claimed and entered on the monthly board once the username is saved. Until then the result is kept only on that device.
 - Attempts are stored in `users/{uid}/daily/{YYYY-MM-DD}`. The document is created when the quest starts and can be finished only once.
-- **Daily alerts:** the scheduled `notifyDailyQuest` function runs at 00:05 UTC. It sends a push notification to every browser registered in `users/{uid}/pushTokens` (the same tokens friend challenges use). Explorers who found yesterday's country get a keep-your-streak message. The notification opens `https://hunch.rohittp.com/?daily=1`, which starts the quest after sign-in. A `dailyNotifications/{YYYY-MM-DD}` document stops a retried run from sending twice.
+- **Daily alerts:** the scheduled `notifyDailyQuest` function runs at 00:05 UTC. It sends a push notification to every browser registered in `users/{uid}/pushTokens` (the same tokens friend challenges use). Explorers who found yesterday's country get a keep-your-streak message. The notification opens `https://hunch.rohittp.com/?daily=1`, which starts the quest after sign-in. A `dailyNotifications/{YYYY-MM-DD}` document stops a retried run from sending twice. Explorers who opt in also get the alert on WhatsApp at about 08:00–12:00 their local time. See [WhatsApp sign-in and daily quest alerts](#whatsapp-sign-in-and-daily-quest-alerts).
 
 These boards are casual and client-scored like the solo leaderboard. The rules enforce one attempt per day per account and keep entries self-consistent, but a modified client could still post made-up results.
 
@@ -63,10 +63,81 @@ firebase deploy --only firestore:rules,functions,hosting --project treasurehunch
 
 The deploy prompts for `CHALLENGE_EMAIL_FROM`; enter a sender on your verified email domain. Challenge emails and background alerts link to `https://hunch.rohittp.com/`. Do not put the Resend key in a Vite or Hosting environment variable.
 
+### WhatsApp sign-in and daily quest alerts
+
+The design and the decisions behind it are in [docs/whatsapp-daily-quest.md](docs/whatsapp-daily-quest.md). Messages go through Twilio from the WhatsApp sender `whatsapp:+12296143014` ("Lascade"). The app only ever sends two approved Content templates and never free-form text:
+
+| Template | Category | Used for | Variable |
+| --- | --- | --- | --- |
+| `daily_quest_alert_v2` (`WHATSAPP_DAILY_CONTENT_SID`) | Marketing | The daily quest alert | `{{1}}` = username, with newlines and tabs stripped, at most 60 characters, `explorer` if none |
+| `hunch_otp` (`WHATSAPP_OTP_CONTENT_SID`) | Authentication | Verification and sign-in codes | `{{1}}` = the 6-digit code |
+
+**Functions** (all in `us-central1`; logic in `functions/whatsapp/`):
+
+- `requestWhatsAppOtp` and `verifyWhatsAppOtp` are callables with App Check enforced. One flow serves both `purpose: "verify_phone"` (signed in; links the number to the explorer) and `purpose: "login"`, where an unknown number creates a new explorer and the app signs in with the returned custom token.
+  - Codes last 10 minutes and allow 5 attempts. Only an HMAC-SHA256 of each code is stored, keyed with `OTP_HMAC_KEY`.
+  - Limits: 60 seconds between codes to a number, 5 codes per number per day, and 10 per explorer (or per IP when signed out) per day.
+- `sendDailyQuestWhatsApp` runs every 4 hours (`5 */4 * * *` UTC). Each run messages opted-in explorers whose local time (from `users/{uid}.whatsapp.timeZone`) is 08:00–11:59. A missing zone falls back to India time for +91 numbers and UTC otherwise.
+  - Every zone lands in exactly one run a day, inside the same UTC day as the quest.
+  - A `dailyNotifications/{YYYY-MM-DD}/whatsapp/{uid}` marker is created before each send, so retried or overlapping runs never message anyone twice.
+  - Sends run about 10 at a time, and logs show counts and masked numbers (`+91******7399`) only.
+  - `notifyDailyQuest` (browser push at 00:05 UTC) is unchanged.
+- `whatsappInbound` (incoming messages) turns opt-in off when an explorer replies STOP, UNSUBSCRIBE, CANCEL or "Stop promotions".
+- `whatsappStatus` (delivery status callbacks) records each message's status on its marker.
+- Twilio errors 21610 (recipient opted out) and 63024 (invalid recipient) also turn opt-in off. Both webhooks reject requests without a valid `X-Twilio-Signature`.
+
+**Data.** Each explorer's number and consent live only on the private `users/{uid}.whatsapp` (`phone`, `verifiedAt`, `optIn`, `optInAt`, `optOutAt`, `timeZone`). `phone` and `verifiedAt` are written only by the functions. These server-only collections are closed to clients by the rules:
+
+- `otpChallenges`: pending codes
+- `otpRateLimits`: daily send counters, keyed by hashed number, explorer or hashed IP
+- `whatsappPhones/{E.164}`: the number-to-explorer index that makes each number belong to one explorer
+- `whatsappMessages/{MessageSid}`: links status callbacks to their markers
+
+`otpChallenges.expiresAt` and `otpRateLimits.expiresAt` are ready for a Firestore TTL policy if you want them cleaned up automatically.
+
+**Setup:**
+
+1. **Secrets.** `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` and `OTP_HMAC_KEY` are already in Secret Manager for project `treasurehunch`. To rotate one, run:
+   ```sh
+   firebase functions:secrets:set TWILIO_AUTH_TOKEN --project treasurehunch
+   ```
+   The emulator reads the same names from `functions/.secret.local` (gitignored). Never commit it.
+2. **Parameters.** `WHATSAPP_FROM`, `WHATSAPP_DAILY_CONTENT_SID` and `WHATSAPP_OTP_CONTENT_SID` are in `functions/.env.treasurehunch`, next to `CHALLENGE_EMAIL_FROM`. The deploy workflow rewrites only the `CHALLENGE_EMAIL_FROM` line and keeps the WhatsApp values.
+3. **Custom-token signing.** WhatsApp sign-in calls `createCustomToken`, which needs `iam.serviceAccounts.signBlob` on the functions' runtime service account. It has Editor, which doesn't include it. Grant **Service Account Token Creator** once:
+   ```sh
+   gcloud iam service-accounts add-iam-policy-binding 555455406222-compute@developer.gserviceaccount.com \
+     --member=serviceAccount:555455406222-compute@developer.gserviceaccount.com \
+     --role=roles/iam.serviceAccountTokenCreator --project treasurehunch
+   ```
+4. **App Check.** The OTP callables reject calls without a valid App Check token, which protects against WhatsApp pumping fraud. The web app uses reCAPTCHA Enterprise site key `6LcQIBguAAAAAFm4o2o2fI6UXEoJn6WSKQYkXF0z`.
+   - In the Firebase console, go to **App Check → Apps**, register the web app with the **reCAPTCHA Enterprise** provider and that site key, and make sure `hunch.rohittp.com` (and any preview domains) are allowed on the key.
+   - For local development, the app prints an App Check debug token in the browser console on `localhost`. Add it under **App Check → Apps → ⋮ → Manage debug tokens**.
+   - The callables enforce App Check on their own, so you don't need to switch on Cloud Functions enforcement in the console.
+5. **Twilio webhooks** (after the first deploy). In the Twilio Console, open **Messaging → Senders → WhatsApp senders → +12296143014** and set:
+   - **Webhook URL for incoming messages:** `https://us-central1-treasurehunch.cloudfunctions.net/whatsappInbound` (HTTP POST)
+   - **Status callback URL:** `https://us-central1-treasurehunch.cloudfunctions.net/whatsappStatus`
+
+   Use these exact `cloudfunctions.net` URLs. Twilio signs the URL it calls, and the functions validate against that form (the daily send also passes it as `statusCallback`).
+6. **Unsubscribe link in the template.** `daily_quest_alert_v2` (`HX323143dfc2da934f5fe3daa9d43b2b5f`) is `daily_quest_alert` plus the footer "Reply STOP to unsubscribe." and a second static URL button, **Stop these alerts** → `https://hunch.rohittp.com/?whatsapp=stop`.
+   - That page asks a signed-out visitor to sign in, then turns the alert off straight away and offers to turn it back on.
+   - `WHATSAPP_DAILY_CONTENT_SID` points at v2. Until WhatsApp approves v2, sends with it fail, so point it back at v1 (`HX00018b6d69870173c03971adf8b14060`) if the alert must go out before approval.
+
+**Manual test send.** With the real auth token in `functions/.secret.local`:
+
+```sh
+node scripts/send-test-whatsapp.mjs +919020277399 maya    # daily_quest_alert, {{1}} = maya
+node scripts/send-test-whatsapp.mjs +919020277399 --otp   # hunch_otp with a random code
+```
+
+The script uses the same message helpers as the functions. It prints only the masked number, the message SID and its status (plus the test code for `--otp`), never the credentials.
+
+**Tests.** `npm test` covers phone normalisation, `safeName`, STOP matching, code hashing and expiry, and the local-time send window. `npm run test:functions` runs the OTP flows, the daily send loop and the webhooks against the Firestore emulator with Twilio and Admin Auth mocked.
+
 ## Build and deploy
 
 ```sh
 npm test
+npm run test:functions
 npm run build
 firebase deploy --only firestore:rules,functions,hosting --project treasurehunch
 ```
@@ -82,7 +153,7 @@ The merge workflow needs these repository settings (**Settings → Secrets and v
 | `CHALLENGE_EMAIL_FROM` | Variable | Verified sender address for challenge emails (a function parameter) |
 | `FIREBASE_WEB_VAPID_KEY` | Variable | Optional Web Push key override for the build |
 
-The deploy service account needs these roles on project `treasurehunch`: Firebase Rules Admin, Cloud Functions Admin, Service Account User, Artifact Registry Administrator, Cloud Build Editor, Eventarc Admin, Cloud Scheduler Admin, and Secret Manager Viewer. The daily alert needs the Cloud Scheduler API enabled on the project. `RESEND_API_KEY` stays in Secret Manager; the workflow only references it. The workflow deploys with `--force`, so a function removed from `functions/index.js` is deleted from the project.
+The deploy service account needs these roles on project `treasurehunch`: Firebase Rules Admin, Cloud Functions Admin, Service Account User, Artifact Registry Administrator, Cloud Build Editor, Eventarc Admin, Cloud Scheduler Admin, and Secret Manager Viewer. The daily alert needs the Cloud Scheduler API enabled on the project. `RESEND_API_KEY`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` and `OTP_HMAC_KEY` stay in Secret Manager; the workflow only references them. Separately, the functions' runtime service account needs Service Account Token Creator for WhatsApp sign-in (see [WhatsApp sign-in and daily quest alerts](#whatsapp-sign-in-and-daily-quest-alerts)). The workflow deploys with `--force`, so a function removed from `functions/index.js` is deleted from the project.
 
 The map uses Natural Earth 1:110m public-domain country outlines; source and terms: https://www.naturalearthdata.com/about/terms-of-use/. The GeoJSON is compacted to the ID, name, and label position fields used by the game. MapLibre GL JS is BSD-3-Clause licensed. The bundled map-label glyphs come from MapLibre demo tiles.
 

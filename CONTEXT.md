@@ -51,3 +51,25 @@ The story of a completed challenge between a hider and a seeker. Finding the tre
 
 **Victory poster**:
 A shareable keepsake of the winner's challenge, including both participants, the hidden country and the seeker's hunt statistics.
+
+**Explorer**:
+A player with an account and a username, signed in with Google or WhatsApp. An explorer becomes a seeker during a hunt.
+_Avoid_: User, account (outside code)
+
+**Daily quest alert**:
+The one message each UTC day that announces the new daily quest, sent by browser push and, for opted-in explorers, on WhatsApp. It is the only message ever sent on WhatsApp apart from verification codes.
+_Avoid_: Daily challenge, daily notification
+
+**Verified number**:
+A WhatsApp number an explorer has proven they own with a one-time code. One number belongs to at most one explorer, and it can be used to sign in.
+
+**WhatsApp opt-in**:
+An explorer's explicit, revocable consent to get the daily quest alert on their verified number. Verifying a number, signing in with WhatsApp or allowing browser notifications is not opt-in.
+_Avoid_: WhatsApp subscription
+
+**Opt-out**:
+Withdrawing WhatsApp opt-in, by replying STOP, by using the unsubscribe link in the alert, or from settings. The verified number is kept for sign-in.
+
+## Flagged ambiguities
+
+- "Daily challenge" was used to mean the **daily quest**. Resolved: "challenge" is reserved for friend hunts, and the day's hunt is always the **daily quest**.

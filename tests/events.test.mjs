@@ -71,3 +71,14 @@ test('solo telemetry uses charged time and preserves legacy duration without the
   assert.equal(params.round_seconds, 120); assert.equal(params.time_used, 55);
   assert.equal(params.country, undefined); assert.equal(params.puzzle, undefined);
 });
+
+test('WhatsApp events keep their funnel parameters but never the number or code', () => {
+  const calls = [];
+  const tracker = createEventTracker({ google: (...args) => calls.push(args) });
+  tracker.track(EVENTS.WHATSAPP_VERIFY_FAILED, { source: 'post_quest', purpose: 'verify_phone', step: 'verify', reason: 'wrong_code', phone: '+919020277399', code: '123456' });
+  tracker.track(EVENTS.LOGIN, { method: 'whatsapp' });
+  assert.deepEqual(calls[0], ['whatsapp_verify_failed', { source: 'post_quest', purpose: 'verify_phone', step: 'verify', reason: 'wrong_code', account_status: 'guest' }]);
+  assert.deepEqual(calls[1][1], { method: 'whatsapp', account_status: 'guest' });
+  for (const name of ['whatsapp_prompt_shown', 'whatsapp_prompt_dismissed', 'whatsapp_code_requested', 'whatsapp_verified', 'whatsapp_opt_in', 'whatsapp_opt_out', 'whatsapp_unsubscribe_viewed', 'sign_in_opened'])
+    assert.ok(Object.values(EVENTS).includes(name), name);
+});

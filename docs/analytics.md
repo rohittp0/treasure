@@ -21,8 +21,8 @@ Selections can instead lead to `selection_cancelled`; seekers can open additiona
 | Event | Trigger / useful parameters |
 | --- | --- |
 | `page_view` | One initial page load |
-| `login` | Successful Google popup or redirect login; `method` |
-| `sign_up` | Successfully claimed the first username; `method` |
+| `login` | Successful sign-in; `method=google` (popup or redirect) or `method=whatsapp` (code verified and custom token accepted) |
+| `sign_up` | Successfully claimed the first username; `method=google/whatsapp` from the account's sign-in provider |
 | `logout` | Successful sign-out |
 | `hunt_started` | Solo hunt actually starts or seeker accepts a waiting challenge; `mode`, `role`, `level`, `difficulty`, `round_seconds` where applicable |
 | `country_selected` | A valid country is selected on the map; `method=map`, current hunt stats |
@@ -46,16 +46,29 @@ Selections can instead lead to `selection_cancelled`; seekers can open additiona
 | `atlas_viewed` | An explorer map is opened; `owner=self/other`, `source=home/result/leaderboard/link`, `countries` collected |
 | `atlas_shared` | The explorer shares their map link; `method=native/clipboard`, `countries` collected |
 | `notifications_permission` | Notification permission prompt resolves; `permission` |
+| `sign_in_opened` | The shared sign-in sheet opens; `source=account/multiplayer/claim/leaderboard/atlas/unsubscribe` |
+| `whatsapp_code_requested` | A WhatsApp code was sent; `source`, `purpose=verify_phone/login`, `step=request/resend` |
+| `whatsapp_verified` | A WhatsApp code was accepted; `source`, `purpose` |
+| `whatsapp_verify_failed` | Sending or checking a code failed; `source`, `purpose`, `step=request/verify`, `reason=invalid_number/cooldown/daily_limit/expired/no_code/wrong_code/too_many_attempts/number_taken/account_mismatch/send_failed/other` |
+| `whatsapp_opt_in` | The daily quest alert was switched on; `source=welcome/post_quest/settings/unsubscribe` (the last is "Turn alerts back on" after using the stop link) |
+| `whatsapp_opt_out` | The alert was switched off in the app; `source=settings`, or `source=unsubscribe` when a signed-in explorer opens the stop link (no confirm step) |
+| `whatsapp_prompt_shown` | The post-quest "Never miss a daily quest" prompt opened; `source=post_quest`, `step=verify` (number not yet verified) or `consent` (verified, one tap) |
+| `whatsapp_prompt_dismissed` | That prompt was closed without opting in (it is then snoozed for 7 days); `source=post_quest` |
+| `whatsapp_unsubscribe_viewed` | The template's `?whatsapp=stop` link was opened; `source=link` |
 
 Daily-quest hunts reuse the hunt events with `mode=daily` and add `streak` on `hunt_completed`. Common properties include `account_status=guest/signed_in`, `mode=solo/daily/multiplayer`, `role`, and applicable hunt statistics. Time used includes paid clue, reveal and wrong-guess costs. Legacy friend hunts remain 120 seconds; current hunts use 180 seconds.
 
 Multiplayer `won`/`lost` describes the **seeker**. A timeout is `outcome=lost`, `winner_role=hider`. `personal_win` on `result_viewed` describes the current viewer. Hiders and historical viewers do not emit a second `hunt_completed` conversion. Completed-hunt and result-view events are deduplicated by hunt/viewer within the current page lifecycle. Multiplayer completion waits for acknowledged writes, and action events precede the final completion/result events even when listeners deliver the result before a transaction promise resolves.
 
+### WhatsApp funnel
+
+Sign-in: `sign_in_opened` → `whatsapp_code_requested` (`purpose=login`) → `whatsapp_verified` → `login` (`method=whatsapp`) → `sign_up` for new explorers. Alerts: `whatsapp_prompt_shown` → `whatsapp_code_requested` (`purpose=verify_phone`) → `whatsapp_verified` → `whatsapp_opt_in`, or `whatsapp_prompt_dismissed`. Phone numbers and codes are never event parameters, and `reason` is a fixed code, not the server's message. Opting out by replying STOP to the WhatsApp message happens on the server (the `whatsappInbound` function), so it is not tracked client-side. Opt-outs from the unsubscribe link and from settings are.
+
 ## Reading the funnel in GA4
 
 Use **Explore → Funnel exploration** with steps `hunt_started`, `country_selected`, `guess_submitted`, and `hunt_completed`. Break down by `mode` or `outcome`; use **Path exploration** to see where `clue_opened`, `country_revealed`, and `selection_cancelled` occur between guesses.
 
-Register event-scoped custom dimensions in GA4 for `mode`, `role`, `outcome`, `winner_role`, `personal_win`, `source`, `method`, and `account_status` when using them in saved explorations. Register custom metrics for `time_used`, `clues_opened`, `wrong_guesses`, and `cost_seconds` if desired. This change does not alter GA4 report definitions or mark events as key events. In Meta, custom conversions can use `hunt_completed` filtered by `outcome`, or `challenge_created` for the challenge-creation funnel.
+Register event-scoped custom dimensions in GA4 for `mode`, `role`, `outcome`, `winner_role`, `personal_win`, `source`, `method`, `purpose`, `step`, `reason`, and `account_status` when using them in saved explorations. Register custom metrics for `time_used`, `clues_opened`, `wrong_guesses`, and `cost_seconds` if desired. This change does not alter GA4 report definitions or mark events as key events. In Meta, custom conversions can use `hunt_completed` filtered by `outcome`, or `challenge_created` for the challenge-creation funnel.
 
 Only allowlisted scalar custom properties reach providers. Display names, usernames, email, Firebase UID, country answers, clue text, invite codes, and arbitrary error messages are excluded from custom event payloads. Provider SDKs still collect their normal browser context such as page URL, referrer and campaign attribution.
 

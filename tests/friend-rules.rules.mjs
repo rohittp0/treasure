@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
 import { doc, getDoc, setDoc, updateDoc, writeBatch, serverTimestamp, Timestamp, collection, getDocs, query, where } from 'firebase/firestore';
+import { testWhatsAppRules } from './whatsapp-rules.rules.mjs';
 
 const projectId = 'demo-treasure-friend-tests';
 const environment = await initializeTestEnvironment({
@@ -242,6 +243,16 @@ try {
   await assertSucceeds(getDoc(doc(environment.unauthenticatedContext().firestore(), 'dailyQuests/2026-11')));
   await assertFails(setDoc(doc(seeker, 'dailyQuests/2026-11'), { month: '2026-11', days: [] }));
   await assertFails(setDoc(doc(seeker, 'dailyQuests/2026-12'), { month: '2026-12', days: [] }));
+  // Public docs can never carry a WhatsApp number.
+  const leak = { whatsapp: { phone: '+919020277399' }, phone: '+919020277399' };
+  for (const extra of [{ whatsapp: leak.whatsapp }, { phone: leak.phone }]) {
+    await assertFails(setDoc(doc(seeker, 'atlases/mapfinder'), { ...atlas, ...extra }));
+    await assertFails(setDoc(doc(seeker, monthlyPath), { ...monthly, ...extra }));
+    await assertFails(updateDoc(leader, { ...extra, updatedAt: serverTimestamp() }));
+    await assertFails(setDoc(doc(seeker, 'profiles/seeker'), { username: 'mapfinder', createdAt: serverTimestamp(), ...extra }));
+    await assertFails(updateDoc(doc(seeker, 'usernames/mapfinder'), extra));
+  }
+  await testWhatsAppRules(environment);
   console.log('Daily quest rules: one attempt per day, monthly board and explorer maps passed.');
   console.log('Friend hunt rules: username claims, direct challenges, private answer, join, time costs, guesses, reveal, and finish passed.');
 } finally {

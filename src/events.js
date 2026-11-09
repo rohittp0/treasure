@@ -12,13 +12,17 @@ export const EVENTS = Object.freeze({
   INVITE_SHARED: 'invite_shared', RESULT_VIEWED: 'result_viewed', REMATCH_STARTED: 'rematch_started',
   POSTER_EXPORTED: 'poster_exported', LOGS_OPENED: 'logs_opened', HISTORY_OPENED: 'history_result_opened',
   LEADERBOARD_VIEWED: 'leaderboard_viewed', NOTIFICATIONS_PERMISSION: 'notifications_permission',
-  ATLAS_VIEWED: 'atlas_viewed', ATLAS_SHARED: 'atlas_shared',
+  ATLAS_VIEWED: 'atlas_viewed', ATLAS_SHARED: 'atlas_shared', SIGN_IN_OPENED: 'sign_in_opened',
+  WHATSAPP_PROMPT_SHOWN: 'whatsapp_prompt_shown', WHATSAPP_PROMPT_DISMISSED: 'whatsapp_prompt_dismissed',
+  WHATSAPP_CODE_REQUESTED: 'whatsapp_code_requested', WHATSAPP_VERIFIED: 'whatsapp_verified',
+  WHATSAPP_VERIFY_FAILED: 'whatsapp_verify_failed', WHATSAPP_OPT_IN: 'whatsapp_opt_in',
+  WHATSAPP_OPT_OUT: 'whatsapp_opt_out', WHATSAPP_UNSUBSCRIBE_VIEWED: 'whatsapp_unsubscribe_viewed',
 });
 const eventNames = new Set(Object.values(EVENTS));
 const allowedParameters = new Set(['mode', 'role', 'level', 'difficulty', 'round_seconds', 'time_used',
   'time_remaining', 'clues_opened', 'wrong_guesses', 'outcome', 'winner_role', 'personal_win', 'source',
   'method', 'targeted', 'revealed', 'clue_number', 'cost_seconds', 'permission', 'account_status',
-  'board', 'owner', 'streak', 'countries']);
+  'board', 'owner', 'streak', 'countries', 'purpose', 'step', 'reason']);
 const metaStandardEvents = { page_view: 'PageView', sign_up: 'CompleteRegistration' };
 
 export function cleanEventParameters(parameters = {}) {

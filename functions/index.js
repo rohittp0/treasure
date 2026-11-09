@@ -154,3 +154,67 @@ exports.notifyDailyQuest = onSchedule({
   await db.doc(`dailyNotifications/${today}`).set({ recipients: tokensByUser.size, sent, finishedAt: new Date() }, { merge: true });
   console.log(`Daily quest ${today}: ${sent} of ${deliveries.length} notifications sent to ${tokensByUser.size} explorers.`);
 });
+
+// ---------------------------------------------------------------------------
+// WhatsApp: one-time codes, sign-in, the daily quest alert and Twilio webhooks.
+// See docs/whatsapp-daily-quest.md. Logic lives in ./whatsapp so tests can inject a mocked Twilio client.
+const { onCall, onRequest } = require('firebase-functions/v2/https');
+const whatsappConfig = require('./whatsapp/config');
+const { createOtpHandlers } = require('./whatsapp/otp');
+const { sendDailyWhatsApp } = require('./whatsapp/send');
+const { createWebhookHandlers } = require('./whatsapp/webhooks');
+
+const twilioSecrets = [whatsappConfig.twilioAccountSid, whatsappConfig.twilioAuthToken];
+const otpOptions = {
+  region: whatsappConfig.REGION,
+  enforceAppCheck: true,
+  secrets: [...twilioSecrets, whatsappConfig.otpHmacKey],
+};
+
+function otpHandlers() {
+  return createOtpHandlers({
+    db: getFirestore(),
+    auth: getAuth(),
+    twilio: whatsappConfig.twilioClient(),
+    hmacKey: whatsappConfig.otpHmacKey.value(),
+    params: whatsappConfig.whatsappParams(),
+  });
+}
+
+function requester(request) {
+  const forwarded = request.rawRequest?.get?.('x-forwarded-for')?.split(',')[0]?.trim();
+  return { uid: request.auth?.uid || null, ip: forwarded || request.rawRequest?.ip || null };
+}
+
+exports.requestWhatsAppOtp = onCall(otpOptions, request => otpHandlers().requestOtp(request.data, requester(request)));
+exports.verifyWhatsAppOtp = onCall(otpOptions, request => otpHandlers().verifyOtp(request.data, requester(request)));
+
+// Every 4 hours; each explorer gets the alert in the run that falls in their local 08:00–12:00.
+exports.sendDailyQuestWhatsApp = onSchedule({
+  schedule: '5 */4 * * *',
+  timeZone: 'Etc/UTC',
+  region: whatsappConfig.REGION,
+  retryCount: 1,
+  timeoutSeconds: 540, // About 30 sends a second at 10 in flight; room for a few thousand explorers per run.
+  secrets: twilioSecrets,
+}, async () => {
+  await sendDailyWhatsApp({
+    db: getFirestore(),
+    twilio: whatsappConfig.twilioClient(),
+    params: whatsappConfig.whatsappParams(),
+    statusCallback: whatsappConfig.functionUrl('whatsappStatus'),
+  });
+});
+
+function webhookHandlers() {
+  return createWebhookHandlers({
+    db: getFirestore(),
+    validateRequest: require('twilio').validateRequest,
+    authToken: whatsappConfig.twilioAuthToken.value(),
+    urls: { inbound: whatsappConfig.functionUrl('whatsappInbound'), status: whatsappConfig.functionUrl('whatsappStatus') },
+  });
+}
+
+const webhookOptions = { region: whatsappConfig.REGION, invoker: 'public', secrets: [whatsappConfig.twilioAuthToken] };
+exports.whatsappInbound = onRequest(webhookOptions, (request, response) => webhookHandlers().inbound(request, response));
+exports.whatsappStatus = onRequest(webhookOptions, (request, response) => webhookHandlers().status(request, response));

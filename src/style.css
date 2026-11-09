@@ -347,3 +347,53 @@ button.leaderboard-row:hover{background:#f4e7cb}
 }
 @media(max-width:700px){.atlas-screen.atlas-empty p#atlas-copy{display:block;margin:4px 0 8px}}
 .atlas-empty .atlas-legend,.atlas-empty .atlas-countries{display:none}
+
+/* WhatsApp daily quest alert: sign-in sheet, number check, consent, prompt and settings. */
+.sign-in-options{display:grid;gap:9px}
+.sign-in-options .primary-button,.sign-in-options .secondary-button{width:100%;margin:0}
+.sign-in-whatsapp{min-height:52px;background:#f9efda}
+.sign-in-dialog #sign-in-back{margin-top:6px}
+.wa-section{margin:16px 0 4px;padding:14px;border:1px solid #c5b08d;border-radius:6px;background:#f7ecd3}
+.wa-section h3{margin:0 0 4px;font:600 17px/1.3 Fraunces,serif;color:#17383a}
+.account-dialog .wa-caption,.wa-caption{margin:0 0 10px;font-size:12px;line-height:1.5;color:#59716d}
+.wa-verify label:not(.wa-consent){display:block;margin:0 0 7px;color:#526d66;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase}
+.wa-phone-row{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.4fr);gap:7px}
+.wa-verify select,.wa-verify input[type=tel],.wa-verify input[type=text]{width:100%;min-height:46px;border:1px solid #bba780;background:#fff9e8;color:#17383a;border-radius:5px;padding:11px 12px;font:14px DM Sans,sans-serif;outline:none}
+.wa-verify select{padding-right:6px;text-overflow:ellipsis}
+.wa-verify select:focus,.wa-verify input:focus{border-color:#c87948;box-shadow:0 0 0 3px #c879482e}
+.wa-verify .wa-code{font:600 24px/1 Fraunces,serif;letter-spacing:10px;text-align:center}
+.account-dialog .wa-consent{display:flex;gap:10px;align-items:flex-start;margin:12px 0 2px;color:#36504f;font-size:12px;line-height:1.45;cursor:pointer;text-transform:none;letter-spacing:0;font-weight:500}
+.account-dialog .wa-consent input{flex:none;width:20px;height:20px;min-height:0;margin:1px 0 0;padding:0;accent-color:#c87948}
+.wa-verify .secondary-button,.wa-verify .primary-button,.welcome-dialog .wa-verify .secondary-button{width:100%;margin:12px 0 0}
+.wa-verify .primary-button{min-height:50px}
+.account-dialog .wa-sent{margin:0 0 12px;font-size:12px;line-height:1.5;color:#36504f}
+.wa-code-actions{display:flex;justify-content:space-between;gap:8px;margin-top:4px}
+.wa-code-actions .text-button{padding-inline:4px}
+.wa-verify .wa-status{min-height:0;margin:8px 0 0}
+.wa-verify .wa-status[data-state="pending"]{color:#59716d!important;font-weight:500}
+.whatsapp-dialog .wa-lead{margin-bottom:16px}
+.whatsapp-dialog .primary-button{width:100%;margin-top:12px}
+.whatsapp-dialog .wa-consent{margin-top:0}
+.whatsapp-dialog .wa-caption{margin:8px 0 0}
+.wa-later{display:flex;margin:10px auto 0}
+.account-whatsapp{margin:4px 0 18px}
+.account-whatsapp .wa-verify{margin-top:4px}
+.wa-toggle{display:flex;align-items:center;gap:12px;min-height:48px;margin:8px 0 4px;cursor:pointer}
+.wa-toggle input{position:absolute;opacity:0;width:1px;height:1px}
+.wa-toggle-track{flex:none;position:relative;width:46px;height:26px;border-radius:999px;background:#c9b896;transition:background .18s}
+.wa-toggle-track:after{content:'';position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff9e8;box-shadow:0 1px 3px #3b2a1240;transition:transform .18s}
+.wa-toggle input:checked+.wa-toggle-track{background:#3f7d6a}
+.wa-toggle input:checked+.wa-toggle-track:after{transform:translateX(20px)}
+.wa-toggle input:focus-visible+.wa-toggle-track{outline:3px solid #f1bc66;outline-offset:3px}
+.wa-toggle input:disabled+.wa-toggle-track{opacity:.5}
+.wa-toggle-copy strong{display:block;font-size:14px;color:#17383a}
+.wa-toggle-copy small{color:#7a7f6c;font-size:12px;letter-spacing:.5px}
+.account-whatsapp .friend-status{min-height:0;margin:4px 0 0}
+.account-whatsapp p.log-caption{margin:0 0 8px}
+@media(max-width:700px){
+  .wa-verify select,.wa-verify input[type=tel],.wa-verify input[type=text]{font-size:16px}
+  .wa-phone-row{grid-template-columns:minmax(0,1fr) minmax(0,1.5fr)}
+}
+@media(max-width:340px){.wa-phone-row{grid-template-columns:1fr}}
+.whatsapp-dialog .wa-section{margin:4px 0 2px}
+.whatsapp-dialog .wa-section .secondary-button{width:100%;margin:12px 0 0}

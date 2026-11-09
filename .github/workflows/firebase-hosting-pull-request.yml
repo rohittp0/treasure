@@ -22,8 +22,12 @@ jobs:
           distribution: temurin
           java-version: '21'
       - run: npm ci
+      - run: npm ci
+        working-directory: functions
       - name: Firestore rules tests (emulator)
         run: npx --yes firebase-tools@14 emulators:exec --only firestore --project demo-treasure-friend-tests 'node tests/friend-rules.rules.mjs'
+      - name: WhatsApp function tests (emulator, Twilio mocked)
+        run: npx --yes firebase-tools@14 emulators:exec --only firestore --project demo-treasure-friend-tests 'node --test tests/*.emulator.mjs'
 
   build_and_preview:
     if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
@@ -35,6 +39,8 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - run: npm ci
+        working-directory: functions
       - run: npm test
       - run: npm run build
       - uses: FirebaseExtended/action-hosting-deploy@v0

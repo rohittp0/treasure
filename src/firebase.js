@@ -1,7 +1,8 @@
 import { initializeTracking, trackEvent, EVENTS } from './events.js';
 import { friendHuntHistory } from './friend-result.js';
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult, signOut } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, signInWithCustomToken } from 'firebase/auth';
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
 import { getFirestore, collection, doc, getDoc, getDocs, query, setDoc, where, orderBy, limit, runTransaction, serverTimestamp, onSnapshot, writeBatch, updateDoc, deleteDoc } from 'firebase/firestore';
 import messagingWorkerUrl from './firebase-messaging-sw.js?worker&url';
 import { scoreSoloHunts } from './leaderboard.js';
@@ -19,6 +20,13 @@ const app = initializeApp({
 });
 
 initializeTracking(app);
+
+// App Check guards the WhatsApp code callables against SMS/WhatsApp pumping. The site key is public.
+const recaptchaSiteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY || '6LcQIBguAAAAAFm4o2o2fI6UXEoJn6WSKQYkXF0z';
+if (import.meta.env.DEV && ['localhost', '127.0.0.1'].includes(location.hostname)) self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+try {
+  initializeAppCheck(app, { provider: new ReCaptchaEnterpriseProvider(recaptchaSiteKey), isTokenAutoRefreshEnabled: true });
+} catch (error) { console.warn('App Check unavailable:', error); }
 
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -57,6 +65,58 @@ export async function logout() {
   trackEvent(EVENTS.LOGOUT);
 }
 
+// Google accounts carry a google.com provider; WhatsApp accounts sign in with a server-made custom token.
+export const signInMethod = player => player?.providerData?.some(item => item.providerId === 'google.com') ? 'google' : 'whatsapp';
+
+let callables = null;
+async function callable(name, data) {
+  callables ||= import('firebase/functions').then(({ getFunctions, httpsCallable }) => {
+    const functions = getFunctions(app, 'us-central1');
+    return { requestWhatsAppOtp: httpsCallable(functions, 'requestWhatsAppOtp'), verifyWhatsAppOtp: httpsCallable(functions, 'verifyWhatsAppOtp') };
+  });
+  return (await (await callables)[name](data)).data;
+}
+
+// purpose: 'verify_phone' (signed in) or 'login'. Resolves to { ok, resendAfter }.
+export const requestWhatsAppOtp = (phone, purpose) => callable('requestWhatsAppOtp', { phone, purpose });
+
+// verify_phone resolves to { ok, phone }; login signs in and resolves to { isNew }.
+export async function verifyWhatsAppOtp(phone, purpose, code) {
+  const result = await callable('verifyWhatsAppOtp', { phone, purpose, code });
+  if (purpose !== 'login') return result;
+  await signInWithCustomToken(auth, result.customToken);
+  trackEvent(EVENTS.LOGIN, { method: 'whatsapp' });
+  return { isNew: !!result.isNew };
+}
+
+const userRef = uid => doc(db, 'users', uid);
+
+// The owner's private WhatsApp state: { whatsapp, snoozedAt (ms) }.
+export async function loadWhatsApp(player) {
+  const data = (await getDoc(userRef(player.uid))).data() || {};
+  return { whatsapp: data.whatsapp || null, snoozedAt: data.whatsappPromptSnoozedAt?.toMillis?.() ?? null };
+}
+
+// Turning the alert on needs a verified number; rules check optInAt against the server time.
+export async function setWhatsAppOptIn(player, on, timeZone = '') {
+  if (on) {
+    await updateDoc(userRef(player.uid), {
+      'whatsapp.optIn': true, 'whatsapp.optInAt': serverTimestamp(), ...(timeZone ? { 'whatsapp.timeZone': timeZone } : {}),
+    });
+  } else {
+    await updateDoc(userRef(player.uid), { 'whatsapp.optIn': false, 'whatsapp.optOutAt': serverTimestamp() });
+  }
+}
+
+// Keeps the send window in step with the explorer's current time zone while the alert is on.
+export async function setWhatsAppTimeZone(player, timeZone) {
+  await updateDoc(userRef(player.uid), { 'whatsapp.timeZone': timeZone });
+}
+
+export async function snoozeWhatsAppPrompt(player) {
+  await setDoc(userRef(player.uid), { whatsappPromptSnoozedAt: serverTimestamp() }, { merge: true });
+}
+
 const usernameRef = username => doc(db, 'usernames', username);
 const profileRef = uid => doc(db, 'profiles', uid);
 
@@ -77,7 +137,7 @@ export async function claimUsername(user, username) {
     if (error.code === 'permission-denied' || error.code === 'already-exists') throw new Error('That username is taken. Try another.');
     throw error;
   }
-  trackEvent(EVENTS.SIGN_UP, { method: 'google' });
+  trackEvent(EVENTS.SIGN_UP, { method: signInMethod(user) });
   return handle;
 }
 

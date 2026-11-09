@@ -73,3 +73,6 @@ output/
 .dataconnect
 
 .idea/
+
+# Functions emulator secrets
+functions/.secret.local

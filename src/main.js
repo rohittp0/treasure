@@ -9,6 +9,7 @@ import bundledDailySchedules from '../data/daily-quests.json';
 import { choosePuzzle, createGame, difficultyForLevel, CLUE_COST, REVEAL_COST } from './game.js';
 import { loadFriendHunts, watchUser, login, logout, loadPuzzles, saveHunt, loadHunts, loadLeaderboard, enterLeaderboard, loadProfile, claimUsername, isUsernameAvailable, watchChallenges, markChallengeRead, registerChallengePush, loadDailySchedule, loadDailyRecords, startDailyRecord, finishDailyRecord, loadMonthlyLeaderboard, enterMonthlyLeaderboard, saveAtlas, loadAtlas, loadWhatsApp, setWhatsAppOptIn, setWhatsAppTimeZone, snoozeWhatsAppPrompt } from './firebase.js';
 import { createWhatsAppVerify } from './whatsapp-verify.js';
+import { inAppBrowser, platform, handoffUrl, chromeIntentUrl, googleErrorReason } from './inapp.js';
 import { CONSENT_COPY, browserTimeZone, isVerified, maskPhone, whatsappPromptEligible } from './whatsapp.js';
 import { dailyLinkSource, dayKey, monthKey, daysInMonth, msUntilNextDay, dailyQuest, validDailySchedule, currentStreak, scoreMonth, atlasFromRecords, mergeDailyRecords, validDailyRecord } from './daily.js';
 import { createFriendController } from './friend-controller.js';
@@ -78,6 +79,11 @@ let profileReadyFor = '';
 let pendingDaily = new URLSearchParams(location.search).has('daily');
 // Read before the URL is cleaned: which alert (WhatsApp, push, …) brought the explorer to today's quest.
 let dailyArrivalSource = dailyLinkSource(location.search);
+// In-app browsers (Instagram, Facebook, WhatsApp…) can't finish Google sign-in; their sheet offers a link out instead.
+// That link lands here with ?from=inapp&signin=google, and the sheet opens once auth is ready.
+const IN_APP = inAppBrowser(navigator.userAgent);
+const IN_APP_PLATFORM = platform(navigator.userAgent);
+let pendingGoogleSignIn = new URLSearchParams(location.search).get('signin') === 'google';
 // Daily lists by month; the bundled copy is replaced by Firestore's once it loads.
 const dailySchedules = { ...bundledDailySchedules };
 let dailyScheduleMonth = '';
@@ -366,6 +372,7 @@ const SIGN_IN_COPY = {
   multiplayer: ['Sign in to <em>play together.</em>', 'Sign in to hide a treasure or join a friend’s hunt.'],
   atlas: ['Share your <em>map.</em>', 'Sign in to keep the countries you claim and share your explorer map.'],
   unsubscribe: ['Manage WhatsApp <em>alerts.</em>', 'Sign in with the WhatsApp number that gets the daily quest alert, or the Google account it belongs to.'],
+  open_in_browser: ['Continue with <em>Google.</em>', 'You’re in your browser now. Continue with Google below, or use WhatsApp.'],
 };
 
 function openSignIn(source, { title, copy, resumeResult = false } = {}) {
@@ -385,9 +392,35 @@ function openSignIn(source, { title, copy, resumeResult = false } = {}) {
       closeSignIn();
     },
   });
+  renderInAppSignIn();
   trackEvent(EVENTS.SIGN_IN_OPENED, { source });
   if (!$('#sign-in-dialog').open) $('#sign-in-dialog').showModal();
   signInVerify.focus();
+}
+
+// In an in-app browser Google is hidden: WhatsApp works there, and a small link (tapped, never automatic)
+// reopens the page in the real browser for Google. A guest's unclaimed find lives only in this browser's
+// storage, so while there is one the link is left out and WhatsApp is the way to keep it.
+function renderInAppSignIn() {
+  const inApp = !!IN_APP;
+  $('#sign-in-google').classList.toggle('hidden', inApp);
+  $('#sign-in-dialog .sign-in-divider').classList.toggle('hidden', inApp);
+  $('#sign-in-inapp').classList.toggle('hidden', !inApp);
+  $('#sign-in-inapp-url').classList.add('hidden');
+  if (!inApp) return;
+  const keepHere = !!signInContext?.resumeResult || guestFindsHere();
+  const todayFound = lastResult?.mode === 'daily' && lastResult.status === 'won';
+  $('#sign-in-open-browser').classList.toggle('hidden', keepHere);
+  $('#sign-in-open-browser').textContent = IN_APP_PLATFORM === 'android' ? 'Prefer Google? Open in Chrome' : 'Prefer Google? Open in your browser';
+  $('#sign-in-inapp-note').textContent = keepHere ? `Sign in with WhatsApp here to keep ${todayFound ? "today's find" : 'your progress'}.` : '';
+  $('#sign-in-inapp-note').classList.toggle('hidden', !keepHere);
+}
+
+// Guest wins not yet on an account: this month's daily finds (local storage) and solo wins awaiting the board.
+function guestFindsHere() {
+  if (user) return false;
+  const month = monthKey();
+  return pendingGuestHunts().length > 0 || dailyRecords.some(record => record.status === 'won' && record.day?.startsWith(month));
 }
 
 async function optInAfterSignIn(player) {
@@ -1012,13 +1045,19 @@ function rememberPendingGuestHunt(hunt) {
 
 function renderLeaderboardGate() {
   if (!lastResult) return;
+  // An unclaimed daily win has one obvious next step: the claim button moves up under the stats
+  // and the other actions (leaderboard, another hunt) turn quiet until it's done.
+  const claimPending = lastResult.mode === 'daily' && lastResult.status === 'won' && !(user && username);
+  elements.result.classList.toggle('claim-pending', claimPending);
+  if (claimPending) $('#result-stats').after($('#result-atlas-button'));
+  else $('#result-fact').after($('#result-atlas-button'));
   if (lastResult.mode === 'daily') {
     const dailyWon = lastResult.status === 'won';
     const claimed = !!user && !!username;
     const country = escapeHTML(lastResult.puzzle.country);
     // A guest's win is claimed with the main button, so the box below only covers losses.
     $('#result-atlas-button').innerHTML = claimed || !dailyWon ? 'Open my map <span>↗</span>'
-      : `Create a username to claim ${country} <span>↗</span>`;
+      : user ? `Choose a username to claim ${country} <span>↗</span>` : `Sign in to claim ${country} <span>↗</span>`;
     elements.leaderboardSignIn.classList.toggle('hidden', claimed || dailyWon);
     elements.leaderboardSignIn.innerHTML = user ? 'Choose your username <span>↗</span>'
       : dailyWon ? `Sign in to claim ${escapeHTML(lastResult.puzzle.country)} <span>↗</span>` : 'Sign in to keep your streak <span>↗</span>';
@@ -1654,13 +1693,39 @@ $('#sign-in-google').addEventListener('click', async () => {
     closeSignIn();
   } catch (error) {
     sessionStorage.removeItem(RESUME_RESULT_KEY);
-    if (!['auth/popup-closed-by-user', 'auth/cancelled-popup-request'].includes(error.code))
-      $('#sign-in-status').textContent = 'Sign-in could not start. Please try again.';
+    // Never silent: a closed popup is the usual in-app browser failure, so point at WhatsApp above.
+    const reason = googleErrorReason(error);
+    trackEvent(EVENTS.LOGIN_FAILED, { method: 'google', reason });
+    $('#sign-in-status').textContent = ['popup_closed', 'cancelled'].includes(reason)
+      ? 'Google sign-in was closed before it finished. Try again, or use WhatsApp above.'
+      : 'Sign-in could not start. Please try again.';
     console.error(error);
   } finally {
     $('#sign-in-google').disabled = false;
   }
 });
+// Only on a tap: Android opens Chrome by intent; elsewhere the link is copied for the app's "Open in browser".
+$('#sign-in-open-browser').addEventListener('click', async () => {
+  const android = IN_APP_PLATFORM === 'android';
+  trackEvent(EVENTS.OPEN_IN_BROWSER, { method: android ? 'intent' : 'copy', source: 'sign_in', step: 'tap', in_app: IN_APP });
+  if (android) { location.href = chromeIntentUrl(location.href); return; }
+  const url = handoffUrl(location.href);
+  const note = $('#sign-in-inapp-note');
+  const field = $('#sign-in-inapp-url');
+  try {
+    await navigator.clipboard.writeText(url);
+    note.textContent = 'Link copied. Tap ··· (or the share icon) and choose Open in browser, or paste it into Safari.';
+    field.classList.add('hidden');
+  } catch {
+    note.textContent = 'Copy this link, then open it in Safari or your browser.';
+    field.value = url;
+    field.classList.remove('hidden');
+    field.focus();
+    field.select();
+  }
+  note.classList.remove('hidden');
+});
+$('#sign-in-inapp-url').addEventListener('focus', event => event.target.select());
 $('#close-sign-in').addEventListener('click', closeSignIn);
 $('#sign-in-dialog').addEventListener('close', () => {
   signInVerify?.destroy();
@@ -1732,6 +1797,17 @@ renderDailyHome();
 loadDailyList();
 loadMap();
 loadPuzzleSet();
+// The in-app browser's link out lands here: count it, then drop from/signin and keep the rest (utm_* etc.).
+{
+  const params = new URLSearchParams(location.search);
+  if (params.get('from') === 'inapp') trackEvent(EVENTS.OPEN_IN_BROWSER, { source: 'sign_in', step: 'landed', ...(IN_APP && { in_app: IN_APP }) });
+  if (params.has('from') || params.has('signin')) {
+    params.delete('from');
+    params.delete('signin');
+    const search = params.toString();
+    history.replaceState({}, '', `${location.pathname}${search ? `?${search}` : ''}${location.hash}`);
+  }
+}
 {
   const sharedAtlas = new URLSearchParams(location.search).get('atlas');
   if (sharedAtlas && !new URLSearchParams(location.search).get('hunt')) openAtlas(sharedAtlas, 'link');
@@ -1769,6 +1845,8 @@ watchUser(async nextUser => {
   whatsappState = null;
   hideResultAlert();
   if (!nextUser && pendingUnsubscribe) openSignIn('unsubscribe');
+  else if (!nextUser && pendingGoogleSignIn) openSignIn('open_in_browser');
+  pendingGoogleSignIn = false;
   elements.accountButton.innerHTML = nextUser ? `<span class="account-avatar">${escapeHTML((nextUser.displayName || 'E')[0])}</span><span class="account-label">My logs</span><span id="account-challenge-count" class="account-alert-count hidden">0</span>` : 'Sign in <span aria-hidden="true">↗</span>';
   elements.accountButton.setAttribute('aria-label', nextUser ? 'Open explorer log' : 'Sign in');
   $('#multiplayer-hint').textContent = nextUser ? 'Hide or join a hunt' : 'Sign in required';

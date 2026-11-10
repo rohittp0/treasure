@@ -1,5 +1,6 @@
 import { initializeTracking, trackEvent, EVENTS } from './events.js';
 import { friendHuntHistory } from './friend-result.js';
+import { googleErrorReason } from './inapp.js';
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, signInWithCustomToken } from 'firebase/auth';
 import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
@@ -35,7 +36,10 @@ const publicWebPushKey = 'BOzlGqFf6AfP-pq_3HdJmFMBecQdMdDi74U44jBl3YNgXRdaVLBbst
 let pushRegistration = null;
 
 export function watchUser(callback) {
-  getRedirectResult(auth).then(result => { if (result?.user) trackEvent(EVENTS.LOGIN, { method: 'google' }); }).catch(error => console.warn('Sign-in redirect failed:', error));
+  getRedirectResult(auth).then(result => { if (result?.user) trackEvent(EVENTS.LOGIN, { method: 'google' }); }).catch(error => {
+    trackEvent(EVENTS.LOGIN_FAILED, { method: 'google', reason: googleErrorReason(error) });
+    console.warn('Sign-in redirect failed:', error);
+  });
   return onAuthStateChanged(auth, callback);
 }
 

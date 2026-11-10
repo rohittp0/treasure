@@ -4,6 +4,7 @@ export const POSTHOG_KEY = 'phc_mMjEnzpqWruQeWnybSbFzbFZkDRG5Ct5HcesQzZJEUPa';
 export const POSTHOG_HOST = 'https://us.i.posthog.com';
 export const EVENTS = Object.freeze({
   PAGE_VIEW: 'page_view', LOGIN: 'login', SIGN_UP: 'sign_up', LOGOUT: 'logout',
+  LOGIN_FAILED: 'login_failed', OPEN_IN_BROWSER: 'open_in_browser',
   HUNT_STARTED: 'hunt_started', HUNT_COMPLETED: 'hunt_completed', HUNT_ABANDONED: 'hunt_abandoned',
   COUNTRY_SELECTED: 'country_selected', SELECTION_CANCELLED: 'selection_cancelled',
   CLUE_OPENED: 'clue_opened', COUNTRY_REVEALED: 'country_revealed', GUESS_SUBMITTED: 'guess_submitted',
@@ -20,7 +21,7 @@ export const EVENTS = Object.freeze({
   WHATSAPP_CODE_PASTED: 'whatsapp_code_pasted', DAILY_LINK_OPENED: 'daily_link_opened',
 });
 const eventNames = new Set(Object.values(EVENTS));
-const allowedParameters = new Set(['mode', 'role', 'level', 'difficulty', 'round_seconds', 'time_used',
+const allowedParameters = new Set(['in_app', 'mode', 'role', 'level', 'difficulty', 'round_seconds', 'time_used',
   'time_remaining', 'clues_opened', 'wrong_guesses', 'outcome', 'winner_role', 'personal_win', 'source',
   'method', 'targeted', 'revealed', 'clue_number', 'cost_seconds', 'permission', 'account_status',
   'board', 'owner', 'streak', 'countries', 'purpose', 'step', 'reason']);

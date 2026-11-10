@@ -159,6 +159,12 @@
 .leaderboard-entry-button:hover{background:#2b5859}
 .leaderboard-entry-button span{font-size:17px;font-weight:400}
 .result-leaderboard .leaderboard-sign-in{margin-top:8px}
+/* An unclaimed daily win: the claim is the one primary action; the leaderboard and another hunt step back. */
+.result-screen.claim-pending #result-atlas-button{min-height:60px;margin:0 0 2px;font-size:15px;box-shadow:0 9px 22px #794b2e47}
+.result-screen.claim-pending .leaderboard-entry-button{background:transparent;color:#1e4345;border:1px solid #1e434566;font-size:11px}
+.result-screen.claim-pending .leaderboard-entry-button:hover{background:#ead8b4}
+.result-screen.claim-pending .result-replay{justify-content:center;gap:6px;min-height:44px;border-color:transparent;color:#70817c;font-weight:600;text-decoration:underline;text-underline-offset:3px}
+.result-screen.claim-pending .result-replay:hover{background:transparent;color:#ad7047}
 .leaderboard-screen{left:50%;top:50%;transform:translate(-50%,-50%);width:min(540px,calc(100vw - 48px));max-height:calc(100dvh - 105px)}
 .leaderboard-screen .leaderboard{margin:24px 0 18px}
 .leaderboard-screen .leaderboard-row{padding:12px 0}
@@ -353,6 +359,13 @@ button.leaderboard-row:hover{background:#f4e7cb}
 .sign-in-divider{display:flex;align-items:center;gap:10px;margin:14px 0 10px;color:#8a8e7b;font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase}
 .sign-in-divider:before,.sign-in-divider:after{content:'';flex:1;border-top:1px solid #ccb993}
 .sign-in-dialog .sign-in-google{width:100%;margin:0;background:#f9efda}
+/* In-app browsers: Google is hidden; a quiet link (or caption) sits in its place. */
+.sign-in-inapp{margin:10px 0 0;text-align:center}
+.sign-in-inapp .text-button{font-size:12px}
+.sign-in-inapp .wa-caption{margin:6px 0 0}
+.sign-in-inapp-url{width:100%;min-height:44px;margin:8px 0 0;border:1px solid #bba780;background:#fff9e8;color:#17383a;border-radius:5px;padding:10px 12px;font:13px DM Sans,sans-serif;outline:none;user-select:all;-webkit-user-select:all}
+.sign-in-inapp-url:focus{border-color:#c87948;box-shadow:0 0 0 3px #c879482e}
+@media(max-width:700px){.sign-in-inapp-url{font-size:16px}}
 .wa-code-shortcuts{display:grid;grid-template-columns:repeat(auto-fit,minmax(0,1fr));gap:7px;margin:0 0 12px}
 .wa-verify .wa-code-shortcuts .secondary-button{display:flex;align-items:center;justify-content:center;width:100%;min-height:44px;margin:0;text-decoration:none}
 .wa-section{margin:16px 0 4px;padding:14px;border:1px solid #c5b08d;border-radius:6px;background:#f7ecd3}

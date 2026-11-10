@@ -72,6 +72,15 @@ test('solo telemetry uses charged time and preserves legacy duration without the
   assert.equal(params.country, undefined); assert.equal(params.puzzle, undefined);
 });
 
+test('Google sign-in failures and the in-app handoff send fixed codes only', () => {
+  const calls = [];
+  const tracker = createEventTracker({ google: (...args) => calls.push(args) });
+  tracker.track(EVENTS.LOGIN_FAILED, { method: 'google', reason: 'popup_closed', message: 'Firebase: Error (auth/popup-closed-by-user).', code: 'auth/popup-closed-by-user' });
+  tracker.track(EVENTS.OPEN_IN_BROWSER, { method: 'intent', source: 'sign_in', step: 'tap', in_app: 'instagram', href: 'https://hunch.rohittp.com/?from=inapp' });
+  assert.deepEqual(calls[0], ['login_failed', { method: 'google', reason: 'popup_closed', account_status: 'guest' }]);
+  assert.deepEqual(calls[1], ['open_in_browser', { method: 'intent', source: 'sign_in', step: 'tap', in_app: 'instagram', account_status: 'guest' }]);
+});
+
 test('WhatsApp events keep their funnel parameters but never the number or code', () => {
   const calls = [];
   const tracker = createEventTracker({ google: (...args) => calls.push(args) });

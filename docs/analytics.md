@@ -22,6 +22,8 @@ Selections can instead lead to `selection_cancelled`; seekers can open additiona
 | --- | --- |
 | `page_view` | One initial page load |
 | `login` | Successful sign-in; `method=google` (popup or redirect) or `method=whatsapp` (code verified and custom token accepted) |
+| `login_failed` | Every failed Google sign-in, from the popup or a returning redirect; `method=google`, `reason=popup_closed/popup_blocked/cancelled/network/app_check/unsupported/other` (a fixed code mapped from the Firebase error code, never its message). WhatsApp failures use `whatsapp_verify_failed` |
+| `open_in_browser` | The in-app browser handoff for Google sign-in. `step=tap`: the "Prefer Google?" link in the sign-in sheet was tapped; `source=sign_in`, `method=intent` (Android, opens Chrome) or `copy` (iOS/other, link copied or shown), `in_app=instagram/facebook/messenger/whatsapp/line/other_webview`. `step=landed`: a page opened with `?from=inapp` from that link; `source=sign_in`, plus `in_app` only if it landed in an in-app browser again |
 | `sign_up` | Successfully claimed the first username; `method=google/whatsapp` from the account's sign-in provider |
 | `logout` | Successful sign-out |
 | `hunt_started` | Solo hunt actually starts or seeker accepts a waiting challenge; `mode`, `role`, `level`, `difficulty`, `round_seconds` where applicable |
@@ -46,7 +48,7 @@ Selections can instead lead to `selection_cancelled`; seekers can open additiona
 | `atlas_viewed` | An explorer map is opened; `owner=self/other`, `source=home/result/leaderboard/link`, `countries` collected |
 | `atlas_shared` | The explorer shares their map link; `method=native/clipboard`, `countries` collected |
 | `notifications_permission` | Notification permission prompt resolves; `permission` |
-| `sign_in_opened` | The shared sign-in sheet opens; `source=account/multiplayer/claim/leaderboard/atlas/unsubscribe` |
+| `sign_in_opened` | The shared sign-in sheet opens; `source=account/multiplayer/claim/leaderboard/atlas/unsubscribe/open_in_browser` (the last when the handoff link lands with `signin=google`) |
 | `whatsapp_code_requested` | A WhatsApp code was sent; `source`, `purpose=verify_phone/login`, `step=request/resend` |
 | `whatsapp_verified` | A WhatsApp code was accepted; `source`, `purpose` |
 | `whatsapp_code_pasted` | A 6-digit code was taken from the clipboard after the explorer tapped Copy code in WhatsApp; `source`, `purpose`, `method=auto` (read on returning to the tab) or `button` (Paste code). The code itself is never sent |
@@ -65,11 +67,15 @@ Multiplayer `won`/`lost` describes the **seeker**. A timeout is `outcome=lost`, 
 
 Sign-in: `sign_in_opened` → `whatsapp_code_requested` (`purpose=login`) → `whatsapp_code_pasted` (optional) → `whatsapp_verified` → `login` (`method=whatsapp`) → `whatsapp_opt_in` (`source=sign_in`, if the consent box was ticked) → `sign_up` for new explorers. Alerts: `whatsapp_prompt_shown` → `whatsapp_code_requested` (`purpose=verify_phone`) → `whatsapp_verified` → `whatsapp_opt_in`, or `whatsapp_prompt_dismissed`. Phone numbers and codes are never event parameters, and `reason` is a fixed code, not the server's message. Opting out by replying STOP to the WhatsApp message happens on the server (the `whatsappInbound` function), so it is not tracked client-side. Opt-outs from the unsubscribe link and from settings are.
 
+### In-app browsers and Google
+
+Most traffic comes from the Instagram, Facebook and WhatsApp in-app browsers, where Google's popup usually closes without signing in. There the sign-in sheet shows WhatsApp only, plus a link out: `sign_in_opened` → `open_in_browser` (`step=tap`) → `open_in_browser` (`step=landed`, in the real browser) → `sign_in_opened` (`source=open_in_browser`) → `login` (`method=google`). Google failures anywhere are `login_failed` with a fixed `reason`. Compare `step=tap` and `step=landed` counts by `method` to see how many handoffs reach the real browser.
+
 ## Reading the funnel in GA4
 
 Use **Explore → Funnel exploration** with steps `hunt_started`, `country_selected`, `guess_submitted`, and `hunt_completed`. Break down by `mode` or `outcome`; use **Path exploration** to see where `clue_opened`, `country_revealed`, and `selection_cancelled` occur between guesses.
 
-Register event-scoped custom dimensions in GA4 for `mode`, `role`, `outcome`, `winner_role`, `personal_win`, `source`, `method`, `purpose`, `step`, `reason`, and `account_status` when using them in saved explorations. Register custom metrics for `time_used`, `clues_opened`, `wrong_guesses`, and `cost_seconds` if desired. This change does not alter GA4 report definitions or mark events as key events. In Meta, custom conversions can use `hunt_completed` filtered by `outcome`, or `challenge_created` for the challenge-creation funnel.
+Register event-scoped custom dimensions in GA4 for `mode`, `role`, `outcome`, `winner_role`, `personal_win`, `source`, `method`, `purpose`, `step`, `reason`, `in_app`, and `account_status` when using them in saved explorations. Register custom metrics for `time_used`, `clues_opened`, `wrong_guesses`, and `cost_seconds` if desired. This change does not alter GA4 report definitions or mark events as key events. In Meta, custom conversions can use `hunt_completed` filtered by `outcome`, or `challenge_created` for the challenge-creation funnel.
 
 Only allowlisted scalar custom properties reach providers. Display names, usernames, email, Firebase UID, country answers, clue text, invite codes, and arbitrary error messages are excluded from custom event payloads. Provider SDKs still collect their normal browser context such as page URL, referrer and campaign attribution.
 

@@ -67,6 +67,8 @@ let whatsappPromptTimer;
 let pendingUnsubscribe = new URLSearchParams(location.search).get('whatsapp') === 'stop';
 let signInContext = null;
 let signInVerify = null;
+// Opt-in from the WhatsApp sign-in form; the welcome dialog waits for it before offering WhatsApp again.
+let signInOptInTask = Promise.resolve();
 let welcomeVerify = null;
 let accountVerify = null;
 let whatsappDialogVerify = null;
@@ -335,7 +337,7 @@ function renderWelcomeWhatsApp(player, signingUp) {
   consent.classList.add('hidden');
   consent.querySelector('input').checked = false;
   if (!signingUp) return;
-  refreshWhatsApp(player).then(state => {
+  signInOptInTask.then(() => refreshWhatsApp(player)).then(state => {
     if (!state || welcomeFor?.uid !== player.uid || !$('#welcome-dialog').open) return;
     const whatsapp = state.whatsapp;
     if (whatsapp?.optIn === true || whatsapp?.optOutAt) return;
@@ -373,13 +375,32 @@ function openSignIn(source, { title, copy, resumeResult = false } = {}) {
   $('#sign-in-copy').textContent = copy || defaultCopy;
   $('#sign-in-status').textContent = '';
   $('#sign-in-google').disabled = false;
-  $('#sign-in-google').classList.remove('hidden');
-  $('#sign-in-whatsapp').classList.remove('hidden');
-  $('#sign-in-whatsapp-panel').classList.add('hidden');
   signInVerify?.destroy();
-  signInVerify = null;
+  // WhatsApp is the primary way in: the number field is ready as soon as the sheet opens.
+  // The unticked box is the only opt-in here; signing in alone never turns alerts on.
+  signInVerify = createWhatsAppVerify($('#sign-in-whatsapp-verify'), {
+    purpose: 'login', source, consent: source === 'unsubscribe' ? 'none' : 'optional', submitLabel: 'Send sign-in code',
+    onVerified: ({ player, consent }) => {
+      if (consent && player) signInOptInTask = optInAfterSignIn(player);
+      closeSignIn();
+    },
+  });
   trackEvent(EVENTS.SIGN_IN_OPENED, { source });
   if (!$('#sign-in-dialog').open) $('#sign-in-dialog').showModal();
+  signInVerify.focus();
+}
+
+async function optInAfterSignIn(player) {
+  try {
+    const { whatsapp } = await loadWhatsApp(player);
+    if (whatsapp?.optIn === true) return;
+    await setWhatsAppOptIn(player, true, browserTimeZone());
+    trackEvent(EVENTS.WHATSAPP_OPT_IN, { source: 'sign_in' });
+    await refreshWhatsApp(player).catch(() => {});
+  } catch (error) {
+    console.warn('Could not turn on WhatsApp alerts after sign-in:', error);
+    showToast("You're signed in, but WhatsApp alerts couldn't be turned on. Try again from My logs.");
+  }
 }
 
 function closeSignIn() {
@@ -642,6 +663,8 @@ async function loadMap() {
       center: [12, 21], zoom: window.innerWidth < 700 ? 0.85 : 1.1,
       minZoom: 0.5, maxZoom: 6, renderWorldCopies: false,
       attributionControl: false,
+      // Keeps the last frame readable so session replay can capture the map canvas.
+      canvasContextAttributes: { preserveDrawingBuffer: true },
     });
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
     map.on('load', () => {
@@ -1589,25 +1612,6 @@ $('#sign-in-google').addEventListener('click', async () => {
   } finally {
     $('#sign-in-google').disabled = false;
   }
-});
-$('#sign-in-whatsapp').addEventListener('click', () => {
-  $('#sign-in-whatsapp').classList.add('hidden');
-  $('#sign-in-google').classList.add('hidden');
-  $('#sign-in-whatsapp-panel').classList.remove('hidden');
-  $('#sign-in-status').textContent = '';
-  signInVerify?.destroy();
-  signInVerify = createWhatsAppVerify($('#sign-in-whatsapp-verify'), {
-    purpose: 'login', source: signInContext?.source || 'account', submitLabel: 'Send sign-in code',
-    onVerified: () => closeSignIn(),
-  });
-  signInVerify.focus();
-});
-$('#sign-in-back').addEventListener('click', () => {
-  signInVerify?.destroy();
-  signInVerify = null;
-  $('#sign-in-whatsapp-panel').classList.add('hidden');
-  $('#sign-in-whatsapp').classList.remove('hidden');
-  $('#sign-in-google').classList.remove('hidden');
 });
 $('#close-sign-in').addEventListener('click', closeSignIn);
 $('#sign-in-dialog').addEventListener('close', () => {

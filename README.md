@@ -86,6 +86,11 @@ The design and the decisions behind it are in [docs/whatsapp-daily-quest.md](doc
 - `whatsappStatus` (delivery status callbacks) records each message's status on its marker.
 - Twilio errors 21610 (recipient opted out) and 63024 (invalid recipient) also turn opt-in off. Both webhooks reject requests without a valid `X-Twilio-Signature`.
 
+**App.** WhatsApp is the main way to sign in. The sign-in sheet opens with the number field ready, and Google sits below it. The form also offers an unticked "send me the daily quest on WhatsApp" box. Ticking it opts in as soon as sign-in succeeds; signing in alone never does. The shared number check (`src/whatsapp-verify.js`) works like this:
+
+- The calling code defaults to the last country picked on this device, then the device's time zone (`src/timezone-countries.js`), then the browser language's region, then India. Typing or autofilling a number that starts with `+` or `00` switches the picker to match.
+- After a code is sent, returning to the tab reads the clipboard. Chrome asks once for access. If the clipboard holds exactly 6 digits, the code is filled in and checked, which covers the template's **Copy code** button. Browsers that only read the clipboard on a tap get a **Paste code** button. **Open WhatsApp** links to the sender's chat, so `SENDER_CHAT_URL` there must match `WHATSAPP_FROM`. WhatsApp's own OTP autofill only works in native Android apps, so the web app can't read the message itself.
+
 **Data.** Each explorer's number and consent live only on the private `users/{uid}.whatsapp` (`phone`, `verifiedAt`, `optIn`, `optInAt`, `optOutAt`, `timeZone`). `phone` and `verifiedAt` are written only by the functions. These server-only collections are closed to clients by the rules:
 
 - `otpChallenges`: pending codes

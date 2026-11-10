@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizePhone, maskPhone, whatsappPromptEligible, otpErrorMessage, otpErrorReason, formatCountdown, countryOptions, PROMPT_SNOOZE_MS } from '../src/whatsapp.js';
+import { normalizePhone, maskPhone, whatsappPromptEligible, otpErrorMessage, otpErrorReason, formatCountdown, countryOptions, PROMPT_SNOOZE_MS,
+  detectCountry, countryFromNumber, loadStoredCountry, storeCountry, COUNTRY_STORAGE_KEY } from '../src/whatsapp.js';
+import { countryForTimeZone } from '../src/timezone-countries.js';
 
 test('phone numbers normalise to E.164 with +91 as the default country', () => {
   assert.equal(normalizePhone('9020277399'), '+919020277399');
@@ -61,4 +63,66 @@ test('countdowns and the country picker are ready for the verify form', () => {
   assert.equal(options[0].code, 'IN');
   assert.equal(options[0].callingCode, '91');
   assert.ok(options.some(option => option.code === 'GB' && option.callingCode === '44'));
+});
+
+test('the picker defaults to the last pick, then the time zone, then the browser language, then India', () => {
+  assert.equal(detectCountry({ stored: 'GB', timeZone: 'Asia/Kolkata', languages: ['en-US'] }), 'GB');
+  assert.equal(detectCountry({ timeZone: 'Asia/Kolkata', languages: [] }), 'IN');
+  assert.equal(detectCountry({ timeZone: 'Asia/Calcutta', languages: [] }), 'IN');
+  assert.equal(detectCountry({ timeZone: 'America/Chicago', languages: ['en-GB'] }), 'US');
+  assert.equal(detectCountry({ timeZone: 'Europe/London', languages: [] }), 'GB');
+  assert.equal(detectCountry({ timeZone: 'UTC', languages: ['en-GB'] }), 'GB');
+  assert.equal(detectCountry({ timeZone: 'UTC', languages: ['en'] }), 'IN');
+  assert.equal(detectCountry({ timeZone: 'UTC', languages: ['es-419', 'pt-BR'] }), 'BR');
+  assert.equal(detectCountry({ stored: 'XX', timeZone: 'Europe/London' }), 'GB');
+  assert.equal(detectCountry({ stored: 'gb', timeZone: '', languages: [] }), 'IN');
+  assert.equal(detectCountry({ timeZone: 42, languages: 'nope' }), 'IN');
+  assert.ok(detectCountry({ timeZone: undefined }).length === 2);
+  assert.ok(detectCountry().length === 2);
+});
+
+test('legacy time zone names browsers still report map to their country', () => {
+  const expected = { 'Asia/Katmandu': 'NP', 'Asia/Saigon': 'VN', 'Europe/Kiev': 'UA', 'US/Eastern': 'US', 'Canada/Pacific': 'CA',
+    'Australia/NSW': 'AU', 'America/Buenos_Aires': 'AR', 'Pacific/Truk': 'FM', Iceland: 'IS', Japan: 'JP', GB: 'GB', 'Asia/Istanbul': 'TR' };
+  for (const [zone, country] of Object.entries(expected)) assert.equal(countryForTimeZone(zone), country, zone);
+  for (const zone of ['UTC', 'Etc/GMT+5', 'EST', 'CET', '', undefined]) assert.equal(countryForTimeZone(zone), '', String(zone));
+});
+
+test('a typed international prefix picks the country for the calling code', () => {
+  assert.equal(countryFromNumber('+44 7911 123456'), 'GB');
+  assert.equal(countryFromNumber('0091 98765 43210'), 'IN');
+  assert.equal(countryFromNumber('+91'), 'IN');
+  assert.equal(countryFromNumber('+1 416 555 0123'), 'US');
+  assert.equal(countryFromNumber('+1 416 555 0123', 'CA'), 'CA');
+  for (const text of ['98765', '', '+', '00', '+999 1', null, undefined]) assert.equal(countryFromNumber(text), '');
+});
+
+test('the picked country is remembered only when localStorage works and the code is supported', () => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  const store = new Map();
+  const setStorage = value => Object.defineProperty(globalThis, 'localStorage', { value, configurable: true, writable: true });
+  try {
+    setStorage({ getItem: key => store.get(key) ?? null, setItem: (key, value) => store.set(key, value) });
+    assert.equal(loadStoredCountry(), '');
+    assert.equal(storeCountry('GB'), true);
+    assert.equal(store.get(COUNTRY_STORAGE_KEY), 'GB');
+    assert.equal(loadStoredCountry(), 'GB');
+    assert.equal(storeCountry('XX'), false);
+    store.set(COUNTRY_STORAGE_KEY, 'nope');
+    assert.equal(loadStoredCountry(), '');
+    setStorage({ getItem: () => { throw new Error('blocked'); }, setItem: () => { throw new Error('blocked'); } });
+    assert.equal(loadStoredCountry(), '');
+    assert.equal(storeCountry('GB'), false);
+    setStorage(undefined);
+    assert.equal(loadStoredCountry(), '');
+    assert.equal(storeCountry('GB'), false);
+  } finally {
+    if (original) Object.defineProperty(globalThis, 'localStorage', original);
+    else delete globalThis.localStorage;
+  }
+});
+
+test('the country picker can put any supported country first', () => {
+  assert.equal(countryOptions('en', 'GB')[0].code, 'GB');
+  assert.equal(countryOptions('en', 'XX')[0].code, 'IN');
 });

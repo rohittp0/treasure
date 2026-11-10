@@ -349,10 +349,12 @@ button.leaderboard-row:hover{background:#f4e7cb}
 .atlas-empty .atlas-legend,.atlas-empty .atlas-countries{display:none}
 
 /* WhatsApp daily quest alert: sign-in sheet, number check, consent, prompt and settings. */
-.sign-in-options{display:grid;gap:9px}
-.sign-in-options .primary-button,.sign-in-options .secondary-button{width:100%;margin:0}
-.sign-in-whatsapp{min-height:52px;background:#f9efda}
-.sign-in-dialog #sign-in-back{margin-top:6px}
+.sign-in-whatsapp-panel{margin-top:14px}
+.sign-in-divider{display:flex;align-items:center;gap:10px;margin:14px 0 10px;color:#8a8e7b;font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase}
+.sign-in-divider:before,.sign-in-divider:after{content:'';flex:1;border-top:1px solid #ccb993}
+.sign-in-dialog .sign-in-google{width:100%;margin:0;background:#f9efda}
+.wa-code-shortcuts{display:grid;grid-template-columns:repeat(auto-fit,minmax(0,1fr));gap:7px;margin:0 0 12px}
+.wa-verify .wa-code-shortcuts .secondary-button{display:flex;align-items:center;justify-content:center;width:100%;min-height:44px;margin:0;text-decoration:none}
 .wa-section{margin:16px 0 4px;padding:14px;border:1px solid #c5b08d;border-radius:6px;background:#f7ecd3}
 .wa-section h3{margin:0 0 4px;font:600 17px/1.3 Fraunces,serif;color:#17383a}
 .account-dialog .wa-caption,.wa-caption{margin:0 0 10px;font-size:12px;line-height:1.5;color:#59716d}

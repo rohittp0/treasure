@@ -80,13 +80,13 @@ async function callable(name, data) {
 // purpose: 'verify_phone' (signed in) or 'login'. Resolves to { ok, resendAfter }.
 export const requestWhatsAppOtp = (phone, purpose) => callable('requestWhatsAppOtp', { phone, purpose });
 
-// verify_phone resolves to { ok, phone }; login signs in and resolves to { isNew }.
+// verify_phone resolves to { ok, phone }; login signs in and resolves to { isNew, player }.
 export async function verifyWhatsAppOtp(phone, purpose, code) {
   const result = await callable('verifyWhatsAppOtp', { phone, purpose, code });
   if (purpose !== 'login') return result;
-  await signInWithCustomToken(auth, result.customToken);
+  const credential = await signInWithCustomToken(auth, result.customToken);
   trackEvent(EVENTS.LOGIN, { method: 'whatsapp' });
-  return { isNew: !!result.isNew };
+  return { isNew: !!result.isNew, player: credential.user };
 }
 
 const userRef = uid => doc(db, 'users', uid);

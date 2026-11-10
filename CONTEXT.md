@@ -53,7 +53,7 @@ The story of a completed challenge between a hider and a seeker. Finding the tre
 A shareable keepsake of the winner's challenge, including both participants, the hidden country and the seeker's hunt statistics.
 
 **Explorer**:
-A player with an account and a username, signed in with Google or WhatsApp. An explorer becomes a seeker during a hunt.
+A player with an account and a username, signed in with WhatsApp (the primary way) or Google. An explorer becomes a seeker during a hunt.
 _Avoid_: User, account (outside code)
 
 **Daily quest alert**:
@@ -64,7 +64,7 @@ _Avoid_: Daily challenge, daily notification
 A WhatsApp number an explorer has proven they own with a one-time code. One number belongs to at most one explorer, and it can be used to sign in.
 
 **WhatsApp opt-in**:
-An explorer's explicit, revocable consent to get the daily quest alert on their verified number. Verifying a number, signing in with WhatsApp or allowing browser notifications is not opt-in.
+An explorer's explicit, revocable consent to get the daily quest alert on their verified number. Verifying a number, signing in with WhatsApp or allowing browser notifications is not opt-in on its own; ticking the unticked consent box, including the one offered while signing in with WhatsApp, is.
 _Avoid_: WhatsApp subscription
 
 **Opt-out**:

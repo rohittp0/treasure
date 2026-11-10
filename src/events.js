@@ -17,6 +17,7 @@ export const EVENTS = Object.freeze({
   WHATSAPP_CODE_REQUESTED: 'whatsapp_code_requested', WHATSAPP_VERIFIED: 'whatsapp_verified',
   WHATSAPP_VERIFY_FAILED: 'whatsapp_verify_failed', WHATSAPP_OPT_IN: 'whatsapp_opt_in',
   WHATSAPP_OPT_OUT: 'whatsapp_opt_out', WHATSAPP_UNSUBSCRIBE_VIEWED: 'whatsapp_unsubscribe_viewed',
+  WHATSAPP_CODE_PASTED: 'whatsapp_code_pasted',
 });
 const eventNames = new Set(Object.values(EVENTS));
 const allowedParameters = new Set(['mode', 'role', 'level', 'difficulty', 'round_seconds', 'time_used',
@@ -84,7 +85,13 @@ export function initializeTracking(app, { enabled = !import.meta.env?.DEV } = {}
   }).catch(error => { google.drop(); console.warn('Google Analytics unavailable:', error.code || error.name); });
   import('posthog-js').then(({ default: client }) => {
     // Anonymous events only: users are never identified, so no person profiles are created.
-    client.init(POSTHOG_KEY, { api_host: POSTHOG_HOST, defaults: '2026-05-30', person_profiles: 'identified_only' });
+    client.init(POSTHOG_KEY, {
+      api_host: POSTHOG_HOST, defaults: '2026-05-30', person_profiles: 'identified_only',
+      // The map is a WebGL canvas, which DOM replay can't see. Record it at a quality high enough to keep
+      // thin borders and small country labels readable (the SDK default of 0.4 smears them away).
+      // Needs the map's preserveDrawingBuffer, set in main.js, or frames read back blank.
+      session_recording: { captureCanvas: { recordCanvas: true, canvasFps: 4, canvasQuality: '0.8' } },
+    });
     posthogClient = client;
     applyPosthogUser();
     posthog.ready((name, payload) => client.capture(name, payload));

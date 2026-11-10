@@ -1,7 +1,9 @@
 // Pure helpers for the WhatsApp daily quest alert: phone numbers, masking, prompt rules and error copy.
-import { parsePhoneNumberFromString, getCountries, getCountryCallingCode } from 'libphonenumber-js';
+import { parsePhoneNumberFromString, getCountries, getCountryCallingCode, AsYouType, Metadata } from 'libphonenumber-js';
+import { countryForTimeZone } from './timezone-countries.js';
 
 export const DEFAULT_COUNTRY = 'IN';
+export const COUNTRY_STORAGE_KEY = 'treasurehunch.whatsappCountry';
 export const PROMPT_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
 export const CONSENT_COPY = 'Send me the TreasureHunch daily quest on WhatsApp. Reply STOP anytime to unsubscribe.';
 
@@ -23,13 +25,103 @@ export function maskPhone(phone) {
   return `${code}${'*'.repeat(Math.max(0, rest.length - 4))}${rest.slice(-4)}`;
 }
 
-// Country choices for the calling-code picker, sorted by name with the default first.
-export function countryOptions(locale = 'en') {
+// Country choices for the calling-code picker, sorted by name with the given country first.
+export function countryOptions(locale = 'en', first = DEFAULT_COUNTRY) {
   let names = null;
   try { names = new Intl.DisplayNames([locale], { type: 'region' }); } catch { /* Fall back to ISO codes. */ }
+  const top = isSupportedCountry(first) ? first : DEFAULT_COUNTRY;
   const options = getCountries().map(code => ({ code, name: names?.of(code) || code, callingCode: getCountryCallingCode(code) }));
-  options.sort((a, b) => (b.code === DEFAULT_COUNTRY) - (a.code === DEFAULT_COUNTRY) || a.name.localeCompare(b.name));
+  options.sort((a, b) => (b.code === top) - (a.code === top) || a.name.localeCompare(b.name));
   return options;
+}
+
+let supported = null;
+export function isSupportedCountry(code) {
+  supported ??= new Set(getCountries());
+  return typeof code === 'string' && supported.has(code);
+}
+
+function browserLanguages() {
+  try {
+    if (typeof navigator === 'undefined' || !navigator) return [];
+    if (Array.isArray(navigator.languages) && navigator.languages.length) return navigator.languages;
+    return navigator.language ? [navigator.language] : [];
+  } catch {
+    return [];
+  }
+}
+
+// The region subtag of a BCP 47 tag ('en-GB' → 'GB', 'zh-Hant-TW' → 'TW'), or '' for none or a numeric region ('es-419').
+function languageRegion(tag) {
+  if (typeof tag !== 'string') return '';
+  const region = tag.split(/[-_]/).slice(1).find(part => /^[A-Za-z]{2}$/.test(part));
+  return region ? region.toUpperCase() : '';
+}
+
+// Best guess at the explorer's country for the calling-code picker: last pick, then time zone, then browser language, then India.
+export function detectCountry({ stored, timeZone, languages } = {}) {
+  if (isSupportedCountry(stored)) return stored;
+  const zoneCountry = countryForTimeZone(timeZone === undefined ? browserTimeZone() : timeZone);
+  if (isSupportedCountry(zoneCountry)) return zoneCountry;
+  const tags = languages === undefined ? browserLanguages() : languages;
+  for (const tag of Array.isArray(tags) ? tags : [tags]) {
+    const region = languageRegion(tag);
+    if (isSupportedCountry(region)) return region;
+  }
+  return DEFAULT_COUNTRY;
+}
+
+export function loadStoredCountry() {
+  try {
+    const code = globalThis.localStorage?.getItem(COUNTRY_STORAGE_KEY);
+    return isSupportedCountry(code) ? code : '';
+  } catch {
+    return '';
+  }
+}
+
+export function storeCountry(code) {
+  if (!isSupportedCountry(code)) return false;
+  try {
+    const storage = globalThis.localStorage;
+    if (!storage) return false;
+    storage.setItem(COUNTRY_STORAGE_KEY, code);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+let callingCodeCountries = null;
+const countriesForCallingCode = code => {
+  try { callingCodeCountries ??= new Metadata().countryCallingCodes(); } catch { callingCodeCountries = {}; }
+  return (callingCodeCountries[code] || []).filter(isSupportedCountry);
+};
+
+// The country of a number typed with its international prefix ('+44 …' or '0044 …'), or '' if it cannot tell yet.
+// Calling codes shared by several countries (+1, +44, +7) keep `current` when it already has that code, otherwise
+// give the code's main country (US, GB, RU): libphonenumber would call +44 7911 123456 Guernsey, which is not what a
+// British explorer expects to see in the picker.
+export function countryFromNumber(raw, current = '') {
+  let text = String(raw ?? '').trim();
+  if (!text || text.length > 40) return '';
+  if (text.startsWith('00')) text = `+${text.slice(2)}`;
+  else if (!text.startsWith('+')) return '';
+  try {
+    const parsed = parsePhoneNumberFromString(text);
+    let callingCode = parsed?.countryCallingCode;
+    if (!callingCode) {
+      const typing = new AsYouType();
+      typing.input(text);
+      callingCode = typing.getCallingCode();
+    }
+    const countries = callingCode ? countriesForCallingCode(callingCode) : [];
+    if (!countries.length) return '';
+    if (countries.includes(current)) return current;
+    return countries[0];
+  } catch {
+    return '';
+  }
 }
 
 export function browserTimeZone() {

@@ -5,6 +5,16 @@ export const DAY_MS = 86_400_000;
 // Score order for a monthly board: more finds first, then less total time used.
 export const MONTHLY_FIND_POINTS = 10_000;
 
+// Where a daily quest link (?daily=1) came from, for analytics. Browser push links carry utm_source=push and
+// any other campaign link its own utm_source. The WhatsApp alert's button URL is static in the approved
+// template and has no utm_source, so a bare ?daily=1 is counted as WhatsApp.
+export function dailyLinkSource(search = '') {
+  const params = new URLSearchParams(search);
+  if (!params.has('daily')) return '';
+  const source = (params.get('utm_source') || '').toLowerCase();
+  return /^[a-z0-9_-]{1,30}$/.test(source) ? source : 'whatsapp';
+}
+
 export function dayKey(date = new Date()) {
   return new Date(date).toISOString().slice(0, 10);
 }

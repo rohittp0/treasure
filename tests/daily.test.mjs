@@ -78,3 +78,13 @@ test('a daily attempt resumes with its clock, clues and wrong guesses', () => {
   assert.deepEqual(resumed.tried, ['XXX']);
   assert.equal(resumed.remaining, 180 - 10 - 25);
 });
+
+test('daily quest links are attributed to the alert that sent them', async () => {
+  const { dailyLinkSource } = await import('../src/daily.js');
+  assert.equal(dailyLinkSource('?daily=1'), 'whatsapp');
+  assert.equal(dailyLinkSource('?daily=1&utm_source=push&utm_medium=notification'), 'push');
+  assert.equal(dailyLinkSource('?daily=1&utm_source=WhatsApp'), 'whatsapp');
+  assert.equal(dailyLinkSource('?daily=1&utm_source=<script>'), 'whatsapp');
+  assert.equal(dailyLinkSource('?hunt=ABC&utm_source=push'), '');
+  assert.equal(dailyLinkSource(''), '');
+});

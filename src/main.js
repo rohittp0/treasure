@@ -10,7 +10,7 @@ import { choosePuzzle, createGame, difficultyForLevel, CLUE_COST, REVEAL_COST } 
 import { loadFriendHunts, watchUser, login, logout, loadPuzzles, saveHunt, loadHunts, loadLeaderboard, enterLeaderboard, loadProfile, claimUsername, isUsernameAvailable, watchChallenges, markChallengeRead, registerChallengePush, loadDailySchedule, loadDailyRecords, startDailyRecord, finishDailyRecord, loadMonthlyLeaderboard, enterMonthlyLeaderboard, saveAtlas, loadAtlas, loadWhatsApp, setWhatsAppOptIn, setWhatsAppTimeZone, snoozeWhatsAppPrompt } from './firebase.js';
 import { createWhatsAppVerify } from './whatsapp-verify.js';
 import { CONSENT_COPY, browserTimeZone, isVerified, maskPhone, whatsappPromptEligible } from './whatsapp.js';
-import { dayKey, monthKey, daysInMonth, msUntilNextDay, dailyQuest, validDailySchedule, currentStreak, scoreMonth, atlasFromRecords, mergeDailyRecords, validDailyRecord } from './daily.js';
+import { dailyLinkSource, dayKey, monthKey, daysInMonth, msUntilNextDay, dailyQuest, validDailySchedule, currentStreak, scoreMonth, atlasFromRecords, mergeDailyRecords, validDailyRecord } from './daily.js';
 import { createFriendController } from './friend-controller.js';
 
 maplibregl.setWorkerUrl(mapWorkerUrl);
@@ -78,6 +78,8 @@ let whatsappPromptAccepted = false;
 let profileReadyFor = '';
 // Set by the daily notification link (?daily=1); the quest starts once the map is ready.
 let pendingDaily = new URLSearchParams(location.search).has('daily');
+// Read before the URL is cleaned: which alert (WhatsApp, push, …) brought the explorer to today's quest.
+let dailyArrivalSource = dailyLinkSource(location.search);
 // Daily lists by month; the bundled copy is replaced by Firestore's once it loads.
 const dailySchedules = { ...bundledDailySchedules };
 let dailyScheduleMonth = '';
@@ -793,7 +795,9 @@ function startPendingDaily() {
   if (!pendingDaily || !map?.getLayer('land')) return;
   pendingDaily = false;
   if (new URLSearchParams(location.search).has('daily')) history.replaceState({}, '', location.pathname);
+  if (dailyArrivalSource) trackEvent(EVENTS.DAILY_LINK_OPENED, { source: dailyArrivalSource });
   startDaily();
+  dailyArrivalSource = '';
 }
 
 // Guests can play; sign-in is asked for on the result screen, to claim the find.
@@ -814,7 +818,7 @@ function startDaily() {
   const label = new Date(`${today}T00:00:00Z`).toLocaleDateString('en', { day: 'numeric', month: 'short', timeZone: 'UTC' }).toUpperCase();
   $('#level-label').textContent = `DAILY QUEST · ${label} · ${(puzzle.difficulty || 'medium').toUpperCase()}`;
   saveDailyProgress(state);
-  if (!record) trackEvent(EVENTS.HUNT_STARTED, huntParameters(state));
+  if (!record) trackEvent(EVENTS.HUNT_STARTED, { ...huntParameters(state), ...(dailyArrivalSource ? { source: dailyArrivalSource } : {}) });
   openHuntScreen();
   const player = user;
   if (player && !record) {

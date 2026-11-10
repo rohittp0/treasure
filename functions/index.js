@@ -94,7 +94,8 @@ exports.emailFriendChallenge = onDocumentCreated({
   }
 });
 
-const DAILY_URL = 'https://hunch.rohittp.com/?daily=1';
+// utm_source=push tells these visits apart from the WhatsApp alert's static ?daily=1 button (see src/daily.js).
+const DAILY_URL = 'https://hunch.rohittp.com/?daily=1&utm_source=push&utm_medium=notification&utm_campaign=daily_quest';
 const staleTokenErrors = ['messaging/registration-token-not-registered', 'messaging/invalid-registration-token'];
 const utcDay = date => date.toISOString().slice(0, 10);
 

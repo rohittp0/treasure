@@ -78,13 +78,19 @@ Sign-in: `sign_in_opened` → `whatsapp_code_requested` (`purpose=login`) → `w
 
 Most traffic comes from the Instagram, Facebook and WhatsApp in-app browsers, where Google's popup usually closes without signing in. There the sign-in sheet shows WhatsApp only, plus a link out: `sign_in_opened` → `open_in_browser` (`step=tap`) → `open_in_browser` (`step=landed`, in the real browser) → `sign_in_opened` (`source=open_in_browser`) → `login` (`method=google`). Google failures anywhere are `login_failed` with a fixed `reason`. Compare `step=tap` and `step=landed` counts by `method` to see how many handoffs reach the real browser.
 
+### PostHog-only settings
+
+- Uncaught errors and unhandled promise rejections are captured as `$exception` events (`capture_exceptions`), so they appear in PostHog error tracking.
+- The map canvas is recorded in session replay at 4 frames a second (see `src/events.js`).
+- Team devices: open the site once with `?internal=1` on each phone or browser you test with. That device then sends `is_internal=true` on every PostHog event; filter it out (for example as a test-account filter on `is_internal` is not set). `?internal=0` clears it. The flag is stored in that browser only.
+
 ## Reading the funnel in GA4
 
 Use **Explore → Funnel exploration** with steps `hunt_started`, `country_selected`, `guess_submitted`, and `hunt_completed`. Break down by `mode` or `outcome`; use **Path exploration** to see where `clue_opened`, `country_revealed`, and `selection_cancelled` occur between guesses.
 
 Register event-scoped custom dimensions in GA4 for `mode`, `role`, `outcome`, `winner_role`, `personal_win`, `source`, `method`, `purpose`, `step`, `reason`, `in_app`, and `account_status` when using them in saved explorations. Register custom metrics for `time_used`, `clues_opened`, `wrong_guesses`, and `cost_seconds` if desired. This change does not alter GA4 report definitions or mark events as key events. In Meta, custom conversions can use `hunt_completed` filtered by `outcome`, or `challenge_created` for the challenge-creation funnel.
 
-Only allowlisted scalar custom properties reach providers. Display names, usernames, email, Firebase UID, country answers, clue text, invite codes, and arbitrary error messages are excluded from custom event payloads. Provider SDKs still collect their normal browser context such as page URL, referrer and campaign attribution.
+Only allowlisted scalar custom properties reach providers. Display names, usernames, email, Firebase UID, clue text, invite codes, and arbitrary error messages are excluded from custom event payloads. The one country answer sent is the daily quest's `country` (ISO 3166 alpha-3 id) on its `hunt_completed`, after the hunt is over, so daily countries can be compared by difficulty; it is never on an event sent while that quest is live. Provider SDKs still collect their normal browser context such as page URL, referrer and campaign attribution.
 
 ## Validation and delivery
 

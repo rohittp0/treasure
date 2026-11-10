@@ -1034,7 +1034,8 @@ function finishDaily(state) {
   if (fresh || !dailyRecords.some(item => item.day === record.day && item.status !== 'playing')) rememberDailyRecord(record);
   const streak = currentStreak(dailyRecords);
   lastResult = { ...state, mode: 'daily', day: record.day };
-  if (fresh) trackEvent(EVENTS.HUNT_COMPLETED, { ...soloEventParameters(state, undefined, 'daily'), outcome: won ? 'won' : 'lost', winner_role: won ? 'seeker' : 'none', streak });
+  // The country is only sent once the hunt is over, so a live quest's answer never appears in analytics calls.
+  if (fresh) trackEvent(EVENTS.HUNT_COMPLETED, { ...soloEventParameters(state, undefined, 'daily'), outcome: won ? 'won' : 'lost', winner_role: won ? 'seeker' : 'none', streak, country: state.puzzle?.id });
   game = null;
   showResultScreen(state);
   const month = scoreMonth(dailyRecords, monthKey());

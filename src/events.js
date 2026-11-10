@@ -25,7 +25,7 @@ const eventNames = new Set(Object.values(EVENTS));
 const allowedParameters = new Set(['in_app', 'mode', 'role', 'level', 'difficulty', 'round_seconds', 'time_used',
   'time_remaining', 'clues_opened', 'wrong_guesses', 'outcome', 'winner_role', 'personal_win', 'source',
   'method', 'targeted', 'revealed', 'clue_number', 'cost_seconds', 'permission', 'account_status',
-  'board', 'owner', 'streak', 'countries', 'purpose', 'step', 'reason']);
+  'board', 'owner', 'streak', 'countries', 'purpose', 'step', 'reason', 'country']);
 const metaStandardEvents = { page_view: 'PageView', sign_up: 'CompleteRegistration' };
 
 export function cleanEventParameters(parameters = {}) {
@@ -63,6 +63,8 @@ export function initializeTracking(app, { enabled = !import.meta.env?.DEV } = {}
   if (initialized || typeof window === 'undefined') return;
   initialized = true;
   if (!enabled) return;
+  // Read now, before other URL handling cleans the address bar.
+  const internal = internalDevice();
 
   // Same queue/bootstrap as Meta's supplied snippet, kept here to avoid duplicate setup.
   if (!window.fbq) {
@@ -93,11 +95,34 @@ export function initializeTracking(app, { enabled = !import.meta.env?.DEV } = {}
       // thin borders and small country labels readable (the SDK default of 0.4 smears them away).
       // Needs the map's preserveDrawingBuffer, set in main.js, or frames read back blank.
       session_recording: { captureCanvas: { recordCanvas: true, canvasFps: 4, canvasQuality: '0.8' } },
+      // Uncaught errors and promise rejections become $exception events for error tracking.
+      capture_exceptions: true,
     });
+    if (internal) client.register({ is_internal: true });
     posthogClient = client;
     applyPosthogUser();
     posthog.ready((name, payload) => client.capture(name, payload));
   }).catch(error => { posthog.drop(); console.warn('PostHog unavailable:', error.name); });
+}
+
+// Team devices are marked once by opening the site with ?internal=1 (?internal=0 clears it), so their
+// sessions can be filtered out in PostHog with is_internal. The flag lives in this browser only.
+const INTERNAL_KEY = 'treasurehunch.internal';
+function internalDevice() {
+  try {
+    const params = new URLSearchParams(location.search);
+    const value = params.get('internal');
+    if (value === '1') localStorage.setItem(INTERNAL_KEY, '1');
+    if (value === '0') localStorage.removeItem(INTERNAL_KEY);
+    if (value !== null) {
+      params.delete('internal');
+      const query = params.toString();
+      history.replaceState(history.state, '', `${location.pathname}${query ? `?${query}` : ''}${location.hash}`);
+    }
+    return localStorage.getItem(INTERNAL_KEY) === '1';
+  } catch {
+    return false;
+  }
 }
 
 // Queues early gameplay events until a lazily loaded provider is ready, then flushes them.

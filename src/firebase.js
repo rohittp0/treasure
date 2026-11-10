@@ -164,20 +164,35 @@ export async function markChallengeRead(user, code) {
   await updateDoc(doc(db, 'users', user.uid, 'notifications', code), { read: true });
 }
 
+// Registers this browser for background alerts. Never throws; resolves to a fixed analytics outcome:
+// 'registered', 'denied' (no permission), 'unsupported' (no key, service worker or messaging support),
+// 'token_failed' (the worker or FCM token could not be set up) or 'save_failed' (the token was not stored).
 export async function registerChallengePush(user) {
   const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY || publicWebPushKey;
-  if (!vapidKey || !('serviceWorker' in navigator) || Notification.permission !== 'granted') return false;
-  const { getMessaging, getToken, isSupported } = await import('firebase/messaging');
-  if (!await isSupported()) return false;
-  const worker = await navigator.serviceWorker.register(messagingWorkerUrl, { type: 'module' });
-  const token = await getToken(getMessaging(app), { vapidKey, serviceWorkerRegistration: worker });
-  if (!token) return false;
-  const bytes = new TextEncoder().encode(token);
-  const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))]
-    .map(value => value.toString(16).padStart(2, '0')).join('');
-  await setDoc(doc(db, 'users', user.uid, 'pushTokens', hash), { token, createdAt: serverTimestamp() });
-  pushRegistration = { uid: user.uid, hash };
-  return true;
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return 'denied';
+  if (!vapidKey || !('serviceWorker' in navigator)) return 'unsupported';
+  let token;
+  try {
+    const { getMessaging, getToken, isSupported } = await import('firebase/messaging');
+    if (!await isSupported()) return 'unsupported';
+    const worker = await navigator.serviceWorker.register(messagingWorkerUrl, { type: 'module' });
+    token = await getToken(getMessaging(app), { vapidKey, serviceWorkerRegistration: worker });
+  } catch (error) {
+    console.warn('Background alerts could not start:', error);
+    return 'token_failed';
+  }
+  if (!token) return 'token_failed';
+  try {
+    const bytes = new TextEncoder().encode(token);
+    const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))]
+      .map(value => value.toString(16).padStart(2, '0')).join('');
+    await setDoc(doc(db, 'users', user.uid, 'pushTokens', hash), { token, createdAt: serverTimestamp() });
+    pushRegistration = { uid: user.uid, hash };
+    return 'registered';
+  } catch (error) {
+    console.warn('Background alerts could not be saved:', error);
+    return 'save_failed';
+  }
 }
 
 export async function loadPuzzles() {

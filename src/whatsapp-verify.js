@@ -1,5 +1,5 @@
 // A two-step WhatsApp number check (number, then 6-digit code), shared by sign-in, the username
-// dialog, the post-quest prompt and settings. purpose: 'verify_phone' | 'login'.
+// dialog, the daily quest result card and settings. purpose: 'verify_phone' | 'login'.
 import { requestWhatsAppOtp, verifyWhatsAppOtp } from './firebase.js';
 import { trackEvent, EVENTS } from './events.js';
 import { CONSENT_COPY, DEFAULT_COUNTRY, countryOptions, formatCountdown, maskPhone, normalizePhone, otpErrorMessage, otpErrorReason } from './whatsapp.js';

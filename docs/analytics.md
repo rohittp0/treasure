@@ -34,6 +34,8 @@ Selections can instead lead to `selection_cancelled`; seekers can open additiona
 | `country_revealed` | Country reveal succeeds; `revealed=true`, `cost_seconds=30` |
 | `hunt_completed` | Solo win/timeout, or a confirmed multiplayer completion observed during seeker gameplay; `outcome=won/lost`, `winner_role`, time/clue/guess stats |
 | `hunt_abandoned` | Player exits an unfinished solo or seeker hunt, including switching to a different hunt; current hunt stats. Closing the browser without using an exit action is not counted. |
+| `onboarding_hint_shown` | The one-time map hint ("Tap a country on the map, then press Guess.") appears about a second into the first solo or daily hunt on a device. Players with a solo win or a finished daily quest on the device never see it; current hunt stats |
+| `onboarding_hint_completed` | The seeker selects a country on the map while that hint is showing, which hides it; current hunt stats (`time_used` is the hunt time used before that first selection, including any clue costs) |
 | `multiplayer_opened` | Signed-in user opens the multiplayer lobby |
 | `challenge_setup_opened` | Hider opens hunt creation |
 | `challenge_created` | Challenge creation succeeds; `targeted`, `role=hider` |
@@ -63,6 +65,10 @@ Selections can instead lead to `selection_cancelled`; seekers can open additiona
 Daily-quest hunts reuse the hunt events with `mode=daily` and add `streak` on `hunt_completed`. Common properties include `account_status=guest/signed_in`, `mode=solo/daily/multiplayer`, `role`, and applicable hunt statistics. Time used includes paid clue, reveal and wrong-guess costs. Legacy friend hunts remain 120 seconds; current hunts use 180 seconds.
 
 Multiplayer `won`/`lost` describes the **seeker**. A timeout is `outcome=lost`, `winner_role=hider`. `personal_win` on `result_viewed` describes the current viewer. Hiders and historical viewers do not emit a second `hunt_completed` conversion. Completed-hunt and result-view events are deduplicated by hunt/viewer within the current page lifecycle. Multiplayer completion waits for acknowledged writes, and action events precede the final completion/result events even when listeners deliver the result before a transaction promise resolves.
+
+### Map hint
+
+`onboarding_hint_shown` → `onboarding_hint_completed` measures whether new seekers find the map. A shown hint without a completion means the hunt ended or was left with no country selected (`hunt_completed` with `outcome=lost`, or `hunt_abandoned`). The hint is remembered in `localStorage` (`treasurehunch:map-hint-seen`); where storage is blocked it can show once per page load.
 
 ### WhatsApp funnel
 

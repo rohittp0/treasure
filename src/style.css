@@ -364,11 +364,11 @@ button.leaderboard-row:hover{background:#f4e7cb}
 .wa-verify select{padding-right:6px;text-overflow:ellipsis}
 .wa-verify select:focus,.wa-verify input:focus{border-color:#c87948;box-shadow:0 0 0 3px #c879482e}
 .wa-verify .wa-code{font:600 24px/1 Fraunces,serif;letter-spacing:10px;text-align:center}
-.account-dialog .wa-consent{display:flex;gap:10px;align-items:flex-start;margin:12px 0 2px;color:#36504f;font-size:12px;line-height:1.45;cursor:pointer;text-transform:none;letter-spacing:0;font-weight:500}
-.account-dialog .wa-consent input{flex:none;width:20px;height:20px;min-height:0;margin:1px 0 0;padding:0;accent-color:#c87948}
+.account-dialog .wa-consent,.result-alert .wa-consent{display:flex;gap:10px;align-items:flex-start;margin:12px 0 2px;color:#36504f;font-size:12px;line-height:1.45;cursor:pointer;text-transform:none;letter-spacing:0;font-weight:500}
+.account-dialog .wa-consent input,.result-alert .wa-consent input{flex:none;width:20px;height:20px;min-height:0;margin:1px 0 0;padding:0;accent-color:#c87948}
 .wa-verify .secondary-button,.wa-verify .primary-button,.welcome-dialog .wa-verify .secondary-button{width:100%;margin:12px 0 0}
 .wa-verify .primary-button{min-height:50px}
-.account-dialog .wa-sent{margin:0 0 12px;font-size:12px;line-height:1.5;color:#36504f}
+.account-dialog .wa-sent,.result-alert .wa-sent{margin:0 0 12px;font-size:12px;line-height:1.5;color:#36504f}
 .wa-code-actions{display:flex;justify-content:space-between;gap:8px;margin-top:4px}
 .wa-code-actions .text-button{padding-inline:4px}
 .wa-verify .wa-status{min-height:0;margin:8px 0 0}
@@ -377,7 +377,6 @@ button.leaderboard-row:hover{background:#f4e7cb}
 .whatsapp-dialog .primary-button{width:100%;margin-top:12px}
 .whatsapp-dialog .wa-consent{margin-top:0}
 .whatsapp-dialog .wa-caption{margin:8px 0 0}
-.wa-later{display:flex;margin:10px auto 0}
 .account-whatsapp{margin:4px 0 18px}
 .account-whatsapp .wa-verify{margin-top:4px}
 .wa-toggle{display:flex;align-items:center;gap:12px;min-height:48px;margin:8px 0 4px;cursor:pointer}
@@ -399,3 +398,15 @@ button.leaderboard-row:hover{background:#f4e7cb}
 @media(max-width:340px){.wa-phone-row{grid-template-columns:1fr}}
 .whatsapp-dialog .wa-section{margin:4px 0 2px}
 .whatsapp-dialog .wa-section .secondary-button{width:100%;margin:12px 0 0}
+/* Daily quest alert card on the daily quest result: compact, after the result's actions. */
+.result-alert{margin:16px 0 0;padding:12px 13px 6px;text-align:left}
+.result-alert h3{font-size:16px}
+.result-alert h3 em{color:#b87642;font-weight:500}
+.result-alert .wa-caption{margin:0 0 8px}
+.result-alert .wa-consent{margin:4px 0 6px}
+.result-alert>.secondary-button{width:100%;min-height:43px;margin:4px 0 0}
+.result-alert .wa-verify{margin-top:4px}
+.result-alert .friend-status{min-height:0;margin:6px 0 0;font-size:12px}
+.result-alert-links{display:flex;flex-wrap:wrap;justify-content:space-between;gap:0 8px;margin:2px -4px 0}
+.result-alert-links .text-button{padding-inline:4px}
+.result-alert-links .text-button:only-child{margin-left:auto}

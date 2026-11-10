@@ -1,10 +1,10 @@
 // Pure helpers for the WhatsApp daily quest alert: phone numbers, masking, prompt rules and error copy.
 import { parsePhoneNumberFromString, getCountries, getCountryCallingCode, AsYouType, Metadata } from 'libphonenumber-js';
 import { countryForTimeZone } from './timezone-countries.js';
+import { dayKey } from './daily.js';
 
 export const DEFAULT_COUNTRY = 'IN';
 export const COUNTRY_STORAGE_KEY = 'treasurehunch.whatsappCountry';
-export const PROMPT_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
 export const CONSENT_COPY = 'Send me the TreasureHunch daily quest on WhatsApp. Reply STOP anytime to unsubscribe.';
 
 // Returns the E.164 form of a number typed with or without its country code, or '' if it is not valid.
@@ -135,12 +135,13 @@ export function browserTimeZone() {
 
 const millis = value => typeof value === 'number' ? value : value?.toMillis?.() ?? (value instanceof Date ? value.getTime() : null);
 
-// Whether to offer the post-quest WhatsApp prompt. Explorers who opted out are never asked again.
+// Whether to offer the daily quest alert card on a daily quest result. Explorers who opted out are never
+// asked again. "Not now" hides it until the next daily quest, so a snooze lasts for the rest of its UTC day.
 export function whatsappPromptEligible({ signedIn, username, whatsapp, snoozedAt, now = Date.now() }) {
   if (!signedIn || !username) return false;
   if (whatsapp?.optIn === true || whatsapp?.optOutAt) return false;
   const snoozed = millis(snoozedAt);
-  return !(Number.isFinite(snoozed) && now - snoozed < PROMPT_SNOOZE_MS);
+  return !(Number.isFinite(snoozed) && dayKey(snoozed) >= dayKey(now));
 }
 
 export const isVerified = whatsapp => !!whatsapp?.phone && !!whatsapp?.verifiedAt;

@@ -45,18 +45,18 @@ Selections can instead lead to `selection_cancelled`; seekers can open additiona
 | `leaderboard_viewed` | Leaderboard opened from a button; `source=home/result`, `board=monthly/all_time` (also sent when switching tabs, with `source=tab`) |
 | `atlas_viewed` | An explorer map is opened; `owner=self/other`, `source=home/result/leaderboard/link`, `countries` collected |
 | `atlas_shared` | The explorer shares their map link; `method=native/clipboard`, `countries` collected |
-| `notifications_permission` | Notification permission prompt resolves; `permission` |
+| `notifications_permission` | Browser notification permission prompt resolves, sent once this browser's push registration has finished; `permission=granted/denied/default`, `source=welcome/result_card`, `outcome=registered/unsupported/token_failed/save_failed` when granted (`unsupported`: no Web Push key, service worker or Firebase Messaging support; `token_failed`: the worker or FCM token could not be set up; `save_failed`: the token could not be stored), otherwise `denied` or `dismissed` (`signed_out` if the explorer signed out meanwhile) |
 | `sign_in_opened` | The shared sign-in sheet opens; `source=account/multiplayer/claim/leaderboard/atlas/unsubscribe` |
 | `whatsapp_code_requested` | A WhatsApp code was sent; `source`, `purpose=verify_phone/login`, `step=request/resend` |
 | `whatsapp_verified` | A WhatsApp code was accepted; `source`, `purpose` |
 | `daily_link_opened` | A daily quest alert link (`?daily=1`) was opened; `source=whatsapp` (the WhatsApp alert's button, which has no `utm_source`), `push` (browser notification) or any other `utm_source` on the link. The daily `hunt_started` that follows carries the same `source` |
 | `whatsapp_code_pasted` | A 6-digit code was taken from the clipboard after the explorer tapped Copy code in WhatsApp; `source`, `purpose`, `method=auto` (read on returning to the tab) or `button` (Paste code). The code itself is never sent |
 | `whatsapp_verify_failed` | Sending or checking a code failed; `source`, `purpose`, `step=request/verify`, `reason=invalid_number/cooldown/daily_limit/expired/no_code/wrong_code/too_many_attempts/number_taken/account_mismatch/send_failed/other` |
-| `whatsapp_opt_in` | The daily quest alert was switched on; `source=sign_in/welcome/post_quest/settings/unsubscribe` (`sign_in` is the consent box on the WhatsApp sign-in form; `unsubscribe` is "Turn alerts back on" after using the stop link) |
+| `whatsapp_opt_in` | The daily quest alert was switched on; `source=sign_in/welcome/result_card/settings/unsubscribe` (`sign_in` is the consent box on the WhatsApp sign-in form; `unsubscribe` is "Turn alerts back on" after using the stop link) |
 | `whatsapp_opt_out` | The alert was switched off in the app; `source=settings`, or `source=unsubscribe` when a signed-in explorer opens the stop link (no confirm step) |
-| `whatsapp_prompt_shown` | The post-quest "Never miss a daily quest" prompt opened; `source=post_quest`, `step=verify` (number not yet verified) or `consent` (verified, one tap) |
-| `whatsapp_prompt_dismissed` | That prompt was closed without opting in (it is then snoozed for 7 days); `source=post_quest` |
-| `whatsapp_unsubscribe_viewed` | The template's `?whatsapp=stop` link was opened; `source=link` |
+| `whatsapp_prompt_shown` | The "Get tomorrow's country on WhatsApp" card was shown on a daily quest result (once per result); `source=result_card`, `step=verify` (number not yet verified) or `consent` (verified, one tap) |
+| `whatsapp_prompt_dismissed` | "Not now" was tapped on that card (it then stays hidden until the next daily quest, the next UTC day); `source=result_card` |
+| `whatsapp_unsubscribe_viewed` | The template's `?whatsapp=stop` link was opened, sent on page load before any sign-in; `source=link` |
 
 Daily-quest hunts reuse the hunt events with `mode=daily` and add `streak` on `hunt_completed`. Common properties include `account_status=guest/signed_in`, `mode=solo/daily/multiplayer`, `role`, and applicable hunt statistics. Time used includes paid clue, reveal and wrong-guess costs. Legacy friend hunts remain 120 seconds; current hunts use 180 seconds.
 
@@ -64,7 +64,7 @@ Multiplayer `won`/`lost` describes the **seeker**. A timeout is `outcome=lost`, 
 
 ### WhatsApp funnel
 
-Sign-in: `sign_in_opened` → `whatsapp_code_requested` (`purpose=login`) → `whatsapp_code_pasted` (optional) → `whatsapp_verified` → `login` (`method=whatsapp`) → `whatsapp_opt_in` (`source=sign_in`, if the consent box was ticked) → `sign_up` for new explorers. Alerts: `whatsapp_prompt_shown` → `whatsapp_code_requested` (`purpose=verify_phone`) → `whatsapp_verified` → `whatsapp_opt_in`, or `whatsapp_prompt_dismissed`. Phone numbers and codes are never event parameters, and `reason` is a fixed code, not the server's message. Opting out by replying STOP to the WhatsApp message happens on the server (the `whatsappInbound` function), so it is not tracked client-side. Opt-outs from the unsubscribe link and from settings are.
+Sign-in: `sign_in_opened` → `whatsapp_code_requested` (`purpose=login`) → `whatsapp_code_pasted` (optional) → `whatsapp_verified` → `login` (`method=whatsapp`) → `whatsapp_opt_in` (`source=sign_in`, if the consent box was ticked) → `sign_up` for new explorers. Alerts: after each daily quest (won or lost), signed-in explorers with a username who haven't opted in or out get an inline card under the result: `whatsapp_prompt_shown` (`source=result_card`) → `whatsapp_code_requested` (`purpose=verify_phone`) → `whatsapp_verified` → `whatsapp_opt_in` (`source=result_card`), or `whatsapp_prompt_dismissed`. Explorers with a verified number skip straight from the card to `whatsapp_opt_in`. The same card offers browser notifications where the browser can still ask, tracked as `notifications_permission` with `source=result_card`. Guests are asked on the WhatsApp sign-in form (`source=sign_in`) or in the username dialog after sign-in (`source=welcome`) instead. Unsubscribing: `whatsapp_unsubscribe_viewed` → `sign_in_opened` (`source=unsubscribe`, guests only) → `whatsapp_opt_out` (`source=unsubscribe`). Phone numbers and codes are never event parameters, and `reason` is a fixed code, not the server's message. Opting out by replying STOP to the WhatsApp message happens on the server (the `whatsappInbound` function), so it is not tracked client-side. Opt-outs from the unsubscribe link and from settings are.
 
 ## Reading the funnel in GA4
 

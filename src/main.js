@@ -60,10 +60,10 @@ let dailyRecords = [];
 let dailySyncPromise = null;
 let leaderboardBoard = 'monthly';
 let atlasView = null;
-// WhatsApp daily quest alert: the explorer's private state, a pending post-quest prompt and the ?whatsapp=stop link.
+// WhatsApp daily quest alert: the explorer's private state, the result card and the ?whatsapp=stop link.
 let whatsappState = null;
-let whatsappPromptPending = false;
-let whatsappPromptTimer;
+let resultAlertVerify = null;
+let resultAlertVersion = 0;
 let pendingUnsubscribe = new URLSearchParams(location.search).get('whatsapp') === 'stop';
 let signInContext = null;
 let signInVerify = null;
@@ -72,8 +72,6 @@ let signInOptInTask = Promise.resolve();
 let welcomeVerify = null;
 let accountVerify = null;
 let whatsappDialogVerify = null;
-let whatsappDialogMode = '';
-let whatsappPromptAccepted = false;
 // The uid whose profile (username) has loaded; deferred dialogs wait for it.
 let profileReadyFor = '';
 // Set by the daily notification link (?daily=1); the quest starts once the map is ready.
@@ -409,34 +407,19 @@ function closeSignIn() {
   if ($('#sign-in-dialog').open) $('#sign-in-dialog').close();
 }
 
-// ---- Post-quest prompt and the unsubscribe link wait until no other dialog or hunt is on screen.
+// ---- The unsubscribe link waits until no other dialog or hunt is on screen.
 function dialogsBusy() {
   return ['#welcome-dialog', '#sign-in-dialog', '#whatsapp-dialog', '#account-dialog'].some(selector => $(selector).open);
 }
 
-function queueWhatsAppPrompt() {
-  whatsappPromptPending = true;
-  clearTimeout(whatsappPromptTimer);
-  whatsappPromptTimer = setTimeout(showDeferredDialogs, 1800);
-}
-
-async function showDeferredDialogs() {
+function showDeferredDialogs() {
   if (!user || profileReadyFor !== user.uid || dialogsBusy()) return;
-  if (pendingUnsubscribe) { showUnsubscribe(); return; }
-  if (!whatsappPromptPending || !username || document.body.classList.contains('in-game')) return;
-  whatsappPromptPending = false;
-  const player = user;
-  const state = await refreshWhatsApp(player).catch(() => null);
-  if (!state || user?.uid !== player.uid) return;
-  if (!whatsappPromptEligible({ signedIn: true, username, whatsapp: state.whatsapp, snoozedAt: state.snoozedAt })) return;
-  if (dialogsBusy() || document.body.classList.contains('in-game')) { whatsappPromptPending = true; return; }
-  showWhatsAppPrompt(player, state);
+  if (pendingUnsubscribe) showUnsubscribe();
 }
 
-function openWhatsAppDialog(mode, kicker, html) {
+function openWhatsAppDialog(kicker, html) {
   whatsappDialogVerify?.destroy();
   whatsappDialogVerify = null;
-  whatsappDialogMode = mode;
   $('#whatsapp-dialog-kicker').textContent = kicker;
   $('#whatsapp-dialog-content').innerHTML = html;
   if (!$('#whatsapp-dialog').open) $('#whatsapp-dialog').showModal();
@@ -450,47 +433,109 @@ function bindWhatsAppDone() {
   $('#wa-dialog-done')?.addEventListener('click', () => $('#whatsapp-dialog').close());
 }
 
-function showWhatsAppPrompt(player, state) {
+// Asks for browser notification permission, then registers this browser for background alerts.
+// The notifications_permission event waits for the registration so it can carry its outcome.
+async function requestBrowserNotifications(source) {
+  const permission = await Notification.requestPermission();
+  const player = user;
+  (async () => {
+    const outcome = permission !== 'granted' ? (permission === 'denied' ? 'denied' : 'dismissed')
+      : player ? await registerChallengePush(player) : 'signed_out';
+    trackEvent(EVENTS.NOTIFICATIONS_PERMISSION, { permission, outcome, source });
+  })();
+  return permission;
+}
+
+// ---- Daily quest alert card: after a daily quest, signed-in explorers with a username who haven't
+// opted in (or out) see it below the result's actions. Guests are asked during sign-in instead.
+const resultAlert = document.createElement('section');
+resultAlert.className = 'wa-section result-alert hidden';
+resultAlert.setAttribute('aria-labelledby', 'result-alert-heading');
+elements.result.append(resultAlert);
+
+function hideResultAlert() {
+  resultAlertVersion += 1;
+  resultAlertVerify?.destroy();
+  resultAlertVerify = null;
+  resultAlert.classList.add('hidden');
+  resultAlert.replaceChildren();
+}
+
+async function showResultAlert(day) {
+  hideResultAlert();
+  const player = user;
+  if (!player || !username) return;
+  const version = resultAlertVersion;
+  const state = await refreshWhatsApp(player).catch(error => { console.warn('WhatsApp settings unavailable:', error); return null; });
+  if (!state || version !== resultAlertVersion || user?.uid !== player.uid || lastResult?.day !== day) return;
+  if (!whatsappPromptEligible({ signedIn: true, username, whatsapp: state.whatsapp, snoozedAt: state.snoozedAt })) return;
   const whatsapp = state.whatsapp;
   const verified = isVerified(whatsapp);
-  whatsappPromptAccepted = false;
-  openWhatsAppDialog('prompt', '✦   DAILY QUEST ALERT', `<h2>Never miss a <em>daily quest.</em></h2>
-    <p class="wa-lead">Get one WhatsApp message when each new daily quest goes live. That's the only thing we'll ever send you there: no promos, no spam. Reply STOP anytime.</p>
+  const offerPush = browserNotificationsAvailable() && Notification.permission === 'default';
+  resultAlert.innerHTML = `<h3 id="result-alert-heading">Get tomorrow's country on WhatsApp</h3>
+    <p class="wa-caption">One message when each new daily quest goes live. Nothing else. Reply STOP anytime.</p>
     ${verified
-    ? `<label class="wa-consent"><input id="wa-prompt-consent" type="checkbox" /><span>${CONSENT_COPY}</span></label><p class="wa-caption">We'll message ${escapeHTML(maskPhone(whatsapp.phone))}.</p><button id="wa-prompt-on" class="primary-button" type="button" disabled>Yes, alert me on WhatsApp <span aria-hidden="true">↗</span></button><p id="wa-prompt-status" class="friend-status" role="status"></p>`
-    : '<div id="wa-prompt-verify"></div>'}
-    <button id="wa-prompt-later" class="text-button wa-later" type="button">Not now</button>`);
-  trackEvent(EVENTS.WHATSAPP_PROMPT_SHOWN, { source: 'post_quest', step: verified ? 'consent' : 'verify' });
+    ? `<label class="wa-consent"><input id="result-alert-consent" type="checkbox" /><span>${CONSENT_COPY}</span></label><p class="wa-caption">We'll message ${escapeHTML(maskPhone(whatsapp.phone))}.</p><button id="result-alert-on" class="secondary-button" type="button" disabled>Yes, alert me <span aria-hidden="true">↗</span></button>`
+    : '<button id="result-alert-start" class="secondary-button" type="button">Get alerts on WhatsApp <span aria-hidden="true">↗</span></button><div id="result-alert-verify"></div>'}
+    <p id="result-alert-status" class="friend-status" role="status" aria-live="polite"></p>
+    <div class="result-alert-links">${offerPush ? '<button id="result-alert-push" class="text-button" type="button">Or get a browser notification</button>' : ''}<button id="result-alert-later" class="text-button" type="button">Not now</button></div>`;
+  resultAlert.classList.remove('hidden');
+  trackEvent(EVENTS.WHATSAPP_PROMPT_SHOWN, { source: 'result_card', step: verified ? 'consent' : 'verify' }, day);
+  const setStatus = message => { $('#result-alert-status').textContent = message; };
   const accepted = phone => {
-    whatsappPromptAccepted = true;
-    $('#whatsapp-dialog-content').innerHTML = whatsappDoneView(phone);
-    bindWhatsAppDone();
+    if (version !== resultAlertVersion) return;
+    resultAlertVerify?.destroy();
+    resultAlertVerify = null;
+    resultAlert.innerHTML = `<h3 id="result-alert-heading">You're <em>in.</em></h3><p class="wa-caption">We'll message ${escapeHTML(maskPhone(phone))} on WhatsApp when each new daily quest goes live, and nothing else. Reply STOP or turn it off in My logs anytime.</p>`;
   };
   if (verified) {
-    const consent = $('#wa-prompt-consent');
-    const button = $('#wa-prompt-on');
+    const consent = $('#result-alert-consent');
+    const button = $('#result-alert-on');
     consent.addEventListener('change', () => { button.disabled = !consent.checked; });
     button.addEventListener('click', async () => {
+      if (!consent.checked) return;
       button.disabled = true;
       try {
-        await turnOnWhatsApp(player, 'post_quest');
+        await turnOnWhatsApp(player, 'result_card');
         accepted(whatsapp.phone);
       } catch (error) {
         console.error(error);
-        $('#wa-prompt-status').textContent = 'Alerts could not be turned on. Please try again.';
+        setStatus('Alerts could not be turned on. Please try again.');
         button.disabled = !consent.checked;
       }
     });
   } else {
-    whatsappDialogVerify = createWhatsAppVerify($('#wa-prompt-verify'), {
-      purpose: 'verify_phone', source: 'post_quest', requireConsent: true, submitLabel: 'Verify on WhatsApp',
-      onVerified: async ({ phone }) => {
-        await turnOnWhatsApp(player, 'post_quest');
-        accepted(phone);
-      },
+    $('#result-alert-start').addEventListener('click', event => {
+      event.currentTarget.remove();
+      resultAlertVerify = createWhatsAppVerify($('#result-alert-verify'), {
+        purpose: 'verify_phone', source: 'result_card', requireConsent: true, submitLabel: 'Verify on WhatsApp',
+        onVerified: async ({ phone }) => {
+          await turnOnWhatsApp(player, 'result_card');
+          accepted(phone);
+        },
+      });
+      resultAlertVerify.focus();
     });
   }
-  $('#wa-prompt-later').addEventListener('click', () => $('#whatsapp-dialog').close());
+  $('#result-alert-push')?.addEventListener('click', async event => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const permission = await requestBrowserNotifications('result_card');
+      setStatus(permission === 'granted' ? "Browser notifications are on. You'll hear when each day's quest arrives."
+        : permission === 'denied' ? 'Browser notifications are off. You can still get the alert on WhatsApp.' : '');
+    } catch (error) {
+      console.warn('Notification permission could not be requested:', error);
+      setStatus('Browser notifications are unavailable here.');
+    }
+    button.remove();
+  });
+  // "Not now" hides the card until the next daily quest (the next UTC day) on this account.
+  $('#result-alert-later').addEventListener('click', () => {
+    hideResultAlert();
+    trackEvent(EVENTS.WHATSAPP_PROMPT_DISMISSED, { source: 'result_card' });
+    snoozeWhatsAppPrompt(player).catch(error => console.warn('Could not snooze the WhatsApp prompt:', error));
+  });
 }
 
 // The template's "Stop these alerts" link (?whatsapp=stop). The link carries no token, so the explorer
@@ -510,7 +555,7 @@ async function showUnsubscribe() {
   } catch (error) {
     console.error(error);
     if (user?.uid !== player.uid) return;
-    openWhatsAppDialog('stop', '✦   WHATSAPP ALERTS', `<h2>Something went <em>wrong.</em></h2>
+    openWhatsAppDialog('✦   WHATSAPP ALERTS', `<h2>Something went <em>wrong.</em></h2>
       <p class="wa-lead">Your WhatsApp alerts could not be switched off just now. Reply STOP to the WhatsApp message, or turn them off in My logs.</p>
       <button id="wa-dialog-done" class="primary-button" type="button">Done <span aria-hidden="true">↗</span></button>`);
     bindWhatsAppDone();
@@ -519,7 +564,7 @@ async function showUnsubscribe() {
   if (user?.uid !== player.uid) return;
   const whatsapp = state?.whatsapp;
   const canResume = isVerified(whatsapp);
-  openWhatsAppDialog('stop', '✦   WHATSAPP ALERTS', `<h2>You're <em>unsubscribed.</em></h2>
+  openWhatsAppDialog('✦   WHATSAPP ALERTS', `<h2>You're <em>unsubscribed.</em></h2>
     <p class="wa-lead">${stopped ? "You won't get daily quests on WhatsApp any more." : "You're not getting daily quests on WhatsApp, so nothing will be sent."}${stopped || canResume ? ' Your number stays linked so you can still sign in with it.' : ''} If the message came to a different number, sign in with that WhatsApp number, or reply STOP to the message.</p>
     ${canResume ? `<div class="wa-section"><h3>Changed your mind?</h3><label class="wa-consent"><input id="wa-resume-consent" type="checkbox" /><span>${CONSENT_COPY}</span></label><p class="wa-caption">We'll message ${escapeHTML(maskPhone(whatsapp.phone))}.</p><button id="wa-resume" class="secondary-button" type="button" disabled>Turn alerts back on <span aria-hidden="true">↗</span></button><p id="wa-resume-status" class="friend-status" role="status"></p></div>` : ''}
     <button id="wa-dialog-done" class="primary-button" type="button">Done <span aria-hidden="true">↗</span></button>`);
@@ -930,7 +975,7 @@ function finishDaily(state) {
     elements.saveStatus.textContent = won ? 'Kept on this device until you sign in.' : '';
   }
   renderLeaderboardGate();
-  if (fresh) queueWhatsAppPrompt();
+  showResultAlert(record.day);
 }
 
 function huntRecord(state) {
@@ -1290,6 +1335,7 @@ function showResultScreen(state) {
   elements.game.classList.add('hidden');
   elements.leaderboardScreen.classList.add('hidden');
   closeAtlasView();
+  hideResultAlert();
   elements.result.classList.remove('hidden');
   elements.result.classList.remove('victory');
   $('#result-art').textContent = state.status === 'won' ? '✦' : '⌛';
@@ -1432,12 +1478,10 @@ const friend = createFriendController({
 $('#welcome-notifications').addEventListener('click', async () => {
   if (!browserNotificationsAvailable()) return;
   try {
-    const permission = await Notification.requestPermission();
-    trackEvent(EVENTS.NOTIFICATIONS_PERMISSION, { permission });
+    const permission = await requestBrowserNotifications('welcome');
     $('#welcome-notifications').classList.add('hidden');
     $('#notification-status').textContent = permission === 'granted'
       ? "Browser notifications are on. You'll hear when each day's quest arrives." : 'No problem. Challenges will still appear in your inbox.';
-    if (permission === 'granted' && user) registerChallengePush(user).catch(error => console.warn('Background alerts could not start:', error));
   } catch (error) {
     console.warn('Notification permission could not be requested:', error);
     $('#notification-status').textContent = 'Browser alerts are unavailable. Challenges will still appear in your inbox.';
@@ -1627,12 +1671,6 @@ $('#close-whatsapp').addEventListener('click', () => $('#whatsapp-dialog').close
 $('#whatsapp-dialog').addEventListener('close', () => {
   whatsappDialogVerify?.destroy();
   whatsappDialogVerify = null;
-  // Closing the post-quest prompt without opting in snoozes it for a week on this account.
-  if (whatsappDialogMode === 'prompt' && !whatsappPromptAccepted && user) {
-    trackEvent(EVENTS.WHATSAPP_PROMPT_DISMISSED, { source: 'post_quest' });
-    snoozeWhatsAppPrompt(user).catch(error => console.warn('Could not snooze the WhatsApp prompt:', error));
-  }
-  whatsappDialogMode = '';
 });
 $('#play-again-button').addEventListener('click', startHunt);
 window.addEventListener('resize', () => { if (atlasView) requestAnimationFrame(focusAtlas); });
@@ -1699,6 +1737,7 @@ loadPuzzleSet();
   if (sharedAtlas && !new URLSearchParams(location.search).get('hunt')) openAtlas(sharedAtlas, 'link');
 }
 if (location.hash === '#leaderboard') showLeaderboard();
+if (pendingUnsubscribe) trackEvent(EVENTS.WHATSAPP_UNSUBSCRIBE_VIEWED, { source: 'link' });
 try {
   const resumed = sessionStorage.getItem(RESUME_RESULT_KEY);
   if (resumed) {
@@ -1728,6 +1767,7 @@ watchUser(async nextUser => {
   if (!nextUser && $('#whatsapp-dialog').open) $('#whatsapp-dialog').close();
   if (nextUser) closeSignIn();
   whatsappState = null;
+  hideResultAlert();
   if (!nextUser && pendingUnsubscribe) openSignIn('unsubscribe');
   elements.accountButton.innerHTML = nextUser ? `<span class="account-avatar">${escapeHTML((nextUser.displayName || 'E')[0])}</span><span class="account-label">My logs</span><span id="account-challenge-count" class="account-alert-count hidden">0</span>` : 'Sign in <span aria-hidden="true">↗</span>';
   elements.accountButton.setAttribute('aria-label', nextUser ? 'Open explorer log' : 'Sign in');

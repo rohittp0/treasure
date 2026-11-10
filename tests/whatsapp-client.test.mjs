@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizePhone, maskPhone, whatsappPromptEligible, otpErrorMessage, otpErrorReason, formatCountdown, countryOptions, PROMPT_SNOOZE_MS,
+import { normalizePhone, maskPhone, whatsappPromptEligible, otpErrorMessage, otpErrorReason, formatCountdown, countryOptions,
   detectCountry, countryFromNumber, loadStoredCountry, storeCountry, COUNTRY_STORAGE_KEY } from '../src/whatsapp.js';
 import { countryForTimeZone } from '../src/timezone-countries.js';
 
@@ -22,7 +22,7 @@ test('masked numbers keep only the calling code and last four digits', () => {
   assert.equal(maskPhone(undefined), '');
 });
 
-test('the post-quest prompt respects sign-in, opt-in, opt-out and the 7-day snooze', () => {
+test('the result card respects sign-in, opt-in, opt-out and a snooze until the next UTC day', () => {
   const now = Date.UTC(2026, 10, 9, 12);
   const base = { signedIn: true, username: 'scout', whatsapp: null, snoozedAt: null, now };
   assert.equal(whatsappPromptEligible(base), true);
@@ -31,9 +31,15 @@ test('the post-quest prompt respects sign-in, opt-in, opt-out and the 7-day snoo
   assert.equal(whatsappPromptEligible({ ...base, whatsapp: { phone: '+919020277399', verifiedAt: 1, optIn: true } }), false);
   assert.equal(whatsappPromptEligible({ ...base, whatsapp: { phone: '+919020277399', verifiedAt: 1, optIn: false } }), true);
   assert.equal(whatsappPromptEligible({ ...base, whatsapp: { optIn: false, optOutAt: { toMillis: () => now - 1 } } }), false);
-  assert.equal(whatsappPromptEligible({ ...base, snoozedAt: now - PROMPT_SNOOZE_MS + 60_000 }), false);
-  assert.equal(whatsappPromptEligible({ ...base, snoozedAt: now - PROMPT_SNOOZE_MS }), true);
+  // Snoozed earlier the same UTC day, in any of the accepted timestamp shapes: still hidden.
+  assert.equal(whatsappPromptEligible({ ...base, snoozedAt: Date.UTC(2026, 10, 9, 0, 0, 1) }), false);
   assert.equal(whatsappPromptEligible({ ...base, snoozedAt: new Date(now - 1000) }), false);
+  assert.equal(whatsappPromptEligible({ ...base, snoozedAt: { toMillis: () => now - 1000 } }), false);
+  // Snoozed late yesterday (UTC): the next daily quest has started, so it shows again.
+  assert.equal(whatsappPromptEligible({ ...base, snoozedAt: Date.UTC(2026, 10, 8, 23, 59, 59) }), true);
+  assert.equal(whatsappPromptEligible({ ...base, now: Date.UTC(2026, 10, 10, 0, 0, 1), snoozedAt: now }), true);
+  // A server time slightly ahead of this device's clock still counts as snoozed.
+  assert.equal(whatsappPromptEligible({ ...base, now: Date.UTC(2026, 10, 9, 23, 59, 59), snoozedAt: Date.UTC(2026, 10, 10, 0, 0, 5) }), false);
 });
 
 test('callable errors map to clear copy and privacy-safe reasons', () => {

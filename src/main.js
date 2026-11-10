@@ -12,6 +12,8 @@ import { createWhatsAppVerify } from './whatsapp-verify.js';
 import { CONSENT_COPY, browserTimeZone, isVerified, maskPhone, whatsappPromptEligible } from './whatsapp.js';
 import { dayKey, monthKey, daysInMonth, msUntilNextDay, dailyQuest, validDailySchedule, currentStreak, scoreMonth, atlasFromRecords, mergeDailyRecords, validDailyRecord } from './daily.js';
 import { createFriendController } from './friend-controller.js';
+import { clockText, huntSheetKey } from './hunt-view.js';
+import { pickTapFeature, TAP_RADIUS } from './map-tap.js';
 
 maplibregl.setWorkerUrl(mapWorkerUrl);
 
@@ -27,6 +29,7 @@ const elements = {
   sheetToggle: $('#sheet-toggle'), sheetAction: $('#sheet-toggle-action'),
   sheetCount: $('#sheet-peek-count'), sheetClue: $('#sheet-peek-clue'),
   revealNote: $('#reveal-note'), selection: $('#selection-card'), selectionName: $('#selection-name'),
+  mapHint: $('#map-hint'),
   toast: $('#toast'), accountButton: $('#account-button'), accountDialog: $('#account-dialog'),
   accountContent: $('#account-content'), saveStatus: $('#save-status'),
   leaderboardScreen: $('#leaderboard-screen'), leaderboardRows: $('#leaderboard-rows'), leaderboardSignIn: $('#leaderboard-sign-in'),
@@ -44,6 +47,10 @@ let game = null;
 let selectedMapId = '';
 let saved = false;
 let ticker;
+// What the hunt screen last drew, so timer ticks only touch what changed.
+let huntView = { remaining: null, sheet: '' };
+let mapHintTimeout;
+let mapHintShown = false;
 let toastTimeout;
 let victoryTimeout;
 let countryData;
@@ -84,6 +91,7 @@ const FOUND_KEY = 'treasurehunch:solo-found';
 const DAILY_KEY_PREFIX = 'treasurehunch:daily:';
 const PENDING_ENTRY_KEY = 'treasurehunch:pending-leaderboard';
 const RESUME_RESULT_KEY = 'treasurehunch:resume-result';
+const MAP_HINT_KEY = 'treasurehunch:map-hint-seen';
 let completedWins = readCompletedWins();
 let soloFoundIds = readSoloFound();
 
@@ -614,6 +622,32 @@ function collapseSheetForMap() {
   if (game?.snapshot().status === 'playing') setSheetCollapsed(true);
 }
 
+// New seekers often read the first clue and never touch the map, so their first hunt on a device points at it once.
+function mapHintSeen() {
+  if (mapHintShown) return true;
+  try { return localStorage.getItem(MAP_HINT_KEY) === '1'; } catch { return false; }
+}
+
+function scheduleMapHint() {
+  hideMapHint();
+  const returning = completedWins > 0 || dailyRecords.some(record => record.status !== 'playing');
+  if (returning || mapHintSeen()) return;
+  // A short pause lets the seeker read the first clue before the map is pointed out.
+  mapHintTimeout = setTimeout(() => {
+    const state = game?.snapshot();
+    if (!state || state.status !== 'playing' || state.selected) return;
+    mapHintShown = true;
+    try { localStorage.setItem(MAP_HINT_KEY, '1'); } catch { /* Without storage it shows once per page load. */ }
+    elements.mapHint.classList.remove('hidden');
+    trackEvent(EVENTS.ONBOARDING_HINT_SHOWN, huntParameters(state));
+  }, 1200);
+}
+
+function hideMapHint() {
+  clearTimeout(mapHintTimeout);
+  elements.mapHint.classList.add('hidden');
+}
+
 function selectMapCountry(country) {
   if (!game) return;
   const state = game.select(country);
@@ -622,6 +656,8 @@ function selectMapCountry(country) {
     return;
   }
   trackEvent(EVENTS.COUNTRY_SELECTED, { ...huntParameters(state), method: 'map' });
+  if (!elements.mapHint.classList.contains('hidden')) trackEvent(EVENTS.ONBOARDING_HINT_COMPLETED, huntParameters(state));
+  hideMapHint();
   selectedMapId = country.id;
   map.setFilter('selected-country', ['==', ['get', 'id'], country.id]);
   renderSelection(state);
@@ -641,6 +677,8 @@ async function loadMap() {
       style: { version: 8, glyphs: `${window.location.origin}/fonts/{fontstack}/{range}.pbf`, sources: {}, layers: [{ id: 'sea', type: 'background', paint: { 'background-color': '#173740' } }] },
       center: [12, 21], zoom: window.innerWidth < 700 ? 0.85 : 1.1,
       minZoom: 0.5, maxZoom: 6, renderWorldCopies: false,
+      // Finger jitter of a few pixels would otherwise turn a tap into a tiny drag and drop the click.
+      clickTolerance: 10,
       attributionControl: false,
     });
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
@@ -658,8 +696,11 @@ async function loadMap() {
       map.addLayer({ id: 'selected-border', type: 'line', source: 'countries', filter: ['==', ['get', 'id'], ''], paint: { 'line-color': '#fff2c3', 'line-width': 2.3 } });
       map.addSource('country-labels', { type: 'geojson', data: { type: 'FeatureCollection', features: labels } });
       map.addLayer({ id: 'labels', type: 'symbol', source: 'country-labels', layout: { 'text-field': ['get', 'name'], 'text-size': ['interpolate', ['linear'], ['zoom'], 0, 9, 3, 12], 'text-font': ['Open Sans Semibold'], 'text-allow-overlap': false }, paint: { 'text-color': '#395a57', 'text-halo-color': '#dfdcc1', 'text-halo-width': 1.2 } });
-      map.on('click', 'land', event => {
-        const feature = event.features?.[0];
+      // A tap near a small country still selects it; see map-tap.js.
+      map.on('click', event => {
+        const { x, y } = event.point;
+        const nearby = map.queryRenderedFeatures([[x - TAP_RADIUS, y - TAP_RADIUS], [x + TAP_RADIUS, y + TAP_RADIUS]], { layers: ['land'] });
+        const feature = pickTapFeature(nearby, event.point, position => map.project(position));
         if (!feature) return;
         if (friend.mapCountry(feature, event.lngLat)) return;
         if (game?.snapshot().status === 'playing') selectMapCountry({ id: feature.properties.id, country: feature.properties.name });
@@ -673,8 +714,8 @@ async function loadMap() {
     });
     map.on('click', collapseSheetForMap);
     map.on('dragstart', collapseSheetForMap);
-    map.on('zoomstart', () => {
-      if (friend.mode === 'hiding' && friend.suppressSearchZoom) return;
+    map.on('zoomstart', event => {
+      if (event.huntStart || (friend.mode === 'hiding' && friend.suppressSearchZoom)) return;
       collapseSheetForMap();
     });
     map.on('error', error => console.warn('Map detail could not render:', error.error || error));
@@ -704,15 +745,20 @@ function renderSelection(state) {
   if (isVisible) elements.selectionName.textContent = state.selected.country;
 }
 
+// The ticker runs five times a second. The clock changes once a second, and the sheet only when clues or guesses do.
 function renderGame() {
   if (!game) return;
   const state = game.tick();
   if (state.status !== 'playing') { finish(state); return; }
-  const minutes = Math.floor(state.remaining / 60);
-  const seconds = state.remaining % 60;
-  elements.timer.textContent = `${minutes}:${String(seconds).padStart(2, '0')}`;
-  elements.progress.style.width = `${(state.remaining / state.roundSeconds) * 100}%`;
-  elements.hud.classList.toggle('timer-urgent', state.remaining <= 30);
+  if (state.remaining !== huntView.remaining) {
+    huntView.remaining = state.remaining;
+    elements.timer.textContent = clockText(state.remaining);
+    elements.progress.style.width = `${(state.remaining / state.roundSeconds) * 100}%`;
+    elements.hud.classList.toggle('timer-urgent', state.remaining <= 30);
+  }
+  const sheetKey = huntSheetKey(state);
+  if (sheetKey === huntView.sheet) return;
+  huntView.sheet = sheetKey;
   elements.clueCount.textContent = `${String(state.cluesVisible).padStart(2, '0')} / 03`;
   elements.sheetCount.textContent = elements.clueCount.textContent;
   elements.sheetClue.textContent = state.revealedCountry
@@ -760,9 +806,20 @@ function openHuntScreen() {
   $('#end-level-button').classList.remove('hidden');
   setSheetCollapsed(false);
   clearInterval(ticker);
+  huntView = { remaining: null, sheet: '' };
   ticker = setInterval(renderGame, 200);
   renderGame();
   map.resize();
+  frameHuntStart();
+  scheduleMapHint();
+}
+
+// On phones the clue sheet covers the lower half of the map, so the opening world view showed mostly
+// Greenland and the Arctic. Each hunt instead starts a little closer in, centred in the strip above the sheet.
+function frameHuntStart() {
+  if (window.innerWidth >= 700) return;
+  const sheet = elements.game.getBoundingClientRect().height;
+  map.easeTo({ center: [20, 15], zoom: 1.2, offset: [0, -sheet / 2], duration: 0 }, { huntStart: true });
 }
 
 // The daily quest uses the bundled country list so every browser builds the same schedule.
@@ -1271,6 +1328,7 @@ function showResultScreen(state) {
 
 function finish(state) {
   clearInterval(ticker);
+  hideMapHint();
   if (saved) return;
   saved = true;
   if (state.mode === 'daily' || (game && activeMode === 'daily')) { finishDaily(state); return; }
@@ -1312,6 +1370,7 @@ function leaveHunt(track = true) {
   if (track && dailyRunning) showToast("Today's clock keeps running. Resume from the home screen.");
   clearVictory();
   clearInterval(ticker);
+  hideMapHint();
   game = null;
   clearMapSelection();
   document.body.classList.remove('in-game', 'solo-game');

@@ -17,6 +17,7 @@ export const EVENTS = Object.freeze({
   WHATSAPP_CODE_REQUESTED: 'whatsapp_code_requested', WHATSAPP_VERIFIED: 'whatsapp_verified',
   WHATSAPP_VERIFY_FAILED: 'whatsapp_verify_failed', WHATSAPP_OPT_IN: 'whatsapp_opt_in',
   WHATSAPP_OPT_OUT: 'whatsapp_opt_out', WHATSAPP_UNSUBSCRIBE_VIEWED: 'whatsapp_unsubscribe_viewed',
+  ONBOARDING_HINT_SHOWN: 'onboarding_hint_shown', ONBOARDING_HINT_COMPLETED: 'onboarding_hint_completed',
 });
 const eventNames = new Set(Object.values(EVENTS));
 const allowedParameters = new Set(['mode', 'role', 'level', 'difficulty', 'round_seconds', 'time_used',

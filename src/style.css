@@ -454,3 +454,4 @@ button.leaderboard-row:hover{background:#f4e7cb}
 .result-install h3{font-size:16px}
 .result-install .wa-caption{margin:0 0 4px}
 @media(max-width:700px){.home-install-button{width:100%}}
+.install-dialog .text-button{display:flex;width:100%;margin-top:6px}

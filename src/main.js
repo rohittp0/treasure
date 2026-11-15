@@ -11,7 +11,7 @@ import { loadFriendHunts, watchUser, login, logout, loadPuzzles, saveHunt, loadH
 import { createWhatsAppVerify } from './whatsapp-verify.js';
 import { inAppBrowser, platform, googleErrorReason } from './inapp.js';
 import { arrival, clearHandoffParams, outboundHandoff, removeUrlParams, setUrlParam } from './handoff.js';
-import { createInstaller, createWakeLock, setAppBadge, shouldOfferInstall, startServiceWorker } from './pwa.js';
+import { createInstaller, createWakeLock, setAppBadge, shouldAutoOfferInstall, shouldOfferInstall, startServiceWorker } from './pwa.js';
 import { CONSENT_COPY, browserTimeZone, isVerified, maskPhone, whatsappPromptEligible } from './whatsapp.js';
 import { dailyLinkSource, dayKey, monthKey, daysInMonth, msUntilNextDay, dailyQuest, validDailySchedule, currentStreak, scoreMonth, atlasFromRecords, mergeDailyRecords, validDailyRecord } from './daily.js';
 import { createFriendController } from './friend-controller.js';
@@ -547,10 +547,14 @@ function renderInstallEntry() {
   trackEvent(EVENTS.INSTALL_PROMPT_SHOWN, { source: 'home', method: path }, 'home');
 }
 
-// The card waits for the WhatsApp alert card to decide first, so a result never stacks two asks.
+// The card waits for the WhatsApp alert card to decide first, so a result never stacks two asks. It is for
+// explorers who already have a username: a guest's result has one ask, the claim, and the install sheet
+// follows by itself once they have signed up (maybeOfferInstall).
 function showResultInstall(day) {
   const path = installer.path();
+  const sheetIsComing = installAfterSignUp && shouldAutoOfferInstall({ path, offeredAt: installer.offeredAt(), snoozedAt: installer.snoozedAt() });
   if (lastResult?.day !== day || elements.result.classList.contains('hidden') || !resultAlert.classList.contains('hidden')
+      || !user || !username || sheetIsComing
       || !shouldOfferInstall({ path, snoozedAt: installer.snoozedAt() })) { hideResultInstall(); return; }
   resultInstall.innerHTML = `<h3 id="result-install-heading">Keep tomorrow's country one tap away</h3>
     <p class="wa-caption">${path === 'open_in_browser'
@@ -568,6 +572,31 @@ function showResultInstall(day) {
     trackEvent(EVENTS.INSTALL_PROMPT_DISMISSED, { source: 'result_card', method: path });
   });
 }
+
+// The install sheet opens by itself once per device, at the moment an explorer has just committed: right
+// after signing up (or in) with a quest result on screen, or after switching on the daily quest alert there.
+// `installAfterSignUp` is raised by those moments and waits for dialogs to close and, on Android, for the
+// browser to hand over its install prompt.
+let installAfterSignUp = false;
+let sawSignedOut = false;
+let installSheet = null;
+function maybeOfferInstall() {
+  if (!installAfterSignUp || !user || !username || !lastResult || game
+      || elements.result.classList.contains('hidden') || dialogsBusy()) return;
+  const path = installer.path();
+  if (!shouldAutoOfferInstall({ path, offeredAt: installer.offeredAt(), snoozedAt: installer.snoozedAt() })) {
+    // 'unavailable' can still turn into 'prompt' a few seconds into a first visit; anything else is final.
+    if (path !== 'unavailable') installAfterSignUp = false;
+    return;
+  }
+  installAfterSignUp = false;
+  installer.markOffered();
+  hideResultInstall();
+  trackEvent(EVENTS.INSTALL_PROMPT_SHOWN, { source: 'sign_up', method: path });
+  openInstallDialog('sign_up', path === 'prompt' ? 'offer' : path);
+}
+// A short pause lets the claim's confirmation be read first.
+const offerInstallSoon = () => setTimeout(maybeOfferInstall, 900);
 
 async function startInstall(source) {
   const path = installer.path();
@@ -588,7 +617,17 @@ async function startInstall(source) {
 
 function openInstallDialog(source, path = installer.path()) {
   const content = $('#install-content');
-  if (path === 'ios_steps') {
+  const sheet = { source, method: path === 'offer' ? 'prompt' : path, acted: false };
+  installSheet = sheet;
+  if (path === 'offer') {
+    // After sign-up: one button, which is the tap the browser needs before it will show its own prompt.
+    content.innerHTML = `<h2>Keep your map <em>one tap away.</em></h2>
+      <p>Add TreasureHunch to your home screen. It opens full screen, works offline, and tomorrow's country is a single tap away.</p>
+      <button id="install-now" class="primary-button" type="button">Install the app <span aria-hidden="true">↗</span></button>
+      <button id="install-later" class="text-button" type="button">Not now</button>`;
+    $('#install-now').addEventListener('click', () => { sheet.acted = true; $('#install-dialog').close(); startInstall(source); });
+    $('#install-later').addEventListener('click', () => $('#install-dialog').close());
+  } else if (path === 'ios_steps') {
     installMethod = 'ios_steps';
     content.innerHTML = `<h2>Add it to your <em>Home Screen.</em></h2>
       <p>TreasureHunch then opens full screen from its own icon and can send you each day's quest as a notification.</p>
@@ -602,8 +641,10 @@ function openInstallDialog(source, path = installer.path()) {
       <button id="install-open-browser" class="primary-button" type="button">Open in ${REAL_BROWSER} <span aria-hidden="true">↗</span></button>
       <p id="install-inapp-note" class="wa-caption hidden" aria-live="polite"></p>
       <input id="install-inapp-url" class="sign-in-inapp-url hidden" type="url" readonly aria-label="Link to open in your browser">`;
-    $('#install-open-browser').addEventListener('click', () =>
-      openInRealBrowser('install', { install: '1' }, $('#install-inapp-note'), $('#install-inapp-url')));
+    $('#install-open-browser').addEventListener('click', () => {
+      sheet.acted = true;
+      openInRealBrowser('install', { install: '1' }, $('#install-inapp-note'), $('#install-inapp-url'));
+    });
     $('#install-inapp-url').addEventListener('focus', event => event.target.select());
   } else {
     // A browser that has not offered its prompt yet (it can take a few seconds), or one without a prompt.
@@ -618,7 +659,7 @@ function openInstallDialog(source, path = installer.path()) {
     $('#install-dialog').addEventListener('close', stop, { once: true });
     button.addEventListener('click', () => { $('#install-dialog').close(); startInstall(source); });
   }
-  $('#install-close')?.addEventListener('click', () => $('#install-dialog').close());
+  $('#install-close')?.addEventListener('click', () => { sheet.acted = true; $('#install-dialog').close(); });
   if (!$('#install-dialog').open) $('#install-dialog').showModal();
 }
 
@@ -656,6 +697,8 @@ async function showResultAlert(day) {
     resultAlertVerify?.destroy();
     resultAlertVerify = null;
     resultAlert.innerHTML = `<h3 id="result-alert-heading">You're <em>in.</em></h3><p class="wa-caption">We'll message ${escapeHTML(maskPhone(phone))} on WhatsApp when each new daily quest goes live, and nothing else. Reply STOP or turn it off in My logs anytime.</p>`;
+    installAfterSignUp = true;
+    offerInstallSoon();
   };
   if (verified) {
     const consent = $('#result-alert-consent');
@@ -1198,7 +1241,7 @@ function finishDaily(state) {
     elements.saveStatus.textContent = won ? 'Kept on this device until you sign in.' : '';
   }
   renderLeaderboardGate();
-  showResultAlert(record.day).finally(() => showResultInstall(record.day));
+  showResultAlert(record.day).finally(() => { showResultInstall(record.day); offerInstallSoon(); });
 }
 
 function huntRecord(state) {
@@ -1609,6 +1652,7 @@ function finish(state) {
   else if (won) rememberPendingGuestHunt(huntRecord(state));
   renderLeaderboardGate();
   refreshLeaderboard();
+  offerInstallSoon();
 }
 
 function leaveHunt(track = true) {
@@ -1766,6 +1810,7 @@ $('#welcome-form').addEventListener('submit', async event => {
         throw new Error(`@${handle} is taken. Try another.`);
       }
       username = await claimUsername(welcomeFor, handle);
+      installAfterSignUp = true;
       setAnalyticsUser({ uid: welcomeFor.uid, username });
       renderUsername();
     }
@@ -1805,6 +1850,7 @@ $('#welcome-dialog').addEventListener('close', () => {
   welcomeVerify?.destroy();
   welcomeVerify = null;
   showDeferredDialogs();
+  offerInstallSoon();
 });
 $('#challenge-list').addEventListener('click', async event => {
   const button = event.target.closest('button[data-code]');
@@ -1931,10 +1977,19 @@ $('#sign-in-dialog').addEventListener('close', () => {
   signInVerify?.destroy();
   signInVerify = null;
   showDeferredDialogs();
+  offerInstallSoon();
 });
 $('#close-install').addEventListener('click', () => $('#install-dialog').close());
+// Closing the sheet that opened by itself without acting on it counts as "Not now" for a week.
+$('#install-dialog').addEventListener('close', () => {
+  const sheet = installSheet;
+  installSheet = null;
+  if (sheet?.source !== 'sign_up' || sheet.acted) return;
+  installer.snooze();
+  trackEvent(EVENTS.INSTALL_PROMPT_DISMISSED, { source: 'sign_up', method: sheet.method });
+});
 $('#home-install-button').addEventListener('click', () => startInstall('home'));
-installer.onChange(renderInstallEntry);
+installer.onChange(() => { renderInstallEntry(); maybeOfferInstall(); });
 renderInstallEntry();
 $('#close-whatsapp').addEventListener('click', () => $('#whatsapp-dialog').close());
 $('#whatsapp-dialog').addEventListener('close', () => {
@@ -2047,6 +2102,9 @@ try {
 
 watchUser(async nextUser => {
   const currentVersion = ++authVersion;
+  // Signed in during this visit, as opposed to a session restored from an earlier one.
+  if (!nextUser) sawSignedOut = true;
+  else if (sawSignedOut) { sawSignedOut = false; installAfterSignUp = true; }
   user = nextUser;
   profileReadyFor = '';
   setAnalyticsUser(nextUser && { uid: nextUser.uid });
@@ -2107,6 +2165,7 @@ watchUser(async nextUser => {
     if (atlasView?.self) { atlasView.name = username; renderAtlas(); }
     else if (atlasView && username && atlasView.name === username) openAtlas('', atlasView.source);
     startPendingDaily();
+    offerInstallSoon();
     refreshWhatsApp(nextUser).then(state => {
       const zone = browserTimeZone();
       if (state?.whatsapp?.optIn === true && zone && state.whatsapp.timeZone !== zone)

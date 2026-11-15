@@ -4,6 +4,7 @@
 import { inAppBrowser, platform } from './escape.js';
 
 const SNOOZE_KEY = 'treasurehunch.install-snoozed';
+const OFFERED_KEY = 'treasurehunch.install-offered';
 export const INSTALL_SNOOZE_MS = 7 * 86400000;
 
 // 'twa' (the Play Store app), 'standalone' (added to the home screen) or 'browser'.
@@ -31,6 +32,11 @@ export function installPath({ ua = '', mode = 'browser', canPrompt = false } = {
 export function shouldOfferInstall({ path, snoozedAt = 0, now = Date.now() } = {}) {
   if (!['prompt', 'ios_steps', 'open_in_browser'].includes(path)) return false;
   return !(snoozedAt > 0 && now - snoozedAt < INSTALL_SNOOZE_MS);
+}
+
+// The install sheet opens by itself only once per device, and never within a week of "Not now".
+export function shouldAutoOfferInstall({ path, offeredAt = 0, snoozedAt = 0, now = Date.now() } = {}) {
+  return !(offeredAt > 0) && shouldOfferInstall({ path, snoozedAt, now });
 }
 
 // True when a newly activated worker's file list no longer contains the script this page is running.
@@ -96,6 +102,13 @@ export function createInstaller({ track = () => {} } = {}) {
     },
     snooze() {
       try { localStorage.setItem(SNOOZE_KEY, String(Date.now())); } catch { /* Asked again next time. */ }
+    },
+    // When the install sheet last opened by itself on this device (0 if never).
+    offeredAt() {
+      try { return Number(localStorage.getItem(OFFERED_KEY)) || 0; } catch { return 0; }
+    },
+    markOffered() {
+      try { localStorage.setItem(OFFERED_KEY, String(Date.now())); } catch { /* It may open once more. */ }
     },
   };
 }

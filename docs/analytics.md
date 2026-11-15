@@ -36,9 +36,9 @@ Selections can instead lead to `selection_cancelled`; seekers can open additiona
 | `hunt_abandoned` | Player exits an unfinished solo or seeker hunt, including switching to a different hunt; current hunt stats. Closing the browser without using an exit action is not counted. |
 | `onboarding_hint_shown` | The one-time map hint ("Tap a country on the map, then press Guess.") appears about a second into the first solo or daily hunt on a device. Players with a solo win or a finished daily quest on the device never see it; current hunt stats |
 | `onboarding_hint_completed` | The seeker selects a country on the map while that hint is showing, which hides it; current hunt stats (`time_used` is the hunt time used before that first selection, including any clue costs) |
-| `install_prompt_shown` | An offer to install became visible; `source=home` (the home screen entry, once per page), `result_card` (the card under a daily result, once per result) or `handoff` (the sheet that opens after a link out asked to install), `method=prompt` (the browser's own install prompt is ready), `ios_steps` (Add to Home Screen instructions) or `open_in_browser` (an in-app browser, which must open Chrome or Safari first) |
+| `install_prompt_shown` | An offer to install became visible; `source=sign_up` (the sheet that opens by itself, once per device, right after an explorer signs up or in with a quest result on screen, or switches on the daily quest alert there), `home` (the home screen entry, once per page), `result_card` (the card under a daily result for explorers who already have a username, once per result) or `handoff` (the sheet that opens after a link out asked to install), `method=prompt` (the browser's own install prompt is ready), `ios_steps` (Add to Home Screen instructions) or `open_in_browser` (an in-app browser, which must open Chrome or Safari first) |
 | `install_started` | The explorer tapped an install offer; `source`, `method` as above, or `method=unavailable` when the browser has no prompt ready and manual instructions are shown |
-| `install_prompt_dismissed` | "Not now" on the result card (it then stays hidden for a week on this device), or the browser's install prompt was declined; `source`, `method` |
+| `install_prompt_dismissed` | The sign-up sheet was closed without acting on it, or "Not now" was tapped on the result card (either hides the card and the sheet for a week on this device), or the browser's install prompt was declined; `source`, `method` |
 | `app_installed` | The browser reported the app as installed (`appinstalled`: Chrome, Edge, Samsung Internet); `method=prompt` after our own prompt, otherwise `browser` (installed from the browser's menu). iOS reports nothing: count `page_view` with `display_mode=standalone` there |
 | `multiplayer_opened` | Signed-in user opens the multiplayer lobby |
 | `challenge_setup_opened` | Hider opens hunt creation |
@@ -94,7 +94,7 @@ Sign-in: where the visitor stays in the app's browser, the sign-in sheet shows W
 
 ### Installing
 
-`install_prompt_shown` → `install_started` → `app_installed` (Android and desktop) or a later `page_view` with `display_mode=standalone` (iOS). Inside an in-app browser the path is `install_started` (`method=open_in_browser`) → `open_in_browser` (`step=tap`, `source=install`) → `open_in_browser` (`step=landed`, `source=install`) → `install_prompt_shown` (`source=handoff`).
+The main path for a new explorer is `hunt_completed` → `sign_in_opened` (`source=claim`) → `login` → `sign_up` → `install_prompt_shown` (`source=sign_up`) → `install_started` → `app_installed` (Android and desktop) or a later `page_view` with `display_mode=standalone` (iOS). A guest's result never shows an install offer, so it has one ask: signing in. Inside an in-app browser the path is `install_started` (`method=open_in_browser`) → `open_in_browser` (`step=tap`, `source=install`) → `open_in_browser` (`step=landed`, `source=install`) → `install_prompt_shown` (`source=handoff`).
 
 ### PostHog-only settings
 

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
-import { displayMode, installPath, shouldOfferInstall, pageIsStale, INSTALL_SNOOZE_MS } from '../src/pwa.js';
+import { displayMode, installPath, shouldOfferInstall, shouldAutoOfferInstall, pageIsStale, INSTALL_SNOOZE_MS } from '../src/pwa.js';
 
 const UA = {
   chromeAndroid: 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36',
@@ -36,6 +36,16 @@ test('the result card is offered only where a tap leads somewhere, and not withi
   for (const path of ['installed', 'unavailable', undefined]) assert.equal(shouldOfferInstall({ path, now }), false, String(path));
   assert.equal(shouldOfferInstall({ path: 'prompt', snoozedAt: now - 86400000, now }), false);
   assert.equal(shouldOfferInstall({ path: 'prompt', snoozedAt: now - INSTALL_SNOOZE_MS - 1, now }), true);
+});
+
+test('the install sheet opens by itself once per device, where there is something to tap', () => {
+  const now = Date.parse('2026-11-15T00:00:00Z');
+  for (const path of ['prompt', 'ios_steps', 'open_in_browser']) assert.equal(shouldAutoOfferInstall({ path, now }), true, path);
+  // Chrome has not handed over its prompt yet, or the app is already installed.
+  for (const path of ['unavailable', 'installed']) assert.equal(shouldAutoOfferInstall({ path, now }), false, path);
+  // It has opened here before, or "Not now" was tapped this week.
+  assert.equal(shouldAutoOfferInstall({ path: 'prompt', offeredAt: now - 30 * 86400000, now }), false);
+  assert.equal(shouldAutoOfferInstall({ path: 'prompt', snoozedAt: now - 3600000, now }), false);
 });
 
 test('a page is stale once the active build no longer ships its script', () => {

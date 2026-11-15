@@ -11,6 +11,9 @@ const SHELL_URL = '/index.html';
 // A page load waits this long for the network before falling back to the stored shell.
 const NAVIGATION_TIMEOUT_MS = 4000;
 const precached = new Set(PRECACHE);
+// Stored files are matched by address alone: the page asks for its scripts in CORS mode and servers
+// answer with a Vary header, either of which would otherwise make an identical file look different.
+const ANY = { ignoreSearch: true, ignoreVary: true };
 const RUNTIME_PATHS = /^\/(?:assets|fonts|icons|illustrations)\//;
 
 // All or nothing: if any file is missing the new worker is discarded and the old one keeps serving.
@@ -46,9 +49,9 @@ async function loadPage(request) {
   try {
     const response = await Promise.race([fetch(request), timeout(NAVIGATION_TIMEOUT_MS)]);
     if (response.ok) return response;
-    return (await cache.match(SHELL_URL)) || response;
+    return (await cache.match(SHELL_URL, ANY)) || response;
   } catch (error) {
-    const stored = await cache.match(SHELL_URL);
+    const stored = await cache.match(SHELL_URL, ANY);
     if (stored) return stored;
     throw error;
   }
@@ -57,14 +60,14 @@ async function loadPage(request) {
 // This build's own files never change under the same name.
 async function fromShell(request) {
   const cache = await caches.open(SHELL);
-  return (await cache.match(request, { ignoreSearch: true })) || fetch(request);
+  return (await cache.match(request, ANY)) || fetch(request);
 }
 
 // Other static files (a newer build's assets, illustrations, extra map glyph ranges): answer from the
 // device when possible and refresh the copy in the background.
 async function staleWhileRevalidate(event) {
   const cache = await caches.open(RUNTIME);
-  const stored = await cache.match(event.request);
+  const stored = await cache.match(event.request, { ignoreVary: true });
   const refresh = fetch(event.request).then(response => {
     if (response.ok) cache.put(event.request, response.clone()).catch(() => {});
     return response;

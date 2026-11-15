@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { EVENTS, META_PIXEL_ID, createEventTracker, cleanEventParameters, soloEventParameters, posthogUserProperties } from '../src/events.js';
+import { EVENTS, META_PIXEL_ID, createEventTracker, cleanEventParameters, soloEventParameters, posthogUserProperties, isNoiseException, contextProperties } from '../src/events.js';
 
 test('one catalogue sends the same event data to Google and Meta', () => {
   const google = [], meta = [];
@@ -90,4 +90,43 @@ test('WhatsApp events keep their funnel parameters but never the number or code'
   assert.deepEqual(calls[1][1], { method: 'whatsapp', account_status: 'guest' });
   for (const name of ['whatsapp_prompt_shown', 'whatsapp_prompt_dismissed', 'whatsapp_code_requested', 'whatsapp_verified', 'whatsapp_opt_in', 'whatsapp_opt_out', 'whatsapp_unsubscribe_viewed', 'sign_in_opened'])
     assert.ok(Object.values(EVENTS).includes(name), name);
+});
+
+test('install and handoff events keep to fixed codes', () => {
+  const calls = [];
+  const tracker = createEventTracker({ google: (...args) => calls.push(args) });
+  tracker.track(EVENTS.PAGE_VIEW, { display_mode: 'standalone', url: 'https://hunch.rohittp.com/?fbclid=secret' });
+  tracker.track(EVENTS.OPEN_IN_BROWSER, { source: 'landing', step: 'auto', method: 'intent', in_app: 'instagram', outcome: 'stayed', ph_did: 'abc' });
+  tracker.track(EVENTS.INSTALL_PROMPT_SHOWN, { source: 'result_card', method: 'ios_steps' });
+  tracker.track(EVENTS.INSTALL_STARTED, { source: 'home', method: 'prompt' });
+  tracker.track(EVENTS.INSTALL_PROMPT_DISMISSED, { source: 'home', method: 'prompt' });
+  tracker.track(EVENTS.APP_INSTALLED, { method: 'prompt' });
+  assert.deepEqual(calls.map(call => call[0]), ['page_view', 'open_in_browser', 'install_prompt_shown', 'install_started', 'install_prompt_dismissed', 'app_installed']);
+  assert.deepEqual(calls[0][1], { display_mode: 'standalone', account_status: 'guest' });
+  assert.deepEqual(calls[1][1], { source: 'landing', step: 'auto', method: 'intent', in_app: 'instagram', outcome: 'stayed', account_status: 'guest' });
+});
+
+test('PostHog context names the display mode and the in-app browser', () => {
+  const instagram = 'Mozilla/5.0 (Linux; Android 14; wv) AppleWebKit/537.36 Chrome/129.0 Mobile Safari/537.36 Instagram 352.0 Android';
+  assert.deepEqual(contextProperties(instagram, 'browser'), { display_mode: 'browser', in_app: 'instagram' });
+  assert.deepEqual(contextProperties('Mozilla/5.0 (Linux; Android 10; K) Chrome/130.0 Mobile Safari/537.36', 'standalone'), { display_mode: 'standalone' });
+});
+
+test("errors from an in-app browser's own scripts are dropped, real ones are kept", () => {
+  assert.equal(isNoiseException({ $exception_list: [{ type: 'Error', value: 'Error invoking postMessage: Java object is gone' }] }), true);
+  assert.equal(isNoiseException({ $exception_values: ['Script error.'] }), true);
+  assert.equal(isNoiseException({ $exception_list: [{ type: 'TypeError', value: "Cannot read properties of undefined (reading 'getLayer')" }] }), false);
+  assert.equal(isNoiseException({ $exception_list: [{ value: 'Script error.' }, { value: 'map failed' }] }), false);
+  assert.equal(isNoiseException({}), false);
+  assert.equal(isNoiseException(), false);
+});
+
+test('every event carries the app version when the tracker is given one', () => {
+  const calls = [];
+  const tracker = createEventTracker({ version: '0.2.0', google: (...args) => calls.push(args) });
+  tracker.track(EVENTS.HUNT_STARTED, { mode: 'daily', app_version: 'spoofed' });
+  assert.deepEqual(calls[0][1], { mode: 'daily', account_status: 'guest', app_version: '0.2.0' });
+  const plain = [];
+  createEventTracker({ google: (...args) => plain.push(args) }).track(EVENTS.HUNT_STARTED);
+  assert.equal('app_version' in plain[0][1], false);
 });

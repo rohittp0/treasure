@@ -435,3 +435,22 @@ button.leaderboard-row:hover{background:#f4e7cb}
 .result-alert-links{display:flex;flex-wrap:wrap;justify-content:space-between;gap:0 8px;margin:2px -4px 0}
 .result-alert-links .text-button{padding-inline:4px}
 .result-alert-links .text-button:only-child{margin-left:auto}
+.home-install-button{display:flex;align-items:center;gap:10px;width:265px;min-height:46px;margin-top:8px;padding:6px 14px;border:1px dashed #aa8960;border-radius:5px;background:transparent;color:#24474a;font-size:12px;text-align:left}
+.home-install-button>span:nth-child(2){display:grid;flex:1;gap:1px}
+.home-install-button strong{font-size:12px;font-weight:700}
+.home-install-button small{font-size:10px;color:#5d6f69}
+.home-install-mark{color:#b8792f;font-size:14px}
+.install-dialog h2{margin:6px 0 8px}
+.install-steps{margin:12px 0 14px;padding:0;list-style:none;counter-reset:install}
+.install-steps li{position:relative;margin:0 0 9px;padding:9px 12px 9px 44px;border:1px solid #c5b08d;border-radius:6px;background:#f7ecd3;font-size:13px;line-height:1.4;counter-increment:install}
+.install-steps li:before{content:counter(install);position:absolute;left:12px;top:50%;transform:translateY(-50%);display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#17383e;color:#f4d9a0;font-size:11px;font-weight:700}
+.install-steps b{font-weight:700}
+.install-share-icon{display:inline-block;width:15px;height:17px;margin:0 2px -3px;vertical-align:baseline}
+.install-dialog .primary-button,.install-dialog .secondary-button{width:100%}
+.install-dialog .sign-in-inapp-url{margin-top:8px}
+.result-install{margin:16px 0 0;padding:12px 13px 6px;text-align:left}
+.result-install h3{margin:0 0 4px}
+.result-install>.secondary-button{width:100%;min-height:43px;margin:8px 0 0}
+.result-install h3{font-size:16px}
+.result-install .wa-caption{margin:0 0 4px}
+@media(max-width:700px){.home-install-button{width:100%}}

@@ -1,4 +1,4 @@
-import { trackEvent, EVENTS, setAnalyticsUser, soloEventParameters } from './events.js';
+import { trackEvent, EVENTS, setAnalyticsUser, soloEventParameters, analyticsIds } from './events.js';
 import { historyContent } from './friend-result.js';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -9,7 +9,9 @@ import bundledDailySchedules from '../data/daily-quests.json';
 import { choosePuzzle, createGame, difficultyForLevel, CLUE_COST, REVEAL_COST } from './game.js';
 import { loadFriendHunts, watchUser, login, logout, loadPuzzles, saveHunt, loadHunts, loadLeaderboard, enterLeaderboard, loadProfile, claimUsername, isUsernameAvailable, watchChallenges, markChallengeRead, registerChallengePush, loadDailySchedule, loadDailyRecords, startDailyRecord, finishDailyRecord, loadMonthlyLeaderboard, enterMonthlyLeaderboard, saveAtlas, loadAtlas, loadWhatsApp, setWhatsAppOptIn, setWhatsAppTimeZone, snoozeWhatsAppPrompt } from './firebase.js';
 import { createWhatsAppVerify } from './whatsapp-verify.js';
-import { inAppBrowser, platform, handoffUrl, chromeIntentUrl, googleErrorReason } from './inapp.js';
+import { inAppBrowser, platform, googleErrorReason } from './inapp.js';
+import { arrival, clearHandoffParams, outboundHandoff, removeUrlParams, setUrlParam } from './handoff.js';
+import { createInstaller, createWakeLock, setAppBadge, shouldOfferInstall, startServiceWorker } from './pwa.js';
 import { CONSENT_COPY, browserTimeZone, isVerified, maskPhone, whatsappPromptEligible } from './whatsapp.js';
 import { dailyLinkSource, dayKey, monthKey, daysInMonth, msUntilNextDay, dailyQuest, validDailySchedule, currentStreak, scoreMonth, atlasFromRecords, mergeDailyRecords, validDailyRecord } from './daily.js';
 import { createFriendController } from './friend-controller.js';
@@ -86,11 +88,14 @@ let profileReadyFor = '';
 let pendingDaily = new URLSearchParams(location.search).has('daily');
 // Read before the URL is cleaned: which alert (WhatsApp, push, …) brought the explorer to today's quest.
 let dailyArrivalSource = dailyLinkSource(location.search);
-// In-app browsers (Instagram, Facebook, WhatsApp…) can't finish Google sign-in; their sheet offers a link out instead.
-// That link lands here with ?from=inapp&signin=google, and the sheet opens once auth is ready.
+// In-app browsers (Instagram, Facebook, WhatsApp…) keep their own storage, can't finish Google sign-in and
+// can't install the app. index.html sends a first visit on to the real browser by itself (src/escape.js);
+// anyone still here gets a link out from the sign-in sheet and the install card. Those links land with
+// ?from=inapp plus signin=google or install=1, read once into `arrival` before the address is tidied.
 const IN_APP = inAppBrowser(navigator.userAgent);
 const IN_APP_PLATFORM = platform(navigator.userAgent);
-let pendingGoogleSignIn = new URLSearchParams(location.search).get('signin') === 'google';
+let pendingGoogleSignIn = arrival.signIn;
+let pendingInstall = arrival.install;
 // Daily lists by month; the bundled copy is replaced by Firestore's once it loads.
 const dailySchedules = { ...bundledDailySchedules };
 let dailyScheduleMonth = '';
@@ -102,6 +107,13 @@ const RESUME_RESULT_KEY = 'treasurehunch:resume-result';
 const MAP_HINT_KEY = 'treasurehunch:map-hint-seen';
 let completedWins = readCompletedWins();
 let soloFoundIds = readSoloFound();
+
+// Session storage can throw where storage is blocked; nothing here may stop a hunt over it.
+const session = {
+  get(key) { try { return sessionStorage.getItem(key); } catch { return null; } },
+  set(key, value) { try { sessionStorage.setItem(key, value); } catch { /* Kept in memory for this page only. */ } },
+  remove(key) { try { sessionStorage.removeItem(key); } catch { /* Nothing to remove. */ } },
+};
 
 function readSoloFound() {
   try {
@@ -196,7 +208,15 @@ function monthName(month = monthKey()) {
   return new Date(`${month}-01T00:00:00Z`).toLocaleString('en', { month: 'long', timeZone: 'UTC' });
 }
 
+// The installed app's icon shows unread challenges, plus one while today's quest is still unplayed.
+let unreadChallenges = 0;
+function refreshBadge() {
+  const record = todayRecord();
+  setAppBadge(unreadChallenges + (record && record.status !== 'playing' ? 0 : 1));
+}
+
 function renderDailyHome() {
+  refreshBadge();
   const record = todayRecord();
   const today = dayKey();
   const nextIn = formatCountdown(msUntilNextDay());
@@ -450,7 +470,7 @@ function closeSignIn() {
 
 // ---- The unsubscribe link waits until no other dialog or hunt is on screen.
 function dialogsBusy() {
-  return ['#welcome-dialog', '#sign-in-dialog', '#whatsapp-dialog', '#account-dialog'].some(selector => $(selector).open);
+  return ['#welcome-dialog', '#sign-in-dialog', '#whatsapp-dialog', '#account-dialog', '#install-dialog'].some(selector => $(selector).open);
 }
 
 function showDeferredDialogs() {
@@ -493,6 +513,114 @@ const resultAlert = document.createElement('section');
 resultAlert.className = 'wa-section result-alert hidden';
 resultAlert.setAttribute('aria-labelledby', 'result-alert-heading');
 elements.result.append(resultAlert);
+
+// ---- Installing the app: a home-screen entry and a card under a daily result. src/pwa.js decides which
+// way this browser can install: its own prompt, the iOS Share menu, or a trip to the real browser first.
+let installMethod = '';
+const installer = createInstaller({ track: () => trackEvent(EVENTS.APP_INSTALLED, { method: installMethod || 'browser' }) });
+const wakeLock = createWakeLock();
+const resultInstall = document.createElement('section');
+resultInstall.className = 'wa-section result-install hidden';
+resultInstall.setAttribute('aria-labelledby', 'result-install-heading');
+elements.result.append(resultInstall);
+const REAL_BROWSER = IN_APP_PLATFORM === 'android' ? 'Chrome' : IN_APP_PLATFORM === 'ios' ? 'Safari' : 'your browser';
+const IN_APP_NAME = { instagram: 'Instagram', facebook: 'Facebook', messenger: 'Messenger', whatsapp: 'WhatsApp', line: 'LINE' }[IN_APP] || 'This app';
+const INSTALL_COPY = {
+  prompt: ['Get the app', 'One tap from your home screen'],
+  ios_steps: ['Add to Home Screen', 'Full screen, no App Store needed'],
+  open_in_browser: [`Open in ${REAL_BROWSER} to install`, `${IN_APP_NAME}'s browser can't add apps`],
+};
+const SHARE_ICON = '<svg class="install-share-icon" viewBox="0 0 15 17" aria-hidden="true"><path d="M7.5 1v10M4 4l3.5-3L11 4M2 8v7.5h11V8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+function hideResultInstall() {
+  resultInstall.classList.add('hidden');
+  resultInstall.replaceChildren();
+}
+
+function renderInstallEntry() {
+  const path = installer.path();
+  const copy = INSTALL_COPY[path];
+  $('#home-install-button').classList.toggle('hidden', !copy);
+  if (!copy) { hideResultInstall(); return; }
+  $('#home-install-button strong').textContent = copy[0];
+  $('#home-install-hint').textContent = copy[1];
+  trackEvent(EVENTS.INSTALL_PROMPT_SHOWN, { source: 'home', method: path }, 'home');
+}
+
+// The card waits for the WhatsApp alert card to decide first, so a result never stacks two asks.
+function showResultInstall(day) {
+  const path = installer.path();
+  if (lastResult?.day !== day || elements.result.classList.contains('hidden') || !resultAlert.classList.contains('hidden')
+      || !shouldOfferInstall({ path, snoozedAt: installer.snoozedAt() })) { hideResultInstall(); return; }
+  resultInstall.innerHTML = `<h3 id="result-install-heading">Keep tomorrow's country one tap away</h3>
+    <p class="wa-caption">${path === 'open_in_browser'
+    ? `Put TreasureHunch on your home screen. ${IN_APP_NAME}'s browser can't do that, so it opens in ${REAL_BROWSER} first.`
+    : 'Put TreasureHunch on your home screen: full screen, quicker to open, and it works offline.'}</p>
+    <button id="result-install-start" class="secondary-button" type="button">${INSTALL_COPY[path][0]} <span aria-hidden="true">↗</span></button>
+    <div class="result-alert-links"><button id="result-install-later" class="text-button" type="button">Not now</button></div>`;
+  resultInstall.classList.remove('hidden');
+  trackEvent(EVENTS.INSTALL_PROMPT_SHOWN, { source: 'result_card', method: path }, `result-${day}`);
+  $('#result-install-start').addEventListener('click', () => startInstall('result_card'));
+  // "Not now" hides the card for a week on this device.
+  $('#result-install-later').addEventListener('click', () => {
+    installer.snooze();
+    hideResultInstall();
+    trackEvent(EVENTS.INSTALL_PROMPT_DISMISSED, { source: 'result_card', method: path });
+  });
+}
+
+async function startInstall(source) {
+  const path = installer.path();
+  trackEvent(EVENTS.INSTALL_STARTED, { source, method: path });
+  if (path !== 'prompt') { openInstallDialog(source, path); return; }
+  installMethod = 'prompt';
+  const outcome = await installer.prompt();
+  if (outcome === 'accepted') {
+    hideResultInstall();
+    showToast('Adding TreasureHunch to your home screen…');
+  } else if (outcome === 'dismissed') {
+    trackEvent(EVENTS.INSTALL_PROMPT_DISMISSED, { source, method: 'prompt' });
+  } else {
+    openInstallDialog(source, 'unavailable');
+  }
+  renderInstallEntry();
+}
+
+function openInstallDialog(source, path = installer.path()) {
+  const content = $('#install-content');
+  if (path === 'ios_steps') {
+    installMethod = 'ios_steps';
+    content.innerHTML = `<h2>Add it to your <em>Home Screen.</em></h2>
+      <p>TreasureHunch then opens full screen from its own icon and can send you each day's quest as a notification.</p>
+      <ol class="install-steps"><li>Tap <b>Share</b> ${SHARE_ICON} in the browser's toolbar.</li><li>Scroll down and tap <b>Add to Home Screen</b>.</li><li>Tap <b>Add</b>, then open TreasureHunch from the new icon.</li></ol>
+      <p class="wa-caption">The app keeps its own sign-in, so sign in once inside it to bring your map along.</p>
+      <button id="install-close" class="primary-button" type="button">Got it <span aria-hidden="true">↗</span></button>`;
+  } else if (path === 'open_in_browser') {
+    content.innerHTML = `<h2>Open in <em>${REAL_BROWSER}.</em></h2>
+      <p>${IN_APP_NAME}'s built-in browser can't add apps to your phone. Open TreasureHunch in ${REAL_BROWSER} and install it from there.</p>
+      ${guestFindsHere() ? '<p class="wa-caption">Sign in here first: finds made as a guest stay in this browser, while a signed-in map comes with you.</p>' : user ? `<p class="wa-caption">Sign in again in ${REAL_BROWSER} and your map is there.</p>` : ''}
+      <button id="install-open-browser" class="primary-button" type="button">Open in ${REAL_BROWSER} <span aria-hidden="true">↗</span></button>
+      <p id="install-inapp-note" class="wa-caption hidden" aria-live="polite"></p>
+      <input id="install-inapp-url" class="sign-in-inapp-url hidden" type="url" readonly aria-label="Link to open in your browser">`;
+    $('#install-open-browser').addEventListener('click', () =>
+      openInRealBrowser('install', { install: '1' }, $('#install-inapp-note'), $('#install-inapp-url')));
+    $('#install-inapp-url').addEventListener('focus', event => event.target.select());
+  } else {
+    // A browser that has not offered its prompt yet (it can take a few seconds), or one without a prompt.
+    content.innerHTML = `<h2>Install <em>TreasureHunch.</em></h2>
+      <p>Add it to your home screen for a full-screen game that opens in one tap.</p>
+      <button id="install-now" class="primary-button" type="button">Install <span aria-hidden="true">↗</span></button>
+      <p class="wa-caption">If the button does nothing, open your browser's menu (⋮) and choose <b>Add to Home screen</b> or <b>Install app</b>.</p>`;
+    const button = $('#install-now');
+    const sync = () => { if (button.isConnected) button.disabled = installer.path() !== 'prompt'; };
+    sync();
+    const stop = installer.onChange(sync);
+    $('#install-dialog').addEventListener('close', stop, { once: true });
+    button.addEventListener('click', () => { $('#install-dialog').close(); startInstall(source); });
+  }
+  $('#install-close')?.addEventListener('click', () => $('#install-dialog').close());
+  if (!$('#install-dialog').open) $('#install-dialog').showModal();
+}
 
 function hideResultAlert() {
   resultAlertVersion += 1;
@@ -584,7 +712,7 @@ async function showResultAlert(day) {
 async function showUnsubscribe() {
   const player = user;
   pendingUnsubscribe = false;
-  if (new URLSearchParams(location.search).get('whatsapp') === 'stop') history.replaceState({}, '', location.pathname);
+  removeUrlParams(['whatsapp']);
   let state = null;
   let stopped = false;
   try {
@@ -682,6 +810,8 @@ function watchInbox(player) {
   stopChallenges = watchChallenges(player, challenges => {
     if (user?.uid !== player.uid) return;
     const unread = challenges.filter(challenge => !challenge.read);
+    unreadChallenges = unread.length;
+    refreshBadge();
     $('#account-challenge-count').textContent = String(unread.length);
     $('#account-challenge-count').classList.toggle('hidden', unread.length === 0);
     elements.accountButton.setAttribute('aria-label', unread.length
@@ -888,9 +1018,9 @@ function startHunt() {
   closeAtlasView();
   activeMode = 'solo';
   activeLevel = completedWins + 1;
-  const lastId = sessionStorage.getItem('treasurehunch:last-country') || '';
+  const lastId = session.get('treasurehunch:last-country') || '';
   const puzzle = choosePuzzle(puzzles, lastId, Math.random, activeLevel, [...soloFoundIds]);
-  sessionStorage.setItem('treasurehunch:last-country', puzzle.id);
+  session.set('treasurehunch:last-country', puzzle.id);
   $('#level-label').textContent = `LEVEL ${String(activeLevel).padStart(2, '0')} · ${difficultyForLevel(activeLevel).toUpperCase()} HUNT`;
   game = createGame(puzzle);
   trackEvent(EVENTS.HUNT_STARTED, huntParameters(game.snapshot()));
@@ -911,6 +1041,8 @@ function openHuntScreen() {
   clearInterval(ticker);
   huntView = { remaining: null, sheet: '' };
   ticker = setInterval(renderGame, 200);
+  // The clock keeps running while the screen is off, so keep the screen on for the three minutes.
+  wakeLock.on();
   renderGame();
   map.resize();
   frameHuntStart();
@@ -929,7 +1061,7 @@ function frameHuntStart() {
 function startPendingDaily() {
   if (!pendingDaily || !map?.getLayer('land')) return;
   pendingDaily = false;
-  if (new URLSearchParams(location.search).has('daily')) history.replaceState({}, '', location.pathname);
+  removeUrlParams(['daily']);
   if (dailyArrivalSource) trackEvent(EVENTS.DAILY_LINK_OPENED, { source: dailyArrivalSource });
   startDaily();
   dailyArrivalSource = '';
@@ -1066,7 +1198,7 @@ function finishDaily(state) {
     elements.saveStatus.textContent = won ? 'Kept on this device until you sign in.' : '';
   }
   renderLeaderboardGate();
-  showResultAlert(record.day);
+  showResultAlert(record.day).finally(() => showResultInstall(record.day));
 }
 
 function huntRecord(state) {
@@ -1087,7 +1219,7 @@ function huntRecord(state) {
 
 function pendingGuestHunts() {
   try {
-    const stored = JSON.parse(sessionStorage.getItem(PENDING_ENTRY_KEY) || 'null');
+    const stored = JSON.parse(session.get(PENDING_ENTRY_KEY) || 'null');
     return Array.isArray(stored) ? stored : stored ? [stored] : [];
   } catch {
     return [];
@@ -1098,7 +1230,7 @@ function rememberPendingGuestHunt(hunt) {
   const pending = pendingGuestHunts();
   if (!pending.some(item => item.level === hunt.level && item.puzzleId === hunt.puzzleId && item.timeLeft === hunt.timeLeft))
     pending.push(hunt);
-  sessionStorage.setItem(PENDING_ENTRY_KEY, JSON.stringify(pending));
+  session.set(PENDING_ENTRY_KEY, JSON.stringify(pending));
 }
 
 function renderLeaderboardGate() {
@@ -1287,7 +1419,7 @@ async function openAtlas(handle = '', source = 'home') {
   $('#atlas-status').textContent = '';
   const version = Symbol('atlas');
   atlasView = { self, name: self ? username : normalized, countries: {}, loading: !self, version, returnTo, source };
-  history.replaceState({}, '', self && username ? `?atlas=${username}` : self ? location.pathname : `?atlas=${normalized}`);
+  setUrlParam('atlas', self ? username : normalized);
   renderAtlas();
   if (self) {
     trackEvent(EVENTS.ATLAS_VIEWED, { owner: 'self', source, countries: Object.keys(atlasView.countries).length });
@@ -1312,7 +1444,7 @@ function closeAtlasView() {
   atlasView = null;
   $('#atlas-screen').classList.add('hidden');
   document.body.classList.remove('atlas-view');
-  if (new URLSearchParams(location.search).has('atlas')) history.replaceState({}, '', location.pathname);
+  removeUrlParams(['atlas']);
   applyAtlasLayers();
   releaseAtlasStage();
   map?.easeTo({ center: [12, 21], zoom: window.innerWidth < 700 ? 0.85 : 1.1, duration: 0 });
@@ -1403,8 +1535,8 @@ function postPendingGuestEntry(player) {
     for (const hunt of pending) await saveHunt(player, hunt);
     await enterLeaderboard(player);
     if (pending.length) {
-      sessionStorage.removeItem(PENDING_ENTRY_KEY);
-      sessionStorage.removeItem(RESUME_RESULT_KEY);
+      session.remove(PENDING_ENTRY_KEY);
+      session.remove(RESUME_RESULT_KEY);
     }
     leaderboardSyncFailed = false;
     if (pending.length && lastResult) elements.saveStatus.textContent = 'Your finds are saved and entered on the leaderboard.';
@@ -1433,6 +1565,7 @@ function showResultScreen(state) {
   elements.leaderboardScreen.classList.add('hidden');
   closeAtlasView();
   hideResultAlert();
+  hideResultInstall();
   elements.result.classList.remove('hidden');
   elements.result.classList.remove('victory');
   $('#result-art').textContent = state.status === 'won' ? '✦' : '⌛';
@@ -1441,6 +1574,7 @@ function showResultScreen(state) {
 
 function finish(state) {
   clearInterval(ticker);
+  wakeLock.off();
   hideMapHint();
   if (saved) return;
   saved = true;
@@ -1483,6 +1617,7 @@ function leaveHunt(track = true) {
   if (track && dailyRunning) showToast("Today's clock keeps running. Resume from the home screen.");
   clearVictory();
   clearInterval(ticker);
+  wakeLock.off();
   hideMapHint();
   game = null;
   clearMapSelection();
@@ -1744,15 +1879,15 @@ elements.leaderboardSignIn.addEventListener('click', async () => {
 $('#sign-in-google').addEventListener('click', async () => {
   const context = signInContext;
   // A redirect sign-in reloads the page, so the result screen is restored from session storage.
-  if (context?.resumeResult && lastResult) sessionStorage.setItem(RESUME_RESULT_KEY, JSON.stringify(lastResult));
+  if (context?.resumeResult && lastResult) session.set(RESUME_RESULT_KEY, JSON.stringify(lastResult));
   $('#sign-in-google').disabled = true;
   $('#sign-in-status').textContent = '';
   try {
     await login();
-    if (user) sessionStorage.removeItem(RESUME_RESULT_KEY);
+    if (user) session.remove(RESUME_RESULT_KEY);
     closeSignIn();
   } catch (error) {
-    sessionStorage.removeItem(RESUME_RESULT_KEY);
+    session.remove(RESUME_RESULT_KEY);
     // Never silent: a closed popup is the usual in-app browser failure, so point at WhatsApp above.
     const reason = googleErrorReason(error);
     trackEvent(EVENTS.LOGIN_FAILED, { method: 'google', reason });
@@ -1764,27 +1899,32 @@ $('#sign-in-google').addEventListener('click', async () => {
     $('#sign-in-google').disabled = false;
   }
 });
-// Only on a tap: Android opens Chrome by intent; elsewhere the link is copied for the app's "Open in browser".
-$('#sign-in-open-browser').addEventListener('click', async () => {
-  const android = IN_APP_PLATFORM === 'android';
-  trackEvent(EVENTS.OPEN_IN_BROWSER, { method: android ? 'intent' : 'copy', source: 'sign_in', step: 'tap', in_app: IN_APP });
-  if (android) { location.href = chromeIntentUrl(location.href); return; }
-  const url = handoffUrl(location.href);
-  const note = $('#sign-in-inapp-note');
-  const field = $('#sign-in-inapp-url');
+// Only on a tap. Android opens Chrome by intent, Instagram on iOS by its own external-browser link and other
+// iOS apps by Safari's link. The address is also copied, with the app's menu named, in case the app refuses.
+// The link carries the campaign tags this visit arrived with and its analytics ids, so the visit continues
+// in the real browser as the same person from the same ad.
+async function openInRealBrowser(source, reason, note, field) {
+  const handoff = outboundHandoff(reason, analyticsIds());
+  trackEvent(EVENTS.OPEN_IN_BROWSER, { method: handoff.method, source, step: 'tap', in_app: IN_APP });
+  // Android either opens Chrome or loads the same address here, so there is nothing more to explain.
+  if (handoff.method === 'intent') { location.href = handoff.url; return; }
+  if (handoff.method !== 'copy') location.href = handoff.url;
   try {
-    await navigator.clipboard.writeText(url);
-    note.textContent = 'Link copied. Tap ··· (or the share icon) and choose Open in browser, or paste it into Safari.';
+    await navigator.clipboard.writeText(handoff.address);
+    note.textContent = handoff.method === 'copy'
+      ? 'Link copied. Tap ··· (or the share icon) and choose Open in browser, or paste it into Safari.'
+      : 'If nothing opened, the link is copied: tap ··· and choose Open in browser, or paste it into Safari.';
     field.classList.add('hidden');
   } catch {
     note.textContent = 'Copy this link, then open it in Safari or your browser.';
-    field.value = url;
+    field.value = handoff.address;
     field.classList.remove('hidden');
-    field.focus();
-    field.select();
+    if (handoff.method === 'copy') { field.focus(); field.select(); }
   }
   note.classList.remove('hidden');
-});
+}
+$('#sign-in-open-browser').addEventListener('click', () =>
+  openInRealBrowser('sign_in', { signin: 'google' }, $('#sign-in-inapp-note'), $('#sign-in-inapp-url')));
 $('#sign-in-inapp-url').addEventListener('focus', event => event.target.select());
 $('#close-sign-in').addEventListener('click', closeSignIn);
 $('#sign-in-dialog').addEventListener('close', () => {
@@ -1792,6 +1932,10 @@ $('#sign-in-dialog').addEventListener('close', () => {
   signInVerify = null;
   showDeferredDialogs();
 });
+$('#close-install').addEventListener('click', () => $('#install-dialog').close());
+$('#home-install-button').addEventListener('click', () => startInstall('home'));
+installer.onChange(renderInstallEntry);
+renderInstallEntry();
 $('#close-whatsapp').addEventListener('click', () => $('#whatsapp-dialog').close());
 $('#whatsapp-dialog').addEventListener('close', () => {
   whatsappDialogVerify?.destroy();
@@ -1799,11 +1943,26 @@ $('#whatsapp-dialog').addEventListener('close', () => {
 });
 $('#play-again-button').addEventListener('click', startHunt);
 window.addEventListener('resize', () => { if (atlasView) requestAnimationFrame(focusAtlas); });
+// Offline shell and updates. A new build is only switched in from the home screen, never mid-hunt or
+// while a result or dialog is open, and an app left open for days then reloads itself onto it.
+const appUpdates = startServiceWorker({
+  isIdle: () => !game && friend.mode === 'idle' && !elements.home.classList.contains('hidden') && !dialogsBusy(),
+});
 // Keep the daily countdown and day rollover current on the home screen.
 setInterval(() => {
   if (dailyScheduleMonth !== monthKey()) loadDailyList();
   if (!elements.home.classList.contains('hidden')) renderDailyHome();
+  appUpdates.check();
 }, 30000);
+// A link out of an in-app browser that asked to install lands here: show how, once the page has settled.
+if (pendingInstall) {
+  setTimeout(() => {
+    pendingInstall = false;
+    if (dialogsBusy() || game || installer.path() === 'installed') return;
+    trackEvent(EVENTS.INSTALL_PROMPT_SHOWN, { source: 'handoff', method: installer.path() });
+    openInstallDialog('handoff', installer.path() === 'ios_steps' ? 'ios_steps' : installer.path() === 'open_in_browser' ? 'open_in_browser' : 'unavailable');
+  }, 1200);
+}
 $('#challenge-after-win').addEventListener('click', () => {
   if (!lastResult || lastResult.status !== 'won') return;
   clearVictory();
@@ -1854,20 +2013,21 @@ elements.accountDialog.addEventListener('click', event => { if (event.target ===
 
 dailyRecords = readDailyStore('guest');
 renderDailyHome();
+// Show this device's own level straight away; the remote puzzle list can take seconds or never arrive.
+updateHomeStatus();
 loadDailyList();
 loadMap();
 loadPuzzleSet();
-// The in-app browser's link out lands here: count it, then drop from/signin and keep the rest (utm_* etc.).
-{
-  const params = new URLSearchParams(location.search);
-  if (params.get('from') === 'inapp') trackEvent(EVENTS.OPEN_IN_BROWSER, { source: 'sign_in', step: 'landed', ...(IN_APP && { in_app: IN_APP }) });
-  if (params.has('from') || params.has('signin')) {
-    params.delete('from');
-    params.delete('signin');
-    const search = params.toString();
-    history.replaceState({}, '', `${location.pathname}${search ? `?${search}` : ''}${location.hash}`);
-  }
+// A link out of an in-app browser lands here: count it, then drop the handoff's own parameters and keep
+// the rest (utm_*, fbclid…). `in_app` is the app the visit left; outcome=in_app means the link opened
+// inside an in-app browser again (Chrome missing, or the app refused to let go).
+if (arrival.fromInApp) {
+  trackEvent(EVENTS.OPEN_IN_BROWSER, {
+    step: 'landed', source: arrival.signIn ? 'sign_in' : arrival.install ? 'install' : 'landing',
+    ...((arrival.inApp || IN_APP) && { in_app: arrival.inApp || IN_APP }), outcome: IN_APP ? 'in_app' : 'browser',
+  });
 }
+clearHandoffParams();
 {
   const sharedAtlas = new URLSearchParams(location.search).get('atlas');
   if (sharedAtlas && !new URLSearchParams(location.search).get('hunt')) openAtlas(sharedAtlas, 'link');
@@ -1875,14 +2035,14 @@ loadPuzzleSet();
 if (location.hash === '#leaderboard') showLeaderboard();
 if (pendingUnsubscribe) trackEvent(EVENTS.WHATSAPP_UNSUBSCRIBE_VIEWED, { source: 'link' });
 try {
-  const resumed = sessionStorage.getItem(RESUME_RESULT_KEY);
+  const resumed = session.get(RESUME_RESULT_KEY);
   if (resumed) {
-    sessionStorage.removeItem(RESUME_RESULT_KEY);
+    session.remove(RESUME_RESULT_KEY);
     finish(JSON.parse(resumed));
   }
 } catch (error) {
   console.warn('Could not restore the last result:', error);
-  sessionStorage.removeItem(RESUME_RESULT_KEY);
+  session.remove(RESUME_RESULT_KEY);
 }
 
 watchUser(async nextUser => {
@@ -1919,8 +2079,8 @@ watchUser(async nextUser => {
       profileReadyFor = nextUser.uid;
       setAnalyticsUser({ uid: nextUser.uid, username });
       renderUsername();
-      if (!username || (browserNotificationsAvailable() && Notification.permission === 'default' && !sessionStorage.getItem(`treasurehunch:notify-asked:${nextUser.uid}`))) {
-        sessionStorage.setItem(`treasurehunch:notify-asked:${nextUser.uid}`, '1');
+      if (!username || (browserNotificationsAvailable() && Notification.permission === 'default' && !session.get(`treasurehunch:notify-asked:${nextUser.uid}`))) {
+        session.set(`treasurehunch:notify-asked:${nextUser.uid}`, '1');
         showWelcome(nextUser, username);
       }
       if (username) {
@@ -1936,7 +2096,7 @@ watchUser(async nextUser => {
   }
   renderLeaderboardGate();
   if (nextUser) {
-    sessionStorage.removeItem(RESUME_RESULT_KEY);
+    session.remove(RESUME_RESULT_KEY);
     if (username) postPendingGuestEntry(nextUser);
     const claimedCountry = username && lastResult?.mode === 'daily' && lastResult.status === 'won' ? lastResult.puzzle.country : '';
     syncDaily(nextUser).then(() => {

@@ -1,6 +1,6 @@
 // Twilio webhooks: incoming WhatsApp messages (STOP replies) and delivery status callbacks.
 const { normalizePhone, maskPhone } = require('./phone');
-const { OPT_OUT_ERRORS, optOut } = require('./send');
+const { optOut, recordFailure, recordDelivered } = require('./send');
 
 const STOP_KEYWORDS = new Set(['stop', 'unsubscribe', 'cancel', 'stop promotions']);
 const EMPTY_TWIML = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>';
@@ -58,7 +58,8 @@ function createWebhookHandlers({ db, validateRequest, authToken, urls, clock = (
         const code = Number(ErrorCode) || null;
         await db.doc(lookup.marker).update({ status: String(MessageStatus || '').slice(0, 32), errorCode: code, updatedAt: clock() })
           .catch(() => {});
-        if (OPT_OUT_ERRORS.has(code) && lookup.uid) await optOut(db, lookup.uid, clock()).catch(() => {});
+        if (lookup.uid && code) await recordFailure(db, lookup.uid, code, clock()).catch(() => {});
+        else if (lookup.uid && ['delivered', 'read'].includes(MessageStatus)) await recordDelivered(db, lookup.uid).catch(() => {});
       }
     }
     response.status(200).send('');

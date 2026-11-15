@@ -39,6 +39,32 @@ The browser uses the included solo puzzles and daily lists if Firestore is unava
 
 Home and hunt-invite links share a generic social preview that keeps the hidden country secret. Open Graph and X card tags are in `index.html`; the 1200×630 PNG is `public/social-preview.png`. Regenerate the artwork with `python3 scripts/generate-social-preview.py` (requires Pillow).
 
+## Installable app, offline play and in-app browsers
+
+TreasureHunch is a Progressive Web App. Analytics, events and the handoff's measurement are in the [analytics guide](docs/analytics.md).
+
+- **Manifest and icons.** `public/manifest.webmanifest` (standalone display, two home-screen shortcuts, launches tagged `utm_source=pwa`). The icons in `public/icons` are drawn by `python3 scripts/generate-icons.py` (requires Pillow) from the favicon's compass star.
+- **Service worker.** `src/service-worker.js` is emitted as `/sw.js` by a plugin in `vite.config.js`, with the build's file list and a build id in front. Production builds register it; `npm run dev` does not.
+  - It stores the app shell (page, scripts, styles, country outlines, map glyphs), so the game opens with no connection and solo levels and today's quest can be played offline. Page loads still come from the network first, so a deploy shows at once; the stored copy answers when the network fails or takes longer than four seconds.
+  - A new build waits until the home screen is showing with no hunt or dialog open, then takes over. A page still running the previous build (an installed app left open for days) reloads itself at that point.
+  - Push notifications keep their own worker (`src/firebase-messaging-sw.js`); the two never overlap.
+  - To take the worker out of service, deploy a `sw.js` that unregisters itself; the file is served `no-cache`, so browsers pick it up on their next visit.
+  - Hosting keeps its default one-hour cache on `/assets`. Header rules also apply to a path's 404, so a year-long cache there could pin a missing file for anyone who asked for it between a deploy and a rollback; repeat visits are served by the worker anyway.
+  - Paths under `/assets`, `/fonts`, `/icons`, `/illustrations` and `/.well-known` that do not exist return 404 instead of the page (`rewrites` in `firebase.json`), so a script that has been replaced by a deploy fails cleanly and the app reloads itself onto the new build.
+- **Installing.** The home screen shows an install entry and a card appears under a daily result (hidden for a week after "Not now"). Chrome, Edge and Samsung Internet get their own install prompt in one tap; iPhone and iPad get Add to Home Screen steps, which is the only way iOS allows; an in-app browser is sent to Chrome or Safari first. `src/pwa.js` holds the decision and `tests/pwa.test.mjs` covers it.
+- **Installed-app extras.** The screen stays on while a hunt's clock runs, the icon shows a badge while today's quest is unplayed or a challenge is unread (iOS and desktop), and on iOS an installed app can receive the daily quest as a push notification, which a Safari tab cannot.
+- **In-app browsers.** Most visits arrive inside Instagram's or Facebook's browser, whose storage is cut off from Chrome and Safari. `src/escape.js` is inlined into `index.html` and sends a first visit on to the real browser before the game loads; anyone who already has progress there stays. Campaign tags and click ids travel with the link. `?stay=1` on a link switches the redirect off for that visit.
+  - **This has to be checked on real phones before each release that touches it.** Send yourself the site link in an Instagram direct message, a Facebook post and a WhatsApp chat on Android and on an iPhone, and tap it: the game should open in Chrome or Safari, or, where the app refuses, load normally where it is. Whether an app honours the link is the app's decision and changes with its releases, so the automated tests can only prove that a refusal is harmless.
+
+### Play Store (Trusted Web Activity)
+
+The site is ready to be wrapped as a Trusted Web Activity; nothing is published yet. Remaining steps:
+
+1. Create the app in the Play Console and choose a package name (it can never be changed).
+2. Build the Android package from the live manifest with [Bubblewrap](https://github.com/GoogleChromeLabs/bubblewrap) (`npx @bubblewrap/cli init --manifest https://hunch.rohittp.com/manifest.webmanifest`, then `build`) or [PWABuilder](https://www.pwabuilder.com/).
+3. Add `public/.well-known/assetlinks.json` with the package name and the SHA-256 fingerprint Play shows under **App integrity**, deploy, and check that `https://hunch.rohittp.com/.well-known/assetlinks.json` returns JSON. Without it the app shows a browser address bar.
+4. Play requires in-app account deletion for apps with sign-up; the game has none yet.
+
 ## Curated puzzles and Firebase
 
 - [data/countries.json](data/countries.json) is the editorial source for the 64 solo countries (192 clues), each marked easy, medium, hard or expert. [data/daily-quests.json](data/daily-quests.json) holds the monthly daily lists (61 more countries). [data/CLUE-SOURCES.md](data/CLUE-SOURCES.md) records the references.
@@ -84,7 +110,8 @@ The design and the decisions behind it are in [docs/whatsapp-daily-quest.md](doc
   - `notifyDailyQuest` (browser push at 00:05 UTC) is unchanged.
 - `whatsappInbound` (incoming messages) turns opt-in off when an explorer replies STOP, UNSUBSCRIBE, CANCEL or "Stop promotions".
 - `whatsappStatus` (delivery status callbacks) records each message's status on its marker.
-- Twilio errors 21610 (recipient opted out) and 63024 (invalid recipient) also turn opt-in off. Both webhooks reject requests without a valid `X-Twilio-Signature`.
+- Twilio error 21610 (recipient opted out) turns opt-in off at once. Error 63024 (invalid recipient) can fix itself (an outdated WhatsApp, terms not yet accepted), so it is counted once a day on `users/{uid}.whatsapp.unreachableCount` and only switches the alert off after three days running. That leaves `optOutAt` unset and stamps `unreachableAt`, so the game offers the alert again; a delivered message resets the count. Other errors, such as 63049 (Meta chose not to deliver a marketing message to that person), are recorded on the marker and change nothing.
+- Both webhooks reject requests without a valid `X-Twilio-Signature`.
 
 **App.** WhatsApp is the main way to sign in. The sign-in sheet opens with the number field ready, and Google sits below it. The form also offers an unticked "send me the daily quest on WhatsApp" box. Ticking it opts in as soon as sign-in succeeds; signing in alone never does. The shared number check (`src/whatsapp-verify.js`) works like this:
 

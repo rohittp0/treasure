@@ -3,9 +3,9 @@
 // Nothing here imports analytics; callers pass a `track` function, so the helpers stay testable.
 import { inAppBrowser, platform } from './escape.js';
 
-const SNOOZE_KEY = 'treasurehunch.install-snoozed';
-const OFFERED_KEY = 'treasurehunch.install-offered';
-export const INSTALL_SNOOZE_MS = 7 * 86400000;
+const PROMPTED_KEY = 'treasurehunch.install-prompted';
+// An install offer that was shown as a sheet, or turned down anywhere, is not repeated for two days.
+export const INSTALL_REPROMPT_MS = 2 * 86400000;
 
 // 'twa' (the Play Store app), 'standalone' (added to the home screen) or 'browser'.
 // A Trusted Web Activity announces itself with an android-app:// referrer on its first page.
@@ -28,15 +28,11 @@ export function installPath({ ua = '', mode = 'browser', canPrompt = false } = {
   return 'unavailable';
 }
 
-// The result card is only offered where a tap leads somewhere, and not within a week of "Not now".
-export function shouldOfferInstall({ path, snoozedAt = 0, now = Date.now() } = {}) {
+// Whether to make an install offer now: only where a tap leads somewhere, and not within two days of
+// the last sheet or the last "Not now".
+export function shouldOfferInstall({ path, promptedAt = 0, now = Date.now() } = {}) {
   if (!['prompt', 'ios_steps', 'open_in_browser'].includes(path)) return false;
-  return !(snoozedAt > 0 && now - snoozedAt < INSTALL_SNOOZE_MS);
-}
-
-// The install sheet opens by itself only once per device, and never within a week of "Not now".
-export function shouldAutoOfferInstall({ path, offeredAt = 0, snoozedAt = 0, now = Date.now() } = {}) {
-  return !(offeredAt > 0) && shouldOfferInstall({ path, snoozedAt, now });
+  return !(promptedAt > 0 && now - promptedAt < INSTALL_REPROMPT_MS);
 }
 
 // True when a newly activated worker's file list no longer contains the script this page is running.
@@ -97,18 +93,12 @@ export function createInstaller({ track = () => {} } = {}) {
         return 'unavailable';
       }
     },
-    snoozedAt() {
-      try { return Number(localStorage.getItem(SNOOZE_KEY)) || 0; } catch { return 0; }
+    // When an install sheet last opened by itself, or an offer was last turned down (0 if never).
+    promptedAt() {
+      try { return Number(localStorage.getItem(PROMPTED_KEY)) || 0; } catch { return 0; }
     },
-    snooze() {
-      try { localStorage.setItem(SNOOZE_KEY, String(Date.now())); } catch { /* Asked again next time. */ }
-    },
-    // When the install sheet last opened by itself on this device (0 if never).
-    offeredAt() {
-      try { return Number(localStorage.getItem(OFFERED_KEY)) || 0; } catch { return 0; }
-    },
-    markOffered() {
-      try { localStorage.setItem(OFFERED_KEY, String(Date.now())); } catch { /* It may open once more. */ }
+    markPrompted() {
+      try { localStorage.setItem(PROMPTED_KEY, String(Date.now())); } catch { /* Asked again next time. */ }
     },
   };
 }

@@ -11,7 +11,7 @@ import { loadFriendHunts, watchUser, login, logout, loadPuzzles, saveHunt, loadH
 import { createWhatsAppVerify } from './whatsapp-verify.js';
 import { inAppBrowser, platform, googleErrorReason } from './inapp.js';
 import { arrival, clearHandoffParams, outboundHandoff, removeUrlParams, setUrlParam } from './handoff.js';
-import { createInstaller, createWakeLock, setAppBadge, shouldAutoOfferInstall, shouldOfferInstall, startServiceWorker } from './pwa.js';
+import { DISPLAY_MODE, createInstaller, createWakeLock, setAppBadge, shouldOfferInstall, startServiceWorker } from './pwa.js';
 import { CONSENT_COPY, browserTimeZone, isVerified, maskPhone, whatsappPromptEligible } from './whatsapp.js';
 import { dailyLinkSource, dayKey, monthKey, daysInMonth, msUntilNextDay, dailyQuest, validDailySchedule, currentStreak, scoreMonth, atlasFromRecords, mergeDailyRecords, validDailyRecord } from './daily.js';
 import { createFriendController } from './friend-controller.js';
@@ -514,10 +514,34 @@ resultAlert.className = 'wa-section result-alert hidden';
 resultAlert.setAttribute('aria-labelledby', 'result-alert-heading');
 elements.result.append(resultAlert);
 
-// ---- Installing the app: a home-screen entry and a card under a daily result. src/pwa.js decides which
-// way this browser can install: its own prompt, the iOS Share menu, or a trip to the real browser first.
+// ---- Installing the app. src/pwa.js decides which way this browser can install: its own prompt, the iOS
+// Share menu, or a trip to the real browser first.
+//
+// The install sheet opens by itself after a win and after signing in, at most once every two days.
+// A sign-up ask always goes first: a guest's winning result shows the sign-in ask with the install card
+// beneath it and the sheet follows once they have signed in, a new explorer picks a username before the
+// sheet, and the daily quest alert card is answered before the sheet opens over it.
+//
+// Every offer ends in one of two events: install_started (the explorer took it) or
+// install_prompt_dismissed (they closed it or said "Not now"). app_installed follows when the browser
+// confirms the install, or on the installed app's first launch where it cannot (iOS and the Play app).
+const INSTALLED_KEY = 'treasurehunch.installed';
+function rememberInstalled() {
+  try { localStorage.setItem(INSTALLED_KEY, '1'); } catch { /* Counted again next launch at worst. */ }
+}
 let installMethod = '';
-const installer = createInstaller({ track: () => trackEvent(EVENTS.APP_INSTALLED, { method: installMethod || 'browser' }) });
+const installer = createInstaller({ track: () => {
+  rememberInstalled();
+  trackEvent(EVENTS.APP_INSTALLED, { method: installMethod || 'browser', display_mode: DISPLAY_MODE });
+} });
+if (DISPLAY_MODE !== 'browser') {
+  let counted = true;
+  try { counted = localStorage.getItem(INSTALLED_KEY) === '1'; } catch { /* Without storage it cannot be counted once. */ }
+  if (!counted) {
+    rememberInstalled();
+    trackEvent(EVENTS.APP_INSTALLED, { method: DISPLAY_MODE === 'twa' ? 'play_store' : 'home_screen', display_mode: DISPLAY_MODE });
+  }
+}
 const wakeLock = createWakeLock();
 const resultInstall = document.createElement('section');
 resultInstall.className = 'wa-section result-install hidden';
@@ -547,67 +571,75 @@ function renderInstallEntry() {
   trackEvent(EVENTS.INSTALL_PROMPT_SHOWN, { source: 'home', method: path }, 'home');
 }
 
-// The card waits for the WhatsApp alert card to decide first, so a result never stacks two asks. It is for
-// explorers who already have a username: a guest's result has one ask, the claim, and the install sheet
-// follows by itself once they have signed up (maybeOfferInstall).
-function showResultInstall(day) {
+// A guest's winning result: the card sits beneath the sign-in ask, so signing up is always seen first.
+// Explorers with a username get the sheet instead.
+function showResultInstall() {
   const path = installer.path();
-  const sheetIsComing = installAfterSignUp && shouldAutoOfferInstall({ path, offeredAt: installer.offeredAt(), snoozedAt: installer.snoozedAt() });
-  if (lastResult?.day !== day || elements.result.classList.contains('hidden') || !resultAlert.classList.contains('hidden')
-      || !user || !username || sheetIsComing
-      || !shouldOfferInstall({ path, snoozedAt: installer.snoozedAt() })) { hideResultInstall(); return; }
-  resultInstall.innerHTML = `<h3 id="result-install-heading">Keep tomorrow's country one tap away</h3>
+  if (!lastResult || lastResult.status !== 'won' || elements.result.classList.contains('hidden') || (user && username)
+      || !shouldOfferInstall({ path, promptedAt: installer.promptedAt() })) { hideResultInstall(); return; }
+  resultInstall.innerHTML = `<h3 id="result-install-heading">Keep TreasureHunch one tap away</h3>
     <p class="wa-caption">${path === 'open_in_browser'
     ? `Put TreasureHunch on your home screen. ${IN_APP_NAME}'s browser can't do that, so it opens in ${REAL_BROWSER} first.`
     : 'Put TreasureHunch on your home screen: full screen, quicker to open, and it works offline.'}</p>
     <button id="result-install-start" class="secondary-button" type="button">${INSTALL_COPY[path][0]} <span aria-hidden="true">↗</span></button>
     <div class="result-alert-links"><button id="result-install-later" class="text-button" type="button">Not now</button></div>`;
   resultInstall.classList.remove('hidden');
-  trackEvent(EVENTS.INSTALL_PROMPT_SHOWN, { source: 'result_card', method: path }, `result-${day}`);
+  trackEvent(EVENTS.INSTALL_PROMPT_SHOWN, { source: 'result_card', method: path }, `result-${lastResult.day || `${lastResult.puzzle?.id}-${lastResult.level || ''}`}`);
   $('#result-install-start').addEventListener('click', () => startInstall('result_card'));
-  // "Not now" hides the card for a week on this device.
+  // "Not now" pauses every install offer for two days on this device.
   $('#result-install-later').addEventListener('click', () => {
-    installer.snooze();
+    installer.markPrompted();
     hideResultInstall();
     trackEvent(EVENTS.INSTALL_PROMPT_DISMISSED, { source: 'result_card', method: path });
   });
 }
 
-// The install sheet opens by itself once per device, at the moment an explorer has just committed: right
-// after signing up (or in) with a quest result on screen, or after switching on the daily quest alert there.
-// `installAfterSignUp` is raised by those moments and waits for dialogs to close and, on Android, for the
-// browser to hand over its install prompt.
-let installAfterSignUp = false;
+// `installDue` holds why a sheet is waiting to open ('win' or 'sign_in'). It waits for dialogs to close,
+// for any sign-up ask to be answered and, on Android, for the browser to hand over its install prompt.
+// Starting a hunt drops it: the moment has passed, and the next win raises it again.
+let installDue = '';
 let sawSignedOut = false;
 let installSheet = null;
+// True while the daily quest alert card is on screen waiting for an answer.
+let alertAsking = false;
 function maybeOfferInstall() {
-  if (!installAfterSignUp || !user || !username || !lastResult || game
-      || elements.result.classList.contains('hidden') || dialogsBusy()) return;
+  if (!installDue || dialogsBusy() || document.body.classList.contains('in-game') || document.body.classList.contains('in-hide')) return;
+  // Sign-up first: a guest sees the sign-in ask (and the card), a new explorer still has a username to
+  // choose, and the alert card is waiting for its answer.
+  if (!user || !username || alertAsking) return;
   const path = installer.path();
-  if (!shouldAutoOfferInstall({ path, offeredAt: installer.offeredAt(), snoozedAt: installer.snoozedAt() })) {
+  if (!shouldOfferInstall({ path, promptedAt: installer.promptedAt() })) {
     // 'unavailable' can still turn into 'prompt' a few seconds into a first visit; anything else is final.
-    if (path !== 'unavailable') installAfterSignUp = false;
+    if (path !== 'unavailable') installDue = '';
     return;
   }
-  installAfterSignUp = false;
-  installer.markOffered();
+  const source = installDue;
+  installDue = '';
+  installer.markPrompted();
   hideResultInstall();
-  trackEvent(EVENTS.INSTALL_PROMPT_SHOWN, { source: 'sign_up', method: path });
-  openInstallDialog('sign_up', path === 'prompt' ? 'offer' : path);
+  trackEvent(EVENTS.INSTALL_PROMPT_SHOWN, { source, method: path });
+  openInstallDialog(source, path === 'prompt' ? 'offer' : path);
 }
-// A short pause lets the claim's confirmation be read first.
-const offerInstallSoon = () => setTimeout(maybeOfferInstall, 900);
+// A short pause lets the win, or the claim's confirmation, be seen first.
+const offerInstallSoon = () => setTimeout(maybeOfferInstall, 1200);
+function requestInstallSheet(reason) {
+  installDue = reason;
+  offerInstallSoon();
+}
 
+// The explorer took an install offer. The browser's own prompt is shown where there is one; elsewhere
+// the sheet explains how, and its main button counts as taking the offer.
 async function startInstall(source) {
   const path = installer.path();
-  trackEvent(EVENTS.INSTALL_STARTED, { source, method: path });
   if (path !== 'prompt') { openInstallDialog(source, path); return; }
+  trackEvent(EVENTS.INSTALL_STARTED, { source, method: 'prompt' });
   installMethod = 'prompt';
   const outcome = await installer.prompt();
   if (outcome === 'accepted') {
     hideResultInstall();
     showToast('Adding TreasureHunch to your home screen…');
   } else if (outcome === 'dismissed') {
+    installer.markPrompted();
     trackEvent(EVENTS.INSTALL_PROMPT_DISMISSED, { source, method: 'prompt' });
   } else {
     openInstallDialog(source, 'unavailable');
@@ -619,30 +651,36 @@ function openInstallDialog(source, path = installer.path()) {
   const content = $('#install-content');
   const sheet = { source, method: path === 'offer' ? 'prompt' : path, acted: false };
   installSheet = sheet;
+  const later = '<button id="install-later" class="text-button" type="button">Not now</button>';
   if (path === 'offer') {
-    // After sign-up: one button, which is the tap the browser needs before it will show its own prompt.
+    // One button, which is the tap the browser needs before it will show its own prompt.
     content.innerHTML = `<h2>Keep your map <em>one tap away.</em></h2>
       <p>Add TreasureHunch to your home screen. It opens full screen, works offline, and tomorrow's country is a single tap away.</p>
-      <button id="install-now" class="primary-button" type="button">Install the app <span aria-hidden="true">↗</span></button>
-      <button id="install-later" class="text-button" type="button">Not now</button>`;
+      <button id="install-now" class="primary-button" type="button">Install the app <span aria-hidden="true">↗</span></button>${later}`;
     $('#install-now').addEventListener('click', () => { sheet.acted = true; $('#install-dialog').close(); startInstall(source); });
-    $('#install-later').addEventListener('click', () => $('#install-dialog').close());
   } else if (path === 'ios_steps') {
     installMethod = 'ios_steps';
     content.innerHTML = `<h2>Add it to your <em>Home Screen.</em></h2>
       <p>TreasureHunch then opens full screen from its own icon and can send you each day's quest as a notification.</p>
       <ol class="install-steps"><li>Tap <b>Share</b> ${SHARE_ICON} in the browser's toolbar.</li><li>Scroll down and tap <b>Add to Home Screen</b>.</li><li>Tap <b>Add</b>, then open TreasureHunch from the new icon.</li></ol>
       <p class="wa-caption">The app keeps its own sign-in, so sign in once inside it to bring your map along.</p>
-      <button id="install-close" class="primary-button" type="button">Got it <span aria-hidden="true">↗</span></button>`;
+      <button id="install-close" class="primary-button" type="button">Got it <span aria-hidden="true">↗</span></button>${later}`;
+    // iOS reports nothing until the app is first opened, so "Got it" is the install action here.
+    $('#install-close').addEventListener('click', () => {
+      sheet.acted = true;
+      trackEvent(EVENTS.INSTALL_STARTED, { source, method: 'ios_steps' });
+      $('#install-dialog').close();
+    });
   } else if (path === 'open_in_browser') {
     content.innerHTML = `<h2>Open in <em>${REAL_BROWSER}.</em></h2>
       <p>${IN_APP_NAME}'s built-in browser can't add apps to your phone. Open TreasureHunch in ${REAL_BROWSER} and install it from there.</p>
       ${guestFindsHere() ? '<p class="wa-caption">Sign in here first: finds made as a guest stay in this browser, while a signed-in map comes with you.</p>' : user ? `<p class="wa-caption">Sign in again in ${REAL_BROWSER} and your map is there.</p>` : ''}
-      <button id="install-open-browser" class="primary-button" type="button">Open in ${REAL_BROWSER} <span aria-hidden="true">↗</span></button>
+      <button id="install-open-browser" class="primary-button" type="button">Open in ${REAL_BROWSER} <span aria-hidden="true">↗</span></button>${later}
       <p id="install-inapp-note" class="wa-caption hidden" aria-live="polite"></p>
       <input id="install-inapp-url" class="sign-in-inapp-url hidden" type="url" readonly aria-label="Link to open in your browser">`;
     $('#install-open-browser').addEventListener('click', () => {
       sheet.acted = true;
+      trackEvent(EVENTS.INSTALL_STARTED, { source, method: 'open_in_browser' });
       openInRealBrowser('install', { install: '1' }, $('#install-inapp-note'), $('#install-inapp-url'));
     });
     $('#install-inapp-url').addEventListener('focus', event => event.target.select());
@@ -650,20 +688,21 @@ function openInstallDialog(source, path = installer.path()) {
     // A browser that has not offered its prompt yet (it can take a few seconds), or one without a prompt.
     content.innerHTML = `<h2>Install <em>TreasureHunch.</em></h2>
       <p>Add it to your home screen for a full-screen game that opens in one tap.</p>
-      <button id="install-now" class="primary-button" type="button">Install <span aria-hidden="true">↗</span></button>
+      <button id="install-now" class="primary-button" type="button">Install <span aria-hidden="true">↗</span></button>${later}
       <p class="wa-caption">If the button does nothing, open your browser's menu (⋮) and choose <b>Add to Home screen</b> or <b>Install app</b>.</p>`;
     const button = $('#install-now');
     const sync = () => { if (button.isConnected) button.disabled = installer.path() !== 'prompt'; };
     sync();
     const stop = installer.onChange(sync);
     $('#install-dialog').addEventListener('close', stop, { once: true });
-    button.addEventListener('click', () => { $('#install-dialog').close(); startInstall(source); });
+    button.addEventListener('click', () => { sheet.acted = true; $('#install-dialog').close(); startInstall(source); });
   }
-  $('#install-close')?.addEventListener('click', () => { sheet.acted = true; $('#install-dialog').close(); });
+  $('#install-later').addEventListener('click', () => $('#install-dialog').close());
   if (!$('#install-dialog').open) $('#install-dialog').showModal();
 }
 
 function hideResultAlert() {
+  alertAsking = false;
   resultAlertVersion += 1;
   resultAlertVerify?.destroy();
   resultAlertVerify = null;
@@ -690,6 +729,7 @@ async function showResultAlert(day) {
     <p id="result-alert-status" class="friend-status" role="status" aria-live="polite"></p>
     <div class="result-alert-links">${offerPush ? '<button id="result-alert-push" class="text-button" type="button">Or get a browser notification</button>' : ''}<button id="result-alert-later" class="text-button" type="button">Not now</button></div>`;
   resultAlert.classList.remove('hidden');
+  alertAsking = true;
   trackEvent(EVENTS.WHATSAPP_PROMPT_SHOWN, { source: 'result_card', step: verified ? 'consent' : 'verify' }, day);
   const setStatus = message => { $('#result-alert-status').textContent = message; };
   const accepted = phone => {
@@ -697,7 +737,7 @@ async function showResultAlert(day) {
     resultAlertVerify?.destroy();
     resultAlertVerify = null;
     resultAlert.innerHTML = `<h3 id="result-alert-heading">You're <em>in.</em></h3><p class="wa-caption">We'll message ${escapeHTML(maskPhone(phone))} on WhatsApp when each new daily quest goes live, and nothing else. Reply STOP or turn it off in My logs anytime.</p>`;
-    installAfterSignUp = true;
+    alertAsking = false;
     offerInstallSoon();
   };
   if (verified) {
@@ -745,6 +785,7 @@ async function showResultAlert(day) {
   // "Not now" hides the card until the next daily quest (the next UTC day) on this account.
   $('#result-alert-later').addEventListener('click', () => {
     hideResultAlert();
+    offerInstallSoon();
     trackEvent(EVENTS.WHATSAPP_PROMPT_DISMISSED, { source: 'result_card' });
     snoozeWhatsAppPrompt(player).catch(error => console.warn('Could not snooze the WhatsApp prompt:', error));
   });
@@ -1073,6 +1114,8 @@ function startHunt() {
 function openHuntScreen() {
   saved = false;
   lastResult = null;
+  installDue = '';
+  hideResultInstall();
   clearMapSelection();
   elements.home.classList.add('hidden');
   elements.result.classList.add('hidden');
@@ -1241,7 +1284,11 @@ function finishDaily(state) {
     elements.saveStatus.textContent = won ? 'Kept on this device until you sign in.' : '';
   }
   renderLeaderboardGate();
-  showResultAlert(record.day).finally(() => { showResultInstall(record.day); offerInstallSoon(); });
+  showResultAlert(record.day).finally(() => {
+    if (!won || lastResult?.day !== record.day) return;
+    showResultInstall();
+    requestInstallSheet('win');
+  });
 }
 
 function huntRecord(state) {
@@ -1652,7 +1699,10 @@ function finish(state) {
   else if (won) rememberPendingGuestHunt(huntRecord(state));
   renderLeaderboardGate();
   refreshLeaderboard();
-  offerInstallSoon();
+  if (won) {
+    showResultInstall();
+    requestInstallSheet('win');
+  }
 }
 
 function leaveHunt(track = true) {
@@ -1745,7 +1795,8 @@ const friend = createFriendController({
   getMap: () => map,
   getCountries: () => countryData,
   showToast,
-  playVictory,
+  // A friend hunt the explorer personally won.
+  playVictory: card => { playVictory(card); requestInstallSheet('win'); },
   clearVictory,
   requestSignIn: () => openAccount('multiplayer'),
   requestUsername: () => { if (user) showWelcome(user); },
@@ -1810,7 +1861,7 @@ $('#welcome-form').addEventListener('submit', async event => {
         throw new Error(`@${handle} is taken. Try another.`);
       }
       username = await claimUsername(welcomeFor, handle);
-      installAfterSignUp = true;
+      installDue = 'sign_in';
       setAnalyticsUser({ uid: welcomeFor.uid, username });
       renderUsername();
     }
@@ -1980,13 +2031,13 @@ $('#sign-in-dialog').addEventListener('close', () => {
   offerInstallSoon();
 });
 $('#close-install').addEventListener('click', () => $('#install-dialog').close());
-// Closing the sheet that opened by itself without acting on it counts as "Not now" for a week.
+// Closing an install sheet without taking it is a "Not now": tracked, and no offer returns for two days.
 $('#install-dialog').addEventListener('close', () => {
   const sheet = installSheet;
   installSheet = null;
-  if (sheet?.source !== 'sign_up' || sheet.acted) return;
-  installer.snooze();
-  trackEvent(EVENTS.INSTALL_PROMPT_DISMISSED, { source: 'sign_up', method: sheet.method });
+  if (!sheet || sheet.acted) return;
+  installer.markPrompted();
+  trackEvent(EVENTS.INSTALL_PROMPT_DISMISSED, { source: sheet.source, method: sheet.method });
 });
 $('#home-install-button').addEventListener('click', () => startInstall('home'));
 installer.onChange(() => { renderInstallEntry(); maybeOfferInstall(); });
@@ -2104,7 +2155,7 @@ watchUser(async nextUser => {
   const currentVersion = ++authVersion;
   // Signed in during this visit, as opposed to a session restored from an earlier one.
   if (!nextUser) sawSignedOut = true;
-  else if (sawSignedOut) { sawSignedOut = false; installAfterSignUp = true; }
+  else if (sawSignedOut) { sawSignedOut = false; installDue = 'sign_in'; }
   user = nextUser;
   profileReadyFor = '';
   setAnalyticsUser(nextUser && { uid: nextUser.uid });
@@ -2165,6 +2216,8 @@ watchUser(async nextUser => {
     if (atlasView?.self) { atlasView.name = username; renderAtlas(); }
     else if (atlasView && username && atlasView.name === username) openAtlas('', atlasView.source);
     startPendingDaily();
+    // The guest's card gives way once there is a username; a waiting sheet may open now.
+    if (lastResult) showResultInstall();
     offerInstallSoon();
     refreshWhatsApp(nextUser).then(state => {
       const zone = browserTimeZone();

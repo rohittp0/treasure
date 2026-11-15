@@ -39,7 +39,7 @@ Rendered evidence is in `output/multiplayer/`: `seeker-won-mobile.png`, `seeker-
 
 ## Illustration sources
 
-Generated using the built-in image generation tool, then copied into `public/illustrations/victory.png` and `public/illustrations/defeat.png`. The user's mockup was used only as a layout reference; the assets are the original generated rivalry artwork. The initial cooperative high-five illustration was discarded.
+Generated using the built-in image generation tool, then copied into `public/illustrations/victory.webp` and `public/illustrations/defeat.webp` (1200×800 WebP, converted from the 1536×1024 PNG originals, which remain in Git history). The user's mockup was used only as a layout reference; the assets are the original generated rivalry artwork. The initial cooperative high-five illustration was discarded.
 
 Final prompt direction for victory: storybook gouache and fine ink on warm parchment, deep teal and copper; a triumphant seeker claims an open treasure chest and coin while the frustrated rival hider stands separately with folded arms; no collaboration, touching, text or UI.
 

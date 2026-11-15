@@ -30,7 +30,7 @@ export function friendResult(match, viewerUid, answer = null, code = '') {
     completedAt: timestampMillis(match.endedAt),
     action: role === 'seeker' ? personalWin ? 'Challenge back' : 'Plot your revenge' : 'Hide a new treasure',
     canShare: role !== 'spectator',
-    art: seekerWon ? '/illustrations/victory.png' : '/illustrations/defeat.png',
+    art: seekerWon ? '/illustrations/victory.webp' : '/illustrations/defeat.webp',
   };
 }
 

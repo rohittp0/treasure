@@ -9,4 +9,8 @@ const app = initializeApp({
   appId: '1:555455406222:web:f8b265135bd4bfa327a9df',
 });
 
-onBackgroundMessage(getMessaging(app), () => {});
+// Firebase shows the notification itself. An installed app also gets a mark on its icon, which the page
+// clears once today's quest has been played (iOS and desktop; Android has no icon badges for web apps).
+onBackgroundMessage(getMessaging(app), () => {
+  try { self.navigator.setAppBadge?.(1)?.catch(() => {}); } catch { /* Badges are decoration. */ }
+});

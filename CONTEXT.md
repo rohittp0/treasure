@@ -70,6 +70,18 @@ _Avoid_: WhatsApp subscription
 **Opt-out**:
 Withdrawing WhatsApp opt-in, by replying STOP, by using the unsubscribe link in the alert, or from settings. The verified number is kept for sign-in.
 
+**In-app browser**:
+The browser built into another app (Instagram, Facebook, WhatsApp) that opens a tapped link. Its sign-in and progress are separate from Chrome's and Safari's, and it cannot install the app.
+_Avoid_: Webview (outside code)
+
+**Handoff**:
+Moving a visit from an in-app browser to Chrome or Safari, carrying its campaign tags along. It happens by itself on a first visit, or from a tapped "Open in Chrome/Safari" link.
+_Avoid_: Escape (used in code only), redirect
+
+**Installed app**:
+TreasureHunch added to a phone's home screen or installed from the Play Store, running full screen without browser bars.
+_Avoid_: PWA, TWA (outside code and docs for developers)
+
 ## Flagged ambiguities
 
 - "Daily challenge" was used to mean the **daily quest**. Resolved: "challenge" is reserved for friend hunts, and the day's hunt is always the **daily quest**.

@@ -1,0 +1,37 @@
+{
+  "id": "/",
+  "name": "TreasureHunch",
+  "short_name": "Hunch",
+  "description": "Three clues. Three minutes. Find the hidden country on the map, or hide one and challenge a friend.",
+  "lang": "en",
+  "dir": "ltr",
+  "start_url": "/?utm_source=pwa&utm_medium=homescreen",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#102b30",
+  "theme_color": "#102b30",
+  "categories": ["games", "education", "trivia"],
+  "prefer_related_applications": false,
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Today's quest",
+      "short_name": "Daily quest",
+      "description": "Start or resume today's hidden country",
+      "url": "/?daily=1&utm_source=pwa&utm_medium=shortcut",
+      "icons": [{ "src": "/icons/shortcut-daily.png", "sizes": "96x96", "type": "image/png" }]
+    },
+    {
+      "name": "Leaderboard",
+      "short_name": "Leaderboard",
+      "description": "This month's top explorers",
+      "url": "/?utm_source=pwa&utm_medium=shortcut#leaderboard",
+      "icons": [{ "src": "/icons/shortcut-board.png", "sizes": "96x96", "type": "image/png" }]
+    }
+  ]
+}

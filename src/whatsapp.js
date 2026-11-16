@@ -136,7 +136,8 @@ export function browserTimeZone() {
 const millis = value => typeof value === 'number' ? value : value?.toMillis?.() ?? (value instanceof Date ? value.getTime() : null);
 
 // Whether to offer the daily quest alert card on a daily quest result. Explorers who opted out are never
-// asked again. "Not now" hides it until the next daily quest, so a snooze lasts for the rest of its UTC day.
+// asked again. (An alert the server switched off because the number was unreachable has no optOutAt, so it
+// is offered again.) "Not now" hides it until the next daily quest, so a snooze lasts for the rest of its UTC day.
 export function whatsappPromptEligible({ signedIn, username, whatsapp, snoozedAt, now = Date.now() }) {
   if (!signedIn || !username) return false;
   if (whatsapp?.optIn === true || whatsapp?.optOutAt) return false;

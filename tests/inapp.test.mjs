@@ -46,30 +46,30 @@ test('platform splits Android, iOS and everything else', () => {
   assert.equal(platform(''), 'other');
 });
 
-test('the handoff URL keeps the query and asks for Google sign-in', () => {
-  const url = new URL(handoffUrl('https://hunch.rohittp.com/?utm_source=ig&utm_campaign=daily&hunt=ABC#leaderboard'));
+test('the handoff URL keeps the query, names the app left and says why', () => {
+  const url = new URL(handoffUrl('https://hunch.rohittp.com/?utm_source=ig&utm_campaign=daily&hunt=ABC#leaderboard', 'instagram', {}, { signin: 'google' }));
   assert.equal(url.origin + url.pathname, 'https://hunch.rohittp.com/');
   assert.equal(url.searchParams.get('utm_source'), 'ig');
   assert.equal(url.searchParams.get('utm_campaign'), 'daily');
   assert.equal(url.searchParams.get('hunt'), 'ABC');
   assert.equal(url.searchParams.get('from'), 'inapp');
+  assert.equal(url.searchParams.get('iab'), 'instagram');
   assert.equal(url.searchParams.get('signin'), 'google');
   assert.equal(url.hash, '');
   // Tapping twice never stacks duplicate parameters.
-  assert.equal(handoffUrl(url.href), url.href);
+  assert.equal(handoffUrl(url.href, 'instagram', {}, { signin: 'google' }), url.href);
 });
 
-test('the Chrome intent opens the same page with the query and a browser fallback', () => {
-  const intent = chromeIntentUrl('https://hunch.rohittp.com/?utm_source=fb&utm_medium=paid&fbclid=Iw%20AR#leaderboard');
-  const query = '?utm_source=fb&utm_medium=paid&fbclid=Iw+AR&from=inapp&signin=google';
+test('the Chrome intent opens the handoff page with the query and a browser fallback', () => {
+  const handoff = handoffUrl('https://hunch.rohittp.com/?utm_source=fb&utm_medium=paid&fbclid=Iw%20AR#leaderboard', 'facebook');
+  const intent = chromeIntentUrl(handoff);
+  const query = '?utm_source=fb&utm_medium=paid&fbclid=Iw+AR&from=inapp&iab=facebook';
   assert.equal(intent, `intent://hunch.rohittp.com/${query}#Intent;scheme=https;package=com.android.chrome;`
     + `S.browser_fallback_url=${encodeURIComponent(`https://hunch.rohittp.com/${query}`)};end`);
   // The fallback is fully encoded, so its own ; and # can't end the intent early.
   const fallback = intent.match(/S\.browser_fallback_url=([^;]*);end$/)[1];
   assert.doesNotMatch(fallback, /[;#&?]/);
   assert.equal(decodeURIComponent(fallback), `https://hunch.rohittp.com/${query}`);
-  assert.equal(chromeIntentUrl('https://hunch.rohittp.com/'), 'intent://hunch.rohittp.com/?from=inapp&signin=google#Intent;scheme=https;package=com.android.chrome;'
-    + 'S.browser_fallback_url=https%3A%2F%2Fhunch.rohittp.com%2F%3Ffrom%3Dinapp%26signin%3Dgoogle;end');
 });
 
 test('Google failures map to a small fixed set of reasons', () => {

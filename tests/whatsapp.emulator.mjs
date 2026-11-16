@@ -8,7 +8,7 @@ const require = createRequire(new URL('../functions/package.json', import.meta.u
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
 const { createOtpHandlers } = require('./whatsapp/otp.js');
-const { sendDailyWhatsApp } = require('./whatsapp/send.js');
+const { sendDailyWhatsApp, recordFailure, recordDelivered } = require('./whatsapp/send.js');
 const { createWebhookHandlers } = require('./whatsapp/webhooks.js');
 
 const projectId = 'demo-treasure-friend-tests';
@@ -305,7 +305,7 @@ function fakeRequest(body, signature = 'valid') {
   return { method: 'POST', body, headers, originalUrl: '/', get: name => headers[name.toLowerCase()] };
 }
 
-test('webhooks: STOP replies and failed deliveries opt the explorer out; bad signatures are refused', async () => {
+test('webhooks: STOP replies opt out at once, an unreachable number only after three days; bad signatures are refused', async () => {
   await reset();
   const verifiedAt = new Date('2026-11-01T00:00:00Z');
   await seedExplorer('alice', { phone: PHONE, verifiedAt, optIn: true, timeZone: 'Asia/Kolkata' });
@@ -315,7 +315,7 @@ test('webhooks: STOP replies and failed deliveries opt the explorer out; bad sig
   await db.doc('whatsappMessages/SMbob00000000').set({ marker: 'dailyNotifications/2026-11-09/whatsapp/bob', uid: 'bob' });
 
   const validateRequest = (token, signature) => token === 'token' && signature === 'valid';
-  const webhooks = createWebhookHandlers({ db, validateRequest, authToken: 'token', urls: { inbound: 'https://x/whatsappInbound', status: 'https://x/whatsappStatus' }, log: silent });
+  const webhooks = createWebhookHandlers({ db, validateRequest, authToken: 'token', urls: { inbound: 'https://x/whatsappInbound', status: 'https://x/whatsappStatus' }, clock: () => new Date('2026-11-09T10:00:00Z'), log: silent });
 
   const forged = fakeResponse();
   await webhooks.inbound(fakeRequest({ From: `whatsapp:${PHONE}`, Body: 'STOP' }, 'forged'), forged);
@@ -340,7 +340,27 @@ test('webhooks: STOP replies and failed deliveries opt the explorer out; bad sig
   assert.equal(delivered.statusCode, 200);
   const marker = (await db.doc('dailyNotifications/2026-11-09/whatsapp/bob').get()).data();
   assert.deepEqual([marker.status, marker.errorCode], ['undelivered', 63024]);
-  assert.equal((await db.doc('users/bob').get()).data().whatsapp.optIn, false);
+  // 63024 (invalid recipient) can fix itself, so one failure is only counted.
+  const bob = () => db.doc('users/bob').get().then(snapshot => snapshot.data().whatsapp);
+  assert.equal((await bob()).optIn, true);
+  assert.equal((await bob()).unreachableCount, 1);
+  // The send call and its status callback report the same message: counted once per day.
+  await recordFailure(db, 'bob', 63024, new Date('2026-11-09T10:01:00Z'));
+  assert.equal((await bob()).unreachableCount, 1);
+  // A delivered alert ends the run.
+  await recordFailure(db, 'bob', 63024, new Date('2026-11-10T04:05:00Z'));
+  assert.equal((await bob()).unreachableCount, 2);
+  await recordDelivered(db, 'bob');
+  assert.equal((await bob()).unreachableCount, 0);
+  // Three days running switches the alert off without recording an opt-out, so it can be offered again.
+  for (const day of ['11', '12', '13']) await recordFailure(db, 'bob', 63024, new Date(`2026-11-${day}T04:05:00Z`));
+  assert.equal((await bob()).optIn, false);
+  assert.ok((await bob()).unreachableAt);
+  assert.equal((await bob()).optOutAt ?? null, null);
+  // Other errors (63049: Meta chose not to deliver) never touch the opt-in.
+  await db.doc('users/bob').update({ 'whatsapp.optIn': true });
+  await recordFailure(db, 'bob', 63049, new Date('2026-11-14T04:05:00Z'));
+  assert.equal((await bob()).optIn, true);
 
   const unknown = fakeResponse();
   await webhooks.status(fakeRequest({ MessageSid: 'SMunknown0000', MessageStatus: 'sent' }), unknown);

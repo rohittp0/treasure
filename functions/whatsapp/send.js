@@ -5,7 +5,11 @@ const { dailyMessage } = require('./messages');
 
 const WINDOW_START_HOUR = 8;
 const WINDOW_END_HOUR = 12; // Exclusive. Runs every 4 hours, so each zone lands in exactly one run a day.
-const OPT_OUT_ERRORS = new Set([21610, 63024]); // Recipient opted out; invalid recipient.
+const OPT_OUT_ERRORS = new Set([21610]); // The recipient told WhatsApp to stop: honoured at once.
+// "Invalid recipient". Twilio lists causes that fix themselves (an outdated WhatsApp, terms not yet accepted),
+// so the alert is only switched off after it has failed this way on several days running.
+const UNREACHABLE_ERRORS = new Set([63024]);
+const UNREACHABLE_LIMIT = 3;
 const CONCURRENCY = 10;
 
 const utcDay = date => date.toISOString().slice(0, 10);
@@ -35,6 +39,31 @@ const errorCode = error => Number(error?.code) || null;
 
 async function optOut(db, uid, now) {
   await db.doc(`users/${uid}`).update({ 'whatsapp.optIn': false, 'whatsapp.optOutAt': now });
+}
+
+// Acts on a Twilio error for one explorer's alert. A stop request opts out at once. An unreachable number
+// is counted once per day; on the third day in a row the alert is switched off, but optOutAt stays unset:
+// the explorer never asked to stop, so the game may offer the alert again.
+async function recordFailure(db, uid, code, now) {
+  if (OPT_OUT_ERRORS.has(code)) { await optOut(db, uid, now); return; }
+  if (!UNREACHABLE_ERRORS.has(code)) return;
+  const reference = db.doc(`users/${uid}`);
+  await db.runTransaction(async transaction => {
+    const whatsapp = (await transaction.get(reference)).data()?.whatsapp;
+    const day = utcDay(now);
+    // The send call and its status callback can both report the same failed message.
+    if (!whatsapp || whatsapp.unreachableDay === day) return;
+    const count = (whatsapp.unreachableCount || 0) + 1;
+    transaction.update(reference, count >= UNREACHABLE_LIMIT
+      ? { 'whatsapp.optIn': false, 'whatsapp.unreachableAt': now, 'whatsapp.unreachableCount': 0, 'whatsapp.unreachableDay': day }
+      : { 'whatsapp.unreachableCount': count, 'whatsapp.unreachableDay': day });
+  });
+}
+
+// A delivered alert ends a run of unreachable days.
+async function recordDelivered(db, uid) {
+  const reference = db.doc(`users/${uid}`);
+  if ((await reference.get()).data()?.whatsapp?.unreachableCount) await reference.update({ 'whatsapp.unreachableCount': 0 });
 }
 
 // Sends today's alert to every opted-in explorer whose local time is in the window and who has no marker yet.
@@ -72,7 +101,7 @@ async function sendDailyWhatsApp({ db, twilio, params, statusCallback, clock = (
       counts.failed += 1;
       const code = errorCode(error);
       await marker.update({ status: 'failed', errorCode: code }).catch(() => {});
-      if (OPT_OUT_ERRORS.has(code)) await optOut(db, uid, now).catch(() => {});
+      await recordFailure(db, uid, code, now).catch(() => {});
       // Twilio error messages can contain the full number, so only the code is logged.
       log.error(`WhatsApp alert to ${maskPhone(whatsapp.phone)} failed: Twilio error ${code || 'unknown'}.`);
     }
@@ -83,6 +112,6 @@ async function sendDailyWhatsApp({ db, twilio, params, statusCallback, clock = (
 }
 
 module.exports = {
-  WINDOW_START_HOUR, WINDOW_END_HOUR, OPT_OUT_ERRORS,
-  validTimeZone, resolveTimeZone, localHour, inSendWindow, sendDailyWhatsApp, optOut,
+  WINDOW_START_HOUR, WINDOW_END_HOUR, OPT_OUT_ERRORS, UNREACHABLE_ERRORS, UNREACHABLE_LIMIT,
+  validTimeZone, resolveTimeZone, localHour, inSendWindow, sendDailyWhatsApp, optOut, recordFailure, recordDelivered,
 };

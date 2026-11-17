@@ -17,7 +17,7 @@ import { dailyLinkSource, dayKey, monthKey, daysInMonth, msUntilNextDay, dailyQu
 import { createFriendController } from './friend-controller.js';
 import { clockText, huntSheetKey } from './hunt-view.js';
 import { pickTapFeature, TAP_RADIUS } from './map-tap.js';
-import { acceptTerms, watchBlocks } from './firebase.js';
+import { acceptTerms, loadTermsAccepted, watchBlocks } from './firebase.js';
 import { visibleChallenges, visibleHunts } from './moderation.js';
 import { createModerationDialog } from './moderation-dialog.js';
 
@@ -346,6 +346,7 @@ function showWelcome(player, existingUsername = '') {
         : claim ? 'One alert a day keeps your streak going. You can also continue without it.'
           : "Tap to get an alert when each day's quest arrives or a friend challenges you.";
   renderWelcomeWhatsApp(player, !existingUsername);
+  renderWelcomeTerms(player, !existingUsername);
   if (!$('#welcome-dialog').open) $('#welcome-dialog').showModal();
   if (!existingUsername) setTimeout(() => input.focus(), 0);
 }
@@ -461,6 +462,34 @@ function termsAgreed() {
   termsTicked = true;
   session.set(TERMS_KEY, '1');
   return true;
+}
+
+// An account without termsAcceptedAt (made before the box, or signed in only to unsubscribe or delete) ticks it in
+// the username dialog: every username needs it, and everything an explorer posts needs a username.
+function renderWelcomeTerms(player, choosing) {
+  const box = $('#welcome-terms');
+  box.classList.add('hidden');
+  box.querySelector('input').checked = false;
+  if (!choosing || termsTicked || session.get(TERMS_KEY) === '1') return;
+  loadTermsAccepted(player).then(accepted => {
+    if (!accepted && welcomeFor?.uid === player.uid && $('#welcome-dialog').open) box.classList.remove('hidden');
+  }).catch(error => console.warn('Could not check the Terms of Use acceptance:', error));
+}
+
+// Before a username is claimed: stores a pending acceptance now, or throws so the explorer can try again.
+async function ensureTermsAccepted(player) {
+  const box = $('#welcome-terms');
+  if (!box.classList.contains('hidden')) {
+    if (!box.querySelector('input').checked) throw Object.assign(new Error(TERMS_NEEDED), { reason: 'terms' });
+    termsTicked = true;
+    session.set(TERMS_KEY, '1');
+  }
+  if (!termsTicked && session.get(TERMS_KEY) !== '1') return;
+  await termsRecording;
+  if (!termsTicked && session.get(TERMS_KEY) !== '1') return;
+  await acceptTerms(player);
+  termsTicked = false;
+  session.remove(TERMS_KEY);
 }
 
 // The pending flags are cleared only once the acceptance is stored; after a failure the next auth event tries again.
@@ -1974,6 +2003,7 @@ $('#welcome-form').addEventListener('submit', async event => {
         status.dataset.state = 'unavailable';
         throw new Error(`@${handle} is taken. Try another.`);
       }
+      await ensureTermsAccepted(welcomeFor);
       username = await claimUsername(welcomeFor, handle);
       installDue = 'sign_in';
       setAnalyticsUser({ uid: welcomeFor.uid, username });
@@ -2005,6 +2035,11 @@ $('#welcome-form').addEventListener('submit', async event => {
   } catch (error) {
     console.error(error);
     status.textContent = error.message || 'Your username could not be saved. Try again.';
+    // The server found no accepted Terms (a stale view, or another device): ask for the box here.
+    if (error.reason === 'terms') {
+      $('#welcome-terms').classList.remove('hidden');
+      $('#welcome-terms').querySelector('input').focus();
+    }
     if (error.message?.includes('taken') || error.message?.includes('allowed')) status.dataset.state = 'unavailable';
   } finally {
     if ($('#welcome-dialog').open) saveButton.disabled = !username && status.dataset.state !== 'available';

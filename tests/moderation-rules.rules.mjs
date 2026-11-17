@@ -130,13 +130,22 @@ export async function testModerationRules(environment) {
   await assertSucceeds(updateDoc(doc(ok, 'friendHunts/MXDJNA2345'), join('mod-ok')));
   await assertFails(updateDoc(doc(banned, 'friendHunts/MXDJNB2345'), join('mod-banned')));
 
-  async function claim(db, uid, name) {
+  // The Terms of Use acceptance goes in the same batch unless terms is false.
+  async function claim(db, uid, name, { terms = true } = {}) {
     const batch = writeBatch(db);
+    if (terms) batch.set(doc(db, `users/${uid}`), { termsAcceptedAt: serverTimestamp() }, { merge: true });
     batch.set(doc(db, `profiles/${uid}`), { username: name, createdAt: serverTimestamp() });
     batch.set(doc(db, `usernames/${name}`), { uid, displayName: 'Explorer', createdAt: serverTimestamp() });
     return batch.commit();
   }
   await assertSucceeds(claim(environment.authenticatedContext('mod-claim').firestore(), 'mod-claim', 'modclaim'));
+  // No username without the Terms of Use, accepted earlier or in the same batch.
+  const unaccepted = environment.authenticatedContext('mod-claim4').firestore();
+  await assertFails(claim(unaccepted, 'mod-claim4', 'modclaimfour', { terms: false }));
+  await assertSucceeds(setDoc(doc(unaccepted, 'users/mod-claim4'), { displayName: 'Four' }));
+  await assertFails(claim(unaccepted, 'mod-claim4', 'modclaimfour', { terms: false }));
+  await assertSucceeds(updateDoc(doc(unaccepted, 'users/mod-claim4'), { termsAcceptedAt: serverTimestamp() }));
+  await assertSucceeds(claim(unaccepted, 'mod-claim4', 'modclaimfour', { terms: false }));
   await environment.withSecurityRulesDisabled(context => setDoc(doc(context.firestore(), 'bans/mod-claim2'), { bannedAt: past }));
   await assertFails(claim(environment.authenticatedContext('mod-claim2').firestore(), 'mod-claim2', 'modclaimtwo'));
   // Names the server lists in blockedUsernames can't be claimed on the old client path either.

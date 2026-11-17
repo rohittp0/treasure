@@ -9,8 +9,8 @@ const $ = selector => document.querySelector(selector);
 // The report kind a block files, by where the block was made.
 const BLOCK_KIND = { challenge: 'clue', hunt: 'hunt', map: 'profile' };
 
-// target: { uid, name (shown, e.g. '@scout'), context: 'challenge' | 'hunt' | 'map', code?, kind? (files every report
-// as this kind), source: 'inbox' | 'result' | 'clues' | 'map' }
+// target: { uid, name (shown, e.g. '@scout'), context: 'challenge' | 'hunt' | 'map', code?, kind? (the kind of the
+// report a Block files; a Report uses the chosen option's kind), source: 'inbox' | 'result' | 'clues' | 'map' }
 export function createModerationDialog({ getUser, requestSignIn, showToast, onBlocked = () => {} }) {
   const dialog = $('#moderation-dialog');
   let target = null;
@@ -52,7 +52,7 @@ export function createModerationDialog({ getUser, requestSignIn, showToast, onBl
       const reason = reportReason(option, $('#moderation-details').value);
       await submit(async (player, current) => {
         if (alsoBlock) await block(player, current);
-        await reportExplorer(player, { targetUid: current.uid, kind: current.kind || option.kind, code: current.code, reason });
+        await reportExplorer(player, { targetUid: current.uid, kind: option.kind, code: current.code, reason });
         trackEvent(EVENTS.REPORT_SENT, { source: current.source, reason: option.id });
       }, alsoBlock ? `Thanks. ${target.name || 'This explorer'} is blocked, and we'll review your report within 24 hours.`
         : "Thanks. We'll review your report within 24 hours.", alsoBlock);

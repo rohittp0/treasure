@@ -142,16 +142,20 @@ export async function claimUsername(user, username) {
   try { await callFunction('claimUsername', { username: handle }); }
   catch (error) {
     if (error.code === 'functions/already-exists') throw new Error('That username is taken. Try another.');
+    // reason 'terms': the Terms of Use aren't accepted yet; the username dialog then asks for them.
+    if (error.details?.reason === 'terms') throw Object.assign(new Error('Tick the box to agree to the Terms of Use first.'), { reason: 'terms' });
     if (['functions/invalid-argument', 'functions/permission-denied', 'functions/failed-precondition'].includes(error.code)) throw new Error(error.message);
     if (!CLAIM_FALLBACK_CODES.includes(error.code)) {
       console.warn('Username claim failed:', error);
       throw new Error('Your username could not be saved. Try again.');
     }
-    trackEvent(EVENTS.USERNAME_CLAIM_FALLBACK, { reason: error.code.replace('functions/', '') });
     // The function may have saved the claim before failing to answer.
     const existing = (await getDoc(profileRef(user.uid))).data();
     if (existing && existing.username !== handle) throw new Error('You already have a username.');
-    if (!existing) await claimUsernameDirectly(user, handle);
+    if (!existing) {
+      trackEvent(EVENTS.USERNAME_CLAIM_FALLBACK, { reason: error.code.replace('functions/', '') });
+      await claimUsernameDirectly(user, handle);
+    }
   }
   trackEvent(EVENTS.SIGN_UP, { method: signInMethod(user) });
   return handle;
@@ -196,6 +200,10 @@ export async function markChallengeRead(user, code) {
 async function callFunction(name, data) {
   const { getFunctions, httpsCallable } = await import('firebase/functions');
   return (await httpsCallable(getFunctions(app, 'us-central1'), name)(data)).data;
+}
+
+export async function loadTermsAccepted(player) {
+  return (await getDoc(userRef(player.uid))).data()?.termsAcceptedAt != null;
 }
 
 // Recorded once on users/{uid}, with the server time. Rules refuse a second write, so it is checked first.

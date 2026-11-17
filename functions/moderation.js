@@ -21,7 +21,8 @@ const USERNAME_RULE = 'Use 3–20 characters, starting with a letter. Letters, n
 const ALERTS_PER_REPORTER_PER_HOUR = 5;
 // The same report (reporter, explorer, kind and hunt) within this window is alerted once.
 const DUPLICATE_WINDOW_MS = 24 * 3_600_000;
-const DIGEST_WINDOW_MS = 48 * 3_600_000;
+const DIGEST_WINDOW_MS = 7 * 24 * 3_600_000;
+const TELEGRAM_LIMIT = 4000;
 const TELEGRAM_TIMEOUT_MS = 10_000;
 // The reason the app gives the report that every Block files (BLOCK_REASON in src/moderation.js).
 // Those reports don't count against the reporter's alert limit while the block exists.
@@ -93,13 +94,17 @@ async function claimUsernameData(db, { uid, displayName, username }, list = load
   }
   const name = (typeof displayName === 'string' && displayName.trim() ? displayName.trim() : 'Explorer').slice(0, 48);
   return db.runTransaction(async transaction => {
-    const [ban, profile, taken, blocked] = await transaction.getAll(
-      db.doc(`bans/${uid}`), db.doc(`profiles/${uid}`), db.doc(`usernames/${handle}`), db.doc(`blockedUsernames/${handle}`));
+    const [ban, profile, taken, blocked, user] = await transaction.getAll(
+      db.doc(`bans/${uid}`), db.doc(`profiles/${uid}`), db.doc(`usernames/${handle}`), db.doc(`blockedUsernames/${handle}`),
+      db.doc(`users/${uid}`));
     if (ban.exists) throw new HttpsError('permission-denied', "This account can't choose a username.");
     if (profile.exists) {
       if (profile.data().username === handle) return { username: handle };
       throw new HttpsError('failed-precondition', 'You already have a username.');
     }
+    // Everything an explorer posts needs a username, so this is where the Terms of Use must have been accepted.
+    if (user.data()?.termsAcceptedAt == null)
+      throw new HttpsError('failed-precondition', 'Agree to the Terms of Use to choose a username.', { reason: 'terms' });
     if (taken.exists) throw new HttpsError('already-exists', 'That username is taken. Try another.');
     if (blocked.exists) throw new HttpsError('invalid-argument', "That username isn't allowed. Try another.", { reason: 'blocked' });
     transaction.create(db.doc(`profiles/${uid}`), { username: handle, createdAt: FieldValue.serverTimestamp() });
@@ -258,13 +263,17 @@ async function claimAlert(db, reportId, report, now) {
   const limitRef = db.doc(`moderationLimits/${report.reporterUid}`);
   const keyRef = limitRef.collection('reports').doc(`${report.targetUid}_${report.kind}_${report.code || 'none'}`);
   const blockRef = db.doc(`users/${report.reporterUid}/blocks/${report.targetUid}`);
+  // One exempt alert per blocked explorer a day, whatever the kind or hunt.
+  const exemptRef = limitRef.collection('reports').doc(`${report.reporterUid}_${report.targetUid}_block`);
   return db.runTransaction(async transaction => {
-    const [stored, limit, key, block] = await transaction.getAll(reportRef, limitRef, keyRef, blockRef);
+    const [stored, limit, key, block, exemption] = await transaction.getAll(reportRef, limitRef, keyRef, blockRef, exemptRef);
     if (stored.data()?.alertClaimed) return 'send';
     const lastAt = key.data()?.lastAt?.toMillis?.() ?? 0;
     if (key.exists && key.data().reportId !== reportId && now.getTime() - lastAt < DUPLICATE_WINDOW_MS) return 'duplicate';
-    const exempt = report.reason === BLOCK_REASON && block.exists;
-    if (!exempt) {
+    const lastExemptAt = exemption.data()?.lastAt?.toMillis?.() ?? 0;
+    const exempt = report.reason === BLOCK_REASON && block.exists && now.getTime() - lastExemptAt >= DUPLICATE_WINDOW_MS;
+    if (exempt) transaction.set(exemptRef, { reportId, lastAt: now });
+    else {
       const windowStart = limit.data()?.windowStart?.toMillis?.() ?? 0;
       const fresh = !limit.exists || now.getTime() - windowStart >= 3_600_000;
       if (!fresh && limit.data().count >= ALERTS_PER_REPORTER_PER_HOUR) return 'limited';
@@ -276,19 +285,26 @@ async function claimAlert(db, reportId, report, now) {
   });
 }
 
+// Resolves to { ok: true } or, for a request Telegram refused for good (a bad token, a missing chat), to
+// { ok: false, status, detail }. Throws only for failures worth retrying: network errors, timeouts, 429 and 5xx.
 async function sendTelegram({ fetch, token, chatId, text }) {
   // Plain text: report reasons are explorers' own words and must not be read as Markdown or HTML.
-  const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text: text.slice(0, 4000), disable_web_page_preview: true }),
-    signal: AbortSignal.timeout(TELEGRAM_TIMEOUT_MS),
-  });
-  if (!response.ok) {
-    const detail = await response.text().catch(() => '');
-    // The token is in the URL, so the URL is never part of the error.
-    throw new Error(`Telegram sendMessage failed (${response.status}): ${detail.slice(0, 200)}`);
+  let response;
+  try {
+    response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text: text.slice(0, TELEGRAM_LIMIT), disable_web_page_preview: true }),
+      signal: AbortSignal.timeout(TELEGRAM_TIMEOUT_MS),
+    });
+  } catch (error) {
+    // The token is in the URL, so neither the URL nor the original error (which may quote it) is passed on.
+    throw new Error(`Telegram sendMessage did not complete (${error?.name || 'network error'}).`);
   }
+  if (response.ok) return { ok: true };
+  const detail = (await response.text().catch(() => '')).slice(0, 200);
+  if (response.status === 429 || response.status >= 500) throw new Error(`Telegram sendMessage failed (${response.status}): ${detail}`);
+  return { ok: false, status: response.status, detail };
 }
 
 // One report's alert. The trigger retries on failure; a report already alerted is left alone.
@@ -309,43 +325,61 @@ function createReportAlert({ db, fetch, token, chatId, projectId, clock = () => 
     }
     const [target, reporter] = await db.getAll(db.doc(`profiles/${report.targetUid}`), db.doc(`profiles/${report.reporterUid}`));
     const text = reportAlertText({ projectId, reportId, report, targetName: target.data()?.username, reporterName: reporter.data()?.username });
+    let result;
     try {
-      await sendTelegram({ fetch, token, chatId, text });
+      result = await sendTelegram({ fetch, token, chatId, text });
     } catch (error) {
       await reference.set({ alert: 'failed' }, { merge: true });
       throw new Error(`Telegram alert for report ${reportId} failed: ${error.message}`);
+    }
+    if (!result.ok) {
+      // A retry would be refused the same way; the digest lists it once the secrets are fixed.
+      log.error(`Telegram refused the alert for report ${reportId} (${result.status}): ${result.detail}`);
+      await reference.set({ alert: 'failed', alertStatus: result.status }, { merge: true });
+      return;
     }
     await reference.set({ alert: 'sent', alertedAt: FieldValue.serverTimestamp() }, { merge: true });
   };
 }
 
-// The daily digest: every report from the last 48 hours that wasn't alerted (limited, failed, unconfigured, or
-// never processed), so none waits past the 24 hours the Terms promise. Without Telegram it only logs a count.
+// The digest, every 6 hours: every report from the last 7 days that wasn't alerted (limited, failed,
+// unconfigured, or never processed), oldest first, so none waits past the 24 hours the Terms promise. It lists as
+// many as fit in one Telegram message and marks only those as digested; the rest wait for the next run.
+// Without Telegram it only logs a count.
 async function sendReportDigest({ db, fetch, token, chatId, projectId, clock = () => new Date(), log = console }) {
   const since = new Date(clock().getTime() - DIGEST_WINDOW_MS);
-  const snapshot = await db.collection('reports').where('createdAt', '>=', since).get();
+  const snapshot = await db.collection('reports').where('createdAt', '>=', since).orderBy('createdAt', 'asc').get();
   const pending = snapshot.docs.filter(doc => !ALERTED.includes(doc.data().alert));
   if (!pending.length) return { pending: 0, sent: false };
   if (!token || !chatId) {
-    log.error(`Report digest: ${pending.length} reports from the last 48 hours were not alerted. Set the MODERATION_TELEGRAM_TOKEN and MODERATION_TELEGRAM_CHAT_ID secrets, and review them in the reports collection.`);
+    log.error(`Report digest: ${pending.length} reports from the last 7 days were not alerted. Set the MODERATION_TELEGRAM_TOKEN and MODERATION_TELEGRAM_CHAT_ID secrets, and review them in the reports collection.`);
     return { pending: pending.length, sent: false };
   }
-  const shown = pending.slice(0, 30);
-  const lines = [
-    `TreasureHunch report digest: ${pending.length} reports from the last 48 hours were not alerted one by one. Review each within 24 hours.`,
-    ...shown.map(doc => {
-      const report = doc.data();
-      return `\n- ${report.kind}${report.code ? ` (hunt ${report.code})` : ''}: uid ${report.targetUid}, reported by ${report.reporterUid}, ${report.alert || 'not processed'}\n  Reason: ${report.reason || '(none given)'}\n  ${consoleLink(projectId, `reports/${doc.id}`)}`;
-    }),
-  ];
-  if (pending.length > shown.length) lines.push(`\n…and ${pending.length - shown.length} more: ${consoleLink(projectId, 'reports')}`);
-  await sendTelegram({ fetch, token, chatId, text: lines.join('\n') });
-  for (let index = 0; index < shown.length; index += BATCH_LIMIT) {
+  const header = `TreasureHunch report digest: ${pending.length} reports from the last 7 days were not alerted one by one, oldest first. Review each within 24 hours.`;
+  const more = count => `\n\n…and ${count} more: ${consoleLink(projectId, 'reports')}`;
+  let text = header;
+  const listed = [];
+  for (const doc of pending) {
+    const report = doc.data();
+    const entry = `\n\n- ${report.kind}${report.code ? ` (hunt ${report.code})` : ''}: uid ${report.targetUid}, reported by ${report.reporterUid}, ${report.alert || 'not processed'}\n  Reason: ${report.reason || '(none given)'}\n  ${consoleLink(projectId, `reports/${doc.id}`)}`;
+    const left = pending.length - listed.length - 1;
+    // Room is kept for the "…and N more" line whenever anything would be left out.
+    if ((text + entry + (left ? more(left) : '')).length > TELEGRAM_LIMIT) break;
+    text += entry;
+    listed.push(doc);
+  }
+  if (listed.length < pending.length) text += more(pending.length - listed.length);
+  const result = await sendTelegram({ fetch, token, chatId, text });
+  if (!result.ok) {
+    log.error(`Report digest refused by Telegram (${result.status}): ${result.detail}`);
+    return { pending: pending.length, sent: false, status: result.status };
+  }
+  for (let index = 0; index < listed.length; index += BATCH_LIMIT) {
     const batch = db.batch();
-    for (const doc of shown.slice(index, index + BATCH_LIMIT)) batch.set(doc.ref, { alert: 'digested', digestedAt: FieldValue.serverTimestamp() }, { merge: true });
+    for (const doc of listed.slice(index, index + BATCH_LIMIT)) batch.set(doc.ref, { alert: 'digested', digestedAt: FieldValue.serverTimestamp() }, { merge: true });
     await batch.commit();
   }
-  return { pending: pending.length, sent: true };
+  return { pending: pending.length, sent: true, listed: listed.length };
 }
 
 const currentProjectId = () =>
@@ -369,7 +403,7 @@ const onReportCreated = onDocumentCreated({
 })(event.params.reportId, event.data?.data()));
 
 const moderationDigest = onSchedule({
-  schedule: '0 6 * * *',
+  schedule: '0 */6 * * *',
   timeZone: 'Etc/UTC',
   region: REGION,
   retryCount: 1,

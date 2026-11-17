@@ -133,10 +133,12 @@ try {
   await assertSucceeds(updateDoc(doc(hider, threeMinutePath), { status: 'lost', endedAt: serverTimestamp() }));
 
   const hiderName = writeBatch(hider);
+  hiderName.set(doc(hider, 'users/hider'), { termsAcceptedAt: serverTimestamp() }, { merge: true });
   hiderName.set(doc(hider, 'profiles/hider'), { username: 'mapmaker', createdAt: serverTimestamp() });
   hiderName.set(doc(hider, 'usernames/mapmaker'), { uid: 'hider', displayName: 'Hider', createdAt: serverTimestamp() });
   await assertSucceeds(hiderName.commit());
   const seekerName = writeBatch(seeker);
+  seekerName.set(doc(seeker, 'users/seeker'), { termsAcceptedAt: serverTimestamp() }, { merge: true });
   seekerName.set(doc(seeker, 'profiles/seeker'), { username: 'mapfinder', createdAt: serverTimestamp() });
   seekerName.set(doc(seeker, 'usernames/mapfinder'), { uid: 'seeker', displayName: 'Seeker', createdAt: serverTimestamp() });
   await assertSucceeds(seekerName.commit());

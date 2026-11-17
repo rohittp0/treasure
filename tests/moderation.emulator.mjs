@@ -41,8 +41,11 @@ async function rejectsWith(promise, code) {
 
 const exists = async path => (await db.doc(path).get()).exists;
 const data = async path => (await db.doc(path).get()).data();
-const claim = (uid, username, name = 'Scout Person') =>
-  functions.claimUsername.run({ auth: { uid, token: { name } }, data: { username } });
+// Claims need the Terms of Use accepted (users/{uid}.termsAcceptedAt); terms: false leaves them unaccepted.
+async function claim(uid, username, name = 'Scout Person', { terms = true } = {}) {
+  if (terms) await db.doc(`users/${uid}`).set({ termsAcceptedAt: new Date() }, { merge: true });
+  return functions.claimUsername.run({ auth: { uid, token: { name } }, data: { username } });
+}
 
 // ---- claimUsername
 
@@ -62,8 +65,19 @@ test('claimUsername writes the profile and username together, like the client ba
   await rejectsWith(functions.claimUsername.run({ data: { username: 'nobody' } }), 'unauthenticated');
   assert.equal(await exists('profiles/u3'), false);
   // WhatsApp accounts have no display name.
+  await db.doc('users/u4').set({ termsAcceptedAt: new Date() });
   await functions.claimUsername.run({ auth: { uid: 'u4', token: {} }, data: { username: 'quiet' } });
   assert.equal((await data('usernames/quiet')).displayName, 'Explorer');
+});
+
+test('claimUsername needs the Terms of Use accepted first', async () => {
+  await reset();
+  const error = await rejectsWith(claim('t1', 'newcomer', 'New', { terms: false }), 'failed-precondition');
+  assert.equal(error.details?.reason, 'terms');
+  assert.equal(await exists('usernames/newcomer'), false);
+  await db.doc('users/t1').set({ displayName: 'New' });
+  await rejectsWith(claim('t1', 'newcomer', 'New', { terms: false }), 'failed-precondition');
+  assert.deepEqual(await claim('t1', 'newcomer'), { username: 'newcomer' });
 });
 
 test('two explorers claiming one name at once: exactly one gets it', async () => {
@@ -221,6 +235,7 @@ function mockFetch(status = 200) {
   const mock = { calls, status };
   mock.fetch = async (url, options) => {
     calls.push({ url, body: JSON.parse(options.body), method: options.method, signal: options.signal });
+    if (mock.status === 'network') throw new TypeError('fetch failed');
     return { ok: mock.status === 200, status: mock.status, text: async () => 'telegram says no' };
   };
   return mock;
@@ -274,14 +289,14 @@ test('report alerts are limited per reporter, and skipped without the Telegram s
   assert.equal((await data('reports/quiet')).alert, 'unconfigured');
 });
 
-test('a failed Telegram call throws without leaking the bot token', async () => {
+test('a transient Telegram failure throws without leaking the bot token', async () => {
   await reset();
-  const telegram = mockFetch(401);
+  const telegram = mockFetch(503);
   const alert = moderation.createReportAlert({ db, fetch: telegram.fetch, token: '123:SECRET', chatId: 'c', projectId: 'p' });
   await db.doc('reports/fail').set(report());
   const error = await alert('fail', report()).then(() => null, failure => failure);
   assert.ok(error, 'expected a failure');
-  assert.match(error.message, /401/);
+  assert.match(error.message, /503/);
   assert.equal(error.message.includes('SECRET'), false);
 });
 
@@ -369,7 +384,7 @@ test("a block's report is alerted even past the reporter's hourly limit", async 
   assert.equal(telegram.calls.length, moderation.ALERTS_PER_REPORTER_PER_HOUR + 1);
 });
 
-test('the daily digest sends every report of the last 48 hours that was not alerted', async () => {
+test('the digest sends every report of the last 7 days that was not alerted', async () => {
   await reset();
   const now = new Date('2026-11-18T06:00:00Z');
   const hoursAgo = hours => new Date(now.getTime() - hours * 3_600_000);
@@ -379,27 +394,105 @@ test('the daily digest sends every report of the last 48 hours that was not aler
     unprocessed: { createdAt: hoursAgo(30) },
     sent: { alert: 'sent', createdAt: hoursAgo(3) },
     duplicate: { alert: 'duplicate', createdAt: hoursAgo(3) },
-    old: { alert: 'limited', createdAt: hoursAgo(72) },
+    old: { alert: 'limited', createdAt: hoursAgo(8 * 24) },
+    lastWeek: { alert: 'failed', createdAt: hoursAgo(6 * 24) },
   };
   for (const [id, fields] of Object.entries(seeds)) await db.doc(`reports/${id}`).set({ ...report({ targetUid: `t-${id}` }), ...fields });
 
   const errors = [];
   const quiet = mockFetch();
   const unconfigured = await moderation.sendReportDigest({ db, fetch: quiet.fetch, token: '', chatId: '', projectId: 'p', clock: () => now, log: { error: message => errors.push(message) } });
-  assert.deepEqual(unconfigured, { pending: 3, sent: false });
+  assert.deepEqual(unconfigured, { pending: 4, sent: false });
   assert.equal(quiet.calls.length, 0);
-  assert.match(errors[0], /3 reports/);
+  assert.match(errors[0], /4 reports/);
 
   const telegram = mockFetch();
   const result = await moderation.sendReportDigest({ db, fetch: telegram.fetch, token: 't', chatId: 'c', projectId: 'treasurehunch', clock: () => now });
-  assert.deepEqual(result, { pending: 3, sent: true });
+  assert.deepEqual(result, { pending: 4, sent: true, listed: 4 });
   assert.equal(telegram.calls.length, 1);
   const text = telegram.calls[0].body.text;
-  for (const id of ['limited', 'failed', 'unprocessed']) assert.ok(text.includes(`t-${id}`), `digest lists ${id}`);
+  for (const id of ['limited', 'failed', 'unprocessed', 'lastWeek']) assert.ok(text.includes(`t-${id}`), `digest lists ${id}`);
+  // Oldest first.
+  assert.ok(text.indexOf('t-lastWeek') < text.indexOf('t-unprocessed') && text.indexOf('t-unprocessed') < text.indexOf('t-limited'));
   for (const id of ['sent', 'duplicate', 'old']) assert.equal(text.includes(`t-${id}`), false, `digest skips ${id}`);
   assert.ok(telegram.calls[0].signal instanceof AbortSignal);
-  for (const id of ['limited', 'failed', 'unprocessed']) assert.equal((await data(`reports/${id}`)).alert, 'digested');
+  for (const id of ['limited', 'failed', 'unprocessed', 'lastWeek']) assert.equal((await data(`reports/${id}`)).alert, 'digested');
   // Nothing is left for the next run.
   await moderation.sendReportDigest({ db, fetch: telegram.fetch, token: 't', chatId: 'c', projectId: 'p', clock: () => now });
   assert.equal(telegram.calls.length, 1);
+});
+
+test('a rejected Telegram call is recorded, not retried; network errors and 429 or 5xx are retried', async () => {
+  await reset();
+  const telegram = mockFetch(401);
+  const alert = moderation.createReportAlert({ db, fetch: telegram.fetch, token: 't', chatId: 'c', projectId: 'p' });
+  await db.doc('reports/bad').set(report());
+  await alert('bad', report());
+  const stored = await data('reports/bad');
+  assert.equal(stored.alert, 'failed');
+  assert.equal(stored.alertStatus, 401);
+  for (const [id, status] of [['busy', 429], ['down', 500], ['offline', 'network']]) {
+    telegram.status = status;
+    await db.doc(`reports/${id}`).set(report({ targetUid: id }));
+    await assert.rejects(alert(id, report({ targetUid: id })), `${status} should be retried`);
+    assert.equal((await data(`reports/${id}`)).alert, 'failed');
+  }
+});
+
+test('a block lifts the hourly limit for one alert per explorer a day', async () => {
+  await reset();
+  const telegram = mockFetch();
+  const alert = moderation.createReportAlert({ db, fetch: telegram.fetch, token: 't', chatId: 'c', projectId: 'p' });
+  for (let index = 0; index < moderation.ALERTS_PER_REPORTER_PER_HOUR; index++) {
+    await db.doc(`reports/fill${index}`).set(report({ targetUid: `f${index}` }));
+    await alert(`fill${index}`, report({ targetUid: `f${index}` }));
+  }
+  await db.doc('users/r1/blocks/blocked').set({ createdAt: new Date() });
+  const first = report({ targetUid: 'blocked', kind: 'profile', reason: moderation.BLOCK_REASON });
+  delete first.code;
+  await db.doc('reports/block1').set(first);
+  await alert('block1', first);
+  assert.equal((await data('reports/block1')).alert, 'sent');
+  // Another block report on the same explorer (other kind and hunt) the same day is counted as usual.
+  const second = report({ targetUid: 'blocked', kind: 'clue', code: 'CDEFGHJKLM', reason: moderation.BLOCK_REASON });
+  await db.doc('reports/block2').set(second);
+  await alert('block2', second);
+  assert.equal((await data('reports/block2')).alert, 'limited');
+});
+
+test('a long digest stays within one Telegram message and keeps the rest for the next run', async () => {
+  await reset();
+  const now = new Date('2026-11-18T06:00:00Z');
+  for (let index = 0; index < 30; index++) {
+    await db.doc(`reports/long${String(index).padStart(2, '0')}`).set({
+      ...report({ targetUid: `target-${String(index).padStart(2, '0')}`, reason: `${index} `.padEnd(200, 'x') }),
+      alert: 'limited', createdAt: new Date(now.getTime() - (40 - index) * 3_600_000),
+    });
+  }
+  const telegram = mockFetch();
+  const first = await moderation.sendReportDigest({ db, fetch: telegram.fetch, token: 't', chatId: 'c', projectId: 'treasurehunch', clock: () => now });
+  const text = telegram.calls[0].body.text;
+  assert.ok(text.length <= 4000, `digest is ${text.length} characters`);
+  assert.equal(first.pending, 30);
+  assert.ok(first.listed > 0 && first.listed < 30);
+  assert.ok(text.includes(`…and ${30 - first.listed} more`));
+  assert.ok(text.includes('target-00') && !text.includes(`target-${String(first.listed).padStart(2, '0')}`), 'oldest first');
+  const states = await Promise.all(Array.from({ length: 30 }, (_, index) => data(`reports/long${String(index).padStart(2, '0')}`)));
+  assert.equal(states.filter(state => state.alert === 'digested').length, first.listed);
+  const second = await moderation.sendReportDigest({ db, fetch: telegram.fetch, token: 't', chatId: 'c', projectId: 'treasurehunch', clock: () => now });
+  assert.equal(second.pending, 30 - first.listed);
+});
+
+test('a rejected digest is logged, not retried; a 5xx digest is retried', async () => {
+  await reset();
+  const now = new Date('2026-11-18T06:00:00Z');
+  await db.doc('reports/one').set({ ...report(), alert: 'limited', createdAt: new Date(now.getTime() - 3_600_000) });
+  const errors = [];
+  const telegram = mockFetch(400);
+  const options = { db, fetch: telegram.fetch, token: 't', chatId: 'c', projectId: 'p', clock: () => now, log: { error: message => errors.push(message) } };
+  assert.deepEqual(await moderation.sendReportDigest(options), { pending: 1, sent: false, status: 400 });
+  assert.match(errors[0], /400/);
+  assert.equal((await data('reports/one')).alert, 'limited');
+  telegram.status = 502;
+  await assert.rejects(moderation.sendReportDigest(options));
 });

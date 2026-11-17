@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
 import { doc, getDoc, setDoc, updateDoc, writeBatch, serverTimestamp, Timestamp, collection, getDocs, query, where } from 'firebase/firestore';
 import { testWhatsAppRules } from './whatsapp-rules.rules.mjs';
+import { testPushRules } from './push-rules.rules.mjs';
 
 const projectId = 'demo-treasure-friend-tests';
 const environment = await initializeTestEnvironment({
@@ -253,6 +254,7 @@ try {
     await assertFails(updateDoc(doc(seeker, 'usernames/mapfinder'), extra));
   }
   await testWhatsAppRules(environment);
+  await testPushRules(environment);
   console.log('Daily quest rules: one attempt per day, monthly board and explorer maps passed.');
   console.log('Friend hunt rules: username claims, direct challenges, private answer, join, time costs, guesses, reveal, and finish passed.');
 } finally {

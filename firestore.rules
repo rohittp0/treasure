@@ -423,8 +423,9 @@ service cloud.firestore {
         allow list: if false;
         allow create, update: if request.auth != null && request.auth.uid == userId
           && tokenHash.matches('[a-f0-9]{64}')
-          && request.resource.data.keys().hasOnly(['token', 'createdAt'])
+          && request.resource.data.keys().hasOnly(['token', 'createdAt', 'platform'])
           && request.resource.data.keys().hasAll(['token', 'createdAt'])
+          && (!('platform' in request.resource.data) || request.resource.data.platform in ['web', 'android', 'ios'])
           && request.resource.data.token is string
           && request.resource.data.token.size() > 20
           && request.resource.data.token.size() < 500

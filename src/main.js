@@ -113,7 +113,9 @@ const PENDING_ENTRY_KEY = 'treasurehunch:pending-leaderboard';
 const RESUME_RESULT_KEY = 'treasurehunch:resume-result';
 const MAP_HINT_KEY = 'treasurehunch:map-hint-seen';
 // Set when the Terms of Use box is ticked and a sign-in starts; a Google redirect reloads the page before it ends.
+// The in-memory flag covers browsers that block session storage (WhatsApp and the Google popup).
 const TERMS_KEY = 'treasurehunch:terms-accepted';
+let termsTicked = false;
 let completedWins = readCompletedWins();
 let soloFoundIds = readSoloFound();
 
@@ -442,12 +444,14 @@ function openSignIn(source, { title, copy, resumeResult = false } = {}) {
 const TERMS_NEEDED = 'Tick the box to agree to the Terms of Use first.';
 function termsAgreed() {
   if (!$('#sign-in-terms').checked) return false;
+  termsTicked = true;
   session.set(TERMS_KEY, '1');
   return true;
 }
 
 function recordTermsAcceptance(player) {
-  if (session.get(TERMS_KEY) !== '1') return;
+  if (!termsTicked && session.get(TERMS_KEY) !== '1') return;
+  termsTicked = false;
   session.remove(TERMS_KEY);
   acceptTerms(player).catch(error => console.warn('Could not record the Terms of Use acceptance:', error));
 }
@@ -939,7 +943,13 @@ function watchInbox(player) {
     blocksReady = true;
     renderInbox();
   });
-  stopChallenges = () => { stopInbox(); stopBlocks(); };
+  stopChallenges = () => {
+    stopInbox();
+    stopBlocks();
+    blockedUids = new Set();
+    inboxChallenges = [];
+    accountHistory = null;
+  };
 
   function renderInbox() {
     if (user?.uid !== player.uid || !received || !blocksReady) return;
@@ -1875,7 +1885,11 @@ const friend = createFriendController({
 const moderation = createModerationDialog({
   getUser: () => user,
   requestSignIn: () => openSignIn('account'),
-  showToast,
+  // The toast sits under an open modal, so a report made from My logs is confirmed in the inbox too.
+  showToast: message => {
+    showToast(message);
+    if (elements.accountDialog.open) $('#account-challenge-status').textContent = message;
+  },
   // A blocked explorer's result closes; their map stays, since maps are public anyway.
   onBlocked: target => { if (target.context === 'hunt' && friend.mode.endsWith('-result')) friend.home(); },
 });

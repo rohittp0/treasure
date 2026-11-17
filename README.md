@@ -107,7 +107,7 @@ firebase functions:secrets:set MODERATION_TELEGRAM_TOKEN --project treasurehunch
 firebase functions:secrets:set MODERATION_TELEGRAM_CHAT_ID --project treasurehunch
 ```
 
-Set both before the first deploy that includes `onReportCreated`. Without them the deploy fails, because the function declares them as secrets.
+Set both before the first deploy that includes `onReportCreated`. The function declares them as secrets, so the non-interactive deploy on merge to `main` fails without them (a manual `firebase deploy` asks for them instead).
 
 To ban, run `node scripts/moderate.mjs ban <uid> "<reason>"` (the uid is in the alert). It needs `gcloud auth application-default login` with an account that can manage Auth and Firestore on the project. The same script grants the `admin` claim (`node scripts/moderate.mjs admin <uid>`) to an account that should be able to call `banExplorer` from an app. `banExplorer` is not behind App Check, so a signed-in admin can call it with their ID token.
 

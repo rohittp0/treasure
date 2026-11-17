@@ -132,7 +132,9 @@ export async function loadProfile(user) {
 }
 
 // The claimUsername function writes the profile and username together and checks the username blocklist.
-// Its messages (taken, not allowed, already chosen) are written for explorers.
+// Its verdicts (taken, not allowed, already chosen) are written for explorers. If the function can't be
+// reached at all (not deployed yet, App Check unavailable), the claim falls back to the direct batch, which
+// the rules still allow and check against bans and blockedUsernames.
 export async function claimUsername(user, username) {
   const handle = username.trim().toLowerCase();
   if (!/^[a-z][a-z0-9_]{2,19}$/.test(handle)) throw new Error('Use 3–20 characters, starting with a letter. Letters, numbers and underscores work.');
@@ -140,10 +142,22 @@ export async function claimUsername(user, username) {
   catch (error) {
     if (error.code === 'functions/already-exists') throw new Error('That username is taken. Try another.');
     if (['functions/invalid-argument', 'functions/permission-denied', 'functions/failed-precondition'].includes(error.code)) throw new Error(error.message);
-    throw error;
+    console.warn('claimUsername unavailable, claiming directly:', error.code || error);
+    await claimUsernameDirectly(user, handle);
   }
   trackEvent(EVENTS.SIGN_UP, { method: signInMethod(user) });
   return handle;
+}
+
+async function claimUsernameDirectly(user, handle) {
+  const batch = writeBatch(db);
+  batch.set(profileRef(user.uid), { username: handle, createdAt: serverTimestamp() });
+  batch.set(usernameRef(handle), { uid: user.uid, displayName: (user.displayName || 'Explorer').slice(0, 48), createdAt: serverTimestamp() });
+  try { await batch.commit(); }
+  catch (error) {
+    if (error.code === 'permission-denied' || error.code === 'already-exists') throw new Error('That username is taken. Try another.');
+    throw error;
+  }
 }
 
 export async function isUsernameAvailable(username) {

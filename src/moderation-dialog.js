@@ -49,10 +49,10 @@ export function createModerationDialog({ getUser, requestSignIn, showToast, onBl
       const option = options.find(item => item.id === chosen) || options[0];
       const alsoBlock = $('#moderation-also-block').checked;
       const reason = reportReason(option, $('#moderation-details').value);
-      await submit(async player => {
-        if (alsoBlock) await block(player);
-        await reportExplorer(player, { targetUid: target.uid, kind: option.kind, code: target.code, reason });
-        trackEvent(EVENTS.REPORT_SENT, { source: target.source, reason: option.id });
+      await submit(async (player, current) => {
+        if (alsoBlock) await block(player, current);
+        await reportExplorer(player, { targetUid: current.uid, kind: option.kind, code: current.code, reason });
+        trackEvent(EVENTS.REPORT_SENT, { source: current.source, reason: option.id });
       }, alsoBlock ? `Thanks. ${target.name || 'This explorer'} is blocked, and we'll review your report within 24 hours.`
         : "Thanks. We'll review your report within 24 hours.", alsoBlock);
     });
@@ -66,27 +66,29 @@ export function createModerationDialog({ getUser, requestSignIn, showToast, onBl
       <button id="moderation-block" class="primary-button" type="button">Block <span aria-hidden="true">↗</span></button>
       <button id="moderation-cancel" class="secondary-button" type="button">Cancel</button>`;
     $('#moderation-cancel').addEventListener('click', () => dialog.close());
-    $('#moderation-block').addEventListener('click', () => submit(async player => {
-      await block(player);
+    $('#moderation-block').addEventListener('click', () => submit(async (player, current) => {
+      await block(player, current);
       // The block already hides them; the report only lets the developer look, so a failure is not the explorer's problem.
-      await reportExplorer(player, { targetUid: target.uid, kind: BLOCK_KIND[target.context] || 'profile', code: target.code, reason: BLOCK_REASON })
+      await reportExplorer(player, { targetUid: current.uid, kind: BLOCK_KIND[current.context] || 'profile', code: current.code, reason: BLOCK_REASON })
         .catch(error => console.warn('The report for this block was not sent:', error));
     }, `${target.name || 'This explorer'} is blocked.`, true));
   }
 
-  async function block(player) {
-    await blockExplorer(player, target.uid);
-    trackEvent(EVENTS.EXPLORER_BLOCKED, { source: target.source });
+  async function block(player, current) {
+    await blockExplorer(player, current.uid);
+    trackEvent(EVENTS.EXPLORER_BLOCKED, { source: current.source });
   }
 
   async function submit(action, done, blocked) {
     const player = getUser();
     if (!player) { dialog.close(); requestSignIn(); return; }
+    // Kept apart from `target`, which closing the sheet clears while the request is still running.
     const current = target;
+    if (!current) return;
     setBusy(true);
     setStatus('Sending…');
     try {
-      await action(player);
+      await action(player, current);
     } catch (error) {
       console.error(error);
       setBusy(false);

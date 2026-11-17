@@ -76,7 +76,7 @@ let callables = null;
 async function callable(name, data) {
   callables ||= import('firebase/functions').then(({ getFunctions, httpsCallable }) => {
     const functions = getFunctions(app, 'us-central1');
-    return { requestWhatsAppOtp: httpsCallable(functions, 'requestWhatsAppOtp'), verifyWhatsAppOtp: httpsCallable(functions, 'verifyWhatsAppOtp') };
+    return { requestWhatsAppOtp: httpsCallable(functions, 'requestWhatsAppOtp'), verifyWhatsAppOtp: httpsCallable(functions, 'verifyWhatsAppOtp'), deleteAccount: httpsCallable(functions, 'deleteAccount') };
   });
   return (await (await callables)[name](data)).data;
 }
@@ -91,6 +91,24 @@ export async function verifyWhatsAppOtp(phone, purpose, code) {
   const credential = await signInWithCustomToken(auth, result.customToken);
   trackEvent(EVENTS.LOGIN, { method: 'whatsapp' });
   return { isNew: !!result.isNew, player: credential.user };
+}
+
+// Erases the signed-in explorer's account on the server, then drops the local session. The Auth user is
+// already gone by then, so this signs out directly: logout() would try to delete push tokens that are erased.
+export async function deleteAccount() {
+  const uid = auth.currentUser?.uid;
+  await callable('deleteAccount', {});
+  // From here the account is gone: nothing below may report a failure.
+  pushRegistration = null;
+  try {
+    if (uid) {
+      for (let index = localStorage.length - 1; index >= 0; index--) {
+        const key = localStorage.key(index);
+        if (key && key.includes(uid)) localStorage.removeItem(key);
+      }
+    }
+  } catch (error) { console.warn('Could not clear this browser\'s saved data:', error); }
+  try { await signOut(auth); } catch (error) { console.warn('Signed out locally failed after deletion:', error); }
 }
 
 const userRef = uid => doc(db, 'users', uid);

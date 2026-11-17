@@ -7,7 +7,7 @@ import './style.css';
 import fallbackPuzzles from '../data/countries.json';
 import bundledDailySchedules from '../data/daily-quests.json';
 import { choosePuzzle, createGame, difficultyForLevel, CLUE_COST, REVEAL_COST } from './game.js';
-import { loadFriendHunts, watchUser, login, logout, loadPuzzles, saveHunt, loadHunts, loadLeaderboard, enterLeaderboard, loadProfile, claimUsername, isUsernameAvailable, watchChallenges, markChallengeRead, registerChallengePush, loadDailySchedule, loadDailyRecords, startDailyRecord, finishDailyRecord, loadMonthlyLeaderboard, enterMonthlyLeaderboard, saveAtlas, loadAtlas, loadWhatsApp, setWhatsAppOptIn, setWhatsAppTimeZone, snoozeWhatsAppPrompt } from './firebase.js';
+import { loadFriendHunts, watchUser, login, logout, loadPuzzles, saveHunt, loadHunts, loadLeaderboard, enterLeaderboard, loadProfile, claimUsername, isUsernameAvailable, watchChallenges, markChallengeRead, registerChallengePush, loadDailySchedule, loadDailyRecords, startDailyRecord, finishDailyRecord, loadMonthlyLeaderboard, enterMonthlyLeaderboard, saveAtlas, loadAtlas, loadWhatsApp, setWhatsAppOptIn, setWhatsAppTimeZone, snoozeWhatsAppPrompt, deleteAccount } from './firebase.js';
 import { createWhatsAppVerify } from './whatsapp-verify.js';
 import { inAppBrowser, platform, googleErrorReason } from './inapp.js';
 import { arrival, clearHandoffParams, outboundHandoff, removeUrlParams, setUrlParam } from './handoff.js';
@@ -75,6 +75,9 @@ let whatsappState = null;
 let resultAlertVerify = null;
 let resultAlertVersion = 0;
 let pendingUnsubscribe = new URLSearchParams(location.search).get('whatsapp') === 'stop';
+// ?account=delete (the public deletion link): sign in if needed, then ask to confirm.
+let deleteSource = 'account';
+let pendingDelete = new URLSearchParams(location.search).get('account') === 'delete';
 let signInContext = null;
 let signInVerify = null;
 // Opt-in from the WhatsApp sign-in form; the welcome dialog waits for it before offering WhatsApp again.
@@ -464,18 +467,52 @@ async function optInAfterSignIn(player) {
   }
 }
 
+// ---- Account deletion: a confirmation, then the server erases everything and the explorer is a guest again.
+function openDeleteAccount(source) {
+  $('#delete-account-status').textContent = '';
+  $('#delete-account-confirm').disabled = false;
+  $('#delete-account-keep').disabled = false;
+  trackEvent(EVENTS.ACCOUNT_DELETE_OPENED, { source });
+  deleteSource = source;
+  if (!$('#delete-account-dialog').open) $('#delete-account-dialog').showModal();
+}
+
+async function confirmDeleteAccount() {
+  const confirm = $('#delete-account-confirm'), keep = $('#delete-account-keep');
+  confirm.disabled = keep.disabled = true;
+  $('#delete-account-status').textContent = 'Deleting…';
+  try {
+    await deleteAccount();
+  } catch (error) {
+    console.warn('Could not delete the account:', error);
+    confirm.disabled = keep.disabled = false;
+    $('#delete-account-status').textContent = 'Your account could not be deleted. Try again.';
+    return;
+  }
+  trackEvent(EVENTS.ACCOUNT_DELETED, { source: deleteSource });
+  $('#delete-account-dialog').close();
+  showToast('Your account has been deleted.');
+}
+
 function closeSignIn() {
   if ($('#sign-in-dialog').open) $('#sign-in-dialog').close();
 }
 
 // ---- The unsubscribe link waits until no other dialog or hunt is on screen.
 function dialogsBusy() {
-  return ['#welcome-dialog', '#sign-in-dialog', '#whatsapp-dialog', '#account-dialog', '#install-dialog'].some(selector => $(selector).open);
+  return ['#welcome-dialog', '#sign-in-dialog', '#delete-account-dialog', '#whatsapp-dialog', '#account-dialog', '#install-dialog'].some(selector => $(selector).open);
 }
 
 function showDeferredDialogs() {
   if (!user || profileReadyFor !== user.uid || dialogsBusy()) return;
   if (pendingUnsubscribe) showUnsubscribe();
+  else if (pendingDelete) showDeleteLink();
+}
+
+function showDeleteLink() {
+  pendingDelete = false;
+  removeUrlParams(['account']);
+  openDeleteAccount('link');
 }
 
 function openWhatsAppDialog(kicker, html) {
@@ -1741,7 +1778,7 @@ async function openAccount(purpose = 'log') {
     friend.openLobby();
     return;
   }
-  elements.accountContent.innerHTML = `<h2>Welcome back, ${username ? `@${escapeHTML(username)}` : escapeHTML(user.displayName?.split(' ')[0] || 'Explorer')}.</h2><p>Your discoveries live here.</p><h3 class="log-heading">SOLO EXPLORATIONS</h3><div id="account-stats" class="account-stats">Loading your log…</div><section class="account-whatsapp" aria-labelledby="account-whatsapp-heading"><h3 id="account-whatsapp-heading" class="log-heading">DAILY QUEST ALERT ON WHATSAPP</h3><div id="account-whatsapp-body" class="log-caption">Loading…</div></section><section class="multiplayer-history" aria-labelledby="multiplayer-log-heading"><h3 id="multiplayer-log-heading" class="log-heading">FRIEND HUNTS</h3><p class="log-caption">Your rivalries, kept apart from the solo leaderboard.</p><div id="multiplayer-log" role="status">Loading friend hunts…</div><button id="multiplayer-log-retry" class="text-button hidden" type="button">Retry friend hunts ↗</button></section><button id="dialog-sign-out" class="text-button" type="button">Sign out ↗</button>`;
+  elements.accountContent.innerHTML = `<h2>Welcome back, ${username ? `@${escapeHTML(username)}` : escapeHTML(user.displayName?.split(' ')[0] || 'Explorer')}.</h2><p>Your discoveries live here.</p><h3 class="log-heading">SOLO EXPLORATIONS</h3><div id="account-stats" class="account-stats">Loading your log…</div><section class="account-whatsapp" aria-labelledby="account-whatsapp-heading"><h3 id="account-whatsapp-heading" class="log-heading">DAILY QUEST ALERT ON WHATSAPP</h3><div id="account-whatsapp-body" class="log-caption">Loading…</div></section><section class="multiplayer-history" aria-labelledby="multiplayer-log-heading"><h3 id="multiplayer-log-heading" class="log-heading">FRIEND HUNTS</h3><p class="log-caption">Your rivalries, kept apart from the solo leaderboard.</p><div id="multiplayer-log" role="status">Loading friend hunts…</div><button id="multiplayer-log-retry" class="text-button hidden" type="button">Retry friend hunts ↗</button></section><button id="dialog-sign-out" class="text-button" type="button">Sign out ↗</button><button id="dialog-delete-account" class="text-button" type="button">Delete account</button>`;
   const logUser = user;
   const logContainer = $('#multiplayer-log');
   const retry = $('#multiplayer-log-retry');
@@ -1777,6 +1814,7 @@ async function openAccount(purpose = 'log') {
   loadMultiplayerLog();
   renderAccountWhatsApp(logUser);
   $('#dialog-sign-out').addEventListener('click', async () => { await logout(); elements.accountDialog.close(); });
+  $('#dialog-delete-account').addEventListener('click', () => { elements.accountDialog.close(); openDeleteAccount('account'); });
   try {
     const hunts = await loadHunts(user);
     if (!elements.accountDialog.open) return;
@@ -2027,6 +2065,8 @@ $('#close-sign-in').addEventListener('click', closeSignIn);
 $('#sign-in-dialog').addEventListener('close', () => {
   signInVerify?.destroy();
   signInVerify = null;
+  // Closed without signing in: the ?account=delete confirmation must not appear later, unprompted.
+  if (!user) pendingDelete = false;
   showDeferredDialogs();
   offerInstallSoon();
 });
@@ -2042,6 +2082,10 @@ $('#install-dialog').addEventListener('close', () => {
 $('#home-install-button').addEventListener('click', () => startInstall('home'));
 installer.onChange(() => { renderInstallEntry(); maybeOfferInstall(); });
 renderInstallEntry();
+$('#delete-account-dialog').addEventListener('cancel', event => { if ($('#delete-account-confirm').disabled) event.preventDefault(); });
+$('#delete-account-keep').addEventListener('click', () => $('#delete-account-dialog').close());
+$('#delete-account-confirm').addEventListener('click', confirmDeleteAccount);
+$('#close-delete-account').addEventListener('click', () => { if (!$('#delete-account-confirm').disabled) $('#delete-account-dialog').close(); });
 $('#close-whatsapp').addEventListener('click', () => $('#whatsapp-dialog').close());
 $('#whatsapp-dialog').addEventListener('close', () => {
   whatsappDialogVerify?.destroy();
@@ -2174,6 +2218,7 @@ watchUser(async nextUser => {
   whatsappState = null;
   hideResultAlert();
   if (!nextUser && pendingUnsubscribe) openSignIn('unsubscribe');
+  else if (!nextUser && pendingDelete) openSignIn('account_delete');
   else if (!nextUser && pendingGoogleSignIn) openSignIn('open_in_browser');
   pendingGoogleSignIn = false;
   elements.accountButton.innerHTML = nextUser ? `<span class="account-avatar">${escapeHTML((nextUser.displayName || 'E')[0])}</span><span class="account-label">My logs</span><span id="account-challenge-count" class="account-alert-count hidden">0</span>` : 'Sign in <span aria-hidden="true">↗</span>';

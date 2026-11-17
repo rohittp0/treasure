@@ -130,3 +130,14 @@ test('every event carries the app version when the tracker is given one', () => 
   createEventTracker({ google: (...args) => plain.push(args) }).track(EVENTS.HUNT_STARTED);
   assert.equal('app_version' in plain[0][1], false);
 });
+
+test('account deletion events are catalogued and carry only the source', () => {
+  assert.equal(EVENTS.ACCOUNT_DELETE_OPENED, 'account_delete_opened');
+  assert.equal(EVENTS.ACCOUNT_DELETED, 'account_deleted');
+  const calls = [];
+  const tracker = createEventTracker({ google: (...args) => calls.push(args) });
+  for (const name of [EVENTS.ACCOUNT_DELETE_OPENED, EVENTS.ACCOUNT_DELETED]) {
+    assert.equal(tracker.track(name, { source: 'link', uid: 'secret', email: 'private@example.com', username: 'scout' }), true);
+  }
+  assert.deepEqual(calls.map(call => call[1]), [{ source: 'link', account_status: 'guest' }, { source: 'link', account_status: 'guest' }]);
+});

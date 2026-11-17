@@ -174,14 +174,20 @@ const otpOptions = {
   enforceAppCheck: true,
   secrets: [...twilioSecrets, whatsappConfig.otpHmacKey],
 };
+// Only requesting a code needs the reviewer secrets; verifying just compares the stored hash.
+const requestOtpOptions = {
+  ...otpOptions,
+  secrets: [...otpOptions.secrets, whatsappConfig.reviewTestPhone, whatsappConfig.reviewTestCode],
+};
 
-function otpHandlers() {
+function otpHandlers({ withReviewer = false } = {}) {
   return createOtpHandlers({
     db: getFirestore(),
     auth: getAuth(),
     twilio: whatsappConfig.twilioClient(),
     hmacKey: whatsappConfig.otpHmacKey.value(),
     params: whatsappConfig.whatsappParams(),
+    reviewer: withReviewer ? whatsappConfig.reviewerConfig() : undefined,
   });
 }
 
@@ -190,7 +196,7 @@ function requester(request) {
   return { uid: request.auth?.uid || null, ip: forwarded || request.rawRequest?.ip || null };
 }
 
-exports.requestWhatsAppOtp = onCall(otpOptions, request => otpHandlers().requestOtp(request.data, requester(request)));
+exports.requestWhatsAppOtp = onCall(requestOtpOptions, request => otpHandlers({ withReviewer: true }).requestOtp(request.data, requester(request)));
 exports.verifyWhatsAppOtp = onCall(otpOptions, request => otpHandlers().verifyOtp(request.data, requester(request)));
 
 // Every 4 hours; each explorer gets the alert in the run that falls in their local 08:00–12:00.

@@ -228,6 +228,16 @@ test('banExplorerData tolerates an explorer with no profile or Auth user', async
   assert.equal(await exists('bans/ghost'), true);
 });
 
+test('deleteAccount refuses a banned explorer, so the ban, name and number stay', async () => {
+  await reset();
+  await seedBanned();
+  await moderation.banExplorerData(db, mockAuth(), 'u1', { reason: 'Abusive clues', bannedBy: 'admin1' });
+  // An ID token issued before the ban stays valid for up to an hour.
+  await rejectsWith(functions.deleteAccount.run({ auth: { uid: 'u1', token: {} }, data: {} }), 'permission-denied');
+  for (const path of ['bans/u1', 'blockedUsernames/scout', 'whatsappPhones/+919020277399', 'users/u1'])
+    assert.equal(await exists(path), true, `${path} should be kept`);
+});
+
 // ---- Report alerts
 
 function mockFetch(status = 200) {

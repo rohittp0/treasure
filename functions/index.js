@@ -252,6 +252,8 @@ exports.deleteAccount = onCall({ enforceAppCheck: true, region: 'us-central1', t
   try {
     await deleteAccountData(getFirestore(), getAuth(), request.auth.uid);
   } catch (error) {
+    // A banned explorer is refused with permission-denied (see ./account).
+    if (error instanceof HttpsError) throw error;
     console.error(`Account deletion for ${request.auth.uid} failed:`, error);
     throw new HttpsError('internal', 'Your account could not be deleted. Try again.');
   }

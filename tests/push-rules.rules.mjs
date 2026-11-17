@@ -17,6 +17,12 @@ export async function testPushRules(environment) {
   await assertSucceeds(setDoc(tokenDoc(owner, 'c'), { token, createdAt: serverTimestamp(), platform: 'android' }));
   await assertSucceeds(setDoc(tokenDoc(owner, 'd'), { token, createdAt: serverTimestamp(), platform: 'ios' }));
 
+  // A native token carries its platform and the daily quest switch together.
+  await assertSucceeds(setDoc(tokenDoc(owner, '1'), { token, createdAt: serverTimestamp(), platform: 'android', dailyQuest: false }));
+  await assertSucceeds(setDoc(tokenDoc(owner, '2'), { token, createdAt: serverTimestamp(), platform: 'ios', dailyQuest: true }));
+  await assertFails(setDoc(tokenDoc(owner, 'e'), { token, createdAt: serverTimestamp(), platform: 'desktop', dailyQuest: true }));
+  await assertFails(setDoc(tokenDoc(owner, 'e'), { token, createdAt: serverTimestamp(), platform: 'ios', dailyQuest: 'off' }));
+
   // Anything else is rejected.
   await assertFails(setDoc(tokenDoc(owner, 'e'), { token, createdAt: serverTimestamp(), platform: 'desktop' }));
   await assertFails(setDoc(tokenDoc(owner, 'e'), { token, createdAt: serverTimestamp(), platform: 7 }));

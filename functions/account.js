@@ -1,6 +1,8 @@
 // Account deletion, shared by the web game and the native apps through the deleteAccount callable.
 // Every step tolerates documents that are already gone, so a failed run can simply be retried.
 // The Auth user is deleted last: while it exists, the explorer can sign in and ask again.
+// functions/moderation.js reuses these helpers for banExplorer, which settles the same documents.
+const { HttpsError } = require('firebase-functions/v2/https');
 const { PURPOSES, challengeId, rateLimitRef, utcDay } = require('./whatsapp/otp');
 
 // How a deleted explorer appears in the friend hunts kept for the other participant (CONTEXT.md).
@@ -24,6 +26,13 @@ async function deleteIfOwned(db, ref, uid) {
   });
 }
 
+// A banned explorer can't delete the account: the ban, the reserved username and the linked WhatsApp number
+// must stay, or deleting and signing up again would undo the ban (README, Moderation).
+async function assertNotBanned(db, uid) {
+  if ((await db.doc(`bans/${uid}`).get()).exists)
+    throw new HttpsError('permission-denied', "This account was banned and can't be deleted here. Contact support.");
+}
+
 // Friend hunts the explorer hid, sought or was challenged to, each once.
 async function huntsOf(db, uid) {
   const snapshots = await Promise.all(['hiderUid', 'seekerUid', 'targetUid']
@@ -36,8 +45,9 @@ async function huntsOf(db, uid) {
 // A waiting hunt nobody joined, which the explorer hid or was challenged to, is deleted with its answer:
 // nobody could join it any more. Any other hunt is kept for the other explorer, with the deleted side
 // shown as a former explorer. Each hunt is re-read in its own transaction, so a hunt someone joins
-// meanwhile is anonymised, not deleted.
-async function settleHunt(db, uid, ref) {
+// meanwhile is anonymised, not deleted. hiderChanges adds to what a kept hunt changes when this explorer hid
+// it (a ban also removes the clues).
+async function settleHunt(db, uid, ref, { hiderChanges = {} } = {}) {
   await db.runTransaction(async transaction => {
     const snapshot = await transaction.get(ref);
     if (!snapshot.exists) return;
@@ -48,7 +58,7 @@ async function settleHunt(db, uid, ref) {
       return;
     }
     const changes = {};
-    if (hunt.hiderUid === uid) Object.assign(changes, { hiderName: FORMER_EXPLORER, hiderUsername: null });
+    if (hunt.hiderUid === uid) Object.assign(changes, { hiderName: FORMER_EXPLORER, hiderUsername: null, ...hiderChanges });
     if (hunt.seekerUid === uid) changes.seekerName = FORMER_EXPLORER;
     if (hunt.targetUid === uid) changes.targetUsername = null;
     if (Object.keys(changes).length) transaction.update(ref, changes);
@@ -57,6 +67,7 @@ async function settleHunt(db, uid, ref) {
 
 async function deleteAccountData(db, auth, uid, { clock = () => new Date() } = {}) {
   if (typeof uid !== 'string' || !uid) throw new Error('deleteAccountData needs a uid.');
+  await assertNotBanned(db, uid);
 
   // 1. What the explorer's other documents are keyed by.
   const [profile, user] = await Promise.all([db.doc(`profiles/${uid}`).get(), db.doc(`users/${uid}`).get()]);
@@ -117,4 +128,4 @@ async function deleteAccountData(db, auth, uid, { clock = () => new Date() } = {
   }
 }
 
-module.exports = { FORMER_EXPLORER, deleteAccountData };
+module.exports = { FORMER_EXPLORER, deleteAccountData, deleteRefs, deleteIfOwned, huntsOf, settleHunt };

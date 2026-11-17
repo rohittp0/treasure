@@ -225,3 +225,20 @@ test('deleteAccountData only frees a username, atlas or number the explorer stil
   assert.equal((await data('atlases/taken')).uid, 'u5');
   assert.equal((await data('whatsappPhones/+14155550100')).uid, 'u5');
 });
+
+test('deleteAccountData refuses a banned explorer and leaves everything in place', async () => {
+  const batch = db.batch();
+  batch.set(db.doc('bans/u6'), { bannedAt: new Date(), bannedBy: 'admin1', reason: 'Abusive clues', username: 'banned' });
+  batch.set(db.doc('users/u6'), { whatsapp: { phone: '+14155550106', verifiedAt: new Date() } });
+  batch.set(db.doc('whatsappPhones/+14155550106'), { uid: 'u6', claimedAt: new Date() });
+  batch.set(db.doc('blockedUsernames/banned'), { source: 'ban', uid: 'u6', addedAt: new Date() });
+  await batch.commit();
+  const auth = mockAuth(db);
+  auth.users.add('u6');
+
+  await assert.rejects(deleteAccountData(db, auth, 'u6', { clock }), error => error.code === 'permission-denied');
+
+  for (const path of ['bans/u6', 'users/u6', 'whatsappPhones/+14155550106', 'blockedUsernames/banned'])
+    assert.equal(await exists(path), true, `${path} should be kept`);
+  assert.deepEqual(auth.calls, []);
+});

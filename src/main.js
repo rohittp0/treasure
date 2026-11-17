@@ -418,6 +418,8 @@ const SIGN_IN_COPY = {
   atlas: ['Share your <em>map.</em>', 'Sign in to keep the countries you claim and share your explorer map.'],
   unsubscribe: ['Manage WhatsApp <em>alerts.</em>', 'Sign in with the WhatsApp number that gets the daily quest alert, or the Google account it belongs to.'],
   open_in_browser: ['Continue with <em>Google.</em>', 'You’re in your browser now. Continue with Google below, or use WhatsApp.'],
+  // The ?account=delete link: signed out, the explorer signs in first, then confirms the deletion.
+  account_delete: ['Delete your <em>account.</em>', 'Sign in with the WhatsApp number or Google account you play with. You’ll confirm before anything is deleted.'],
 };
 
 function openSignIn(source, { title, copy, resumeResult = false } = {}) {
@@ -435,7 +437,7 @@ function openSignIn(source, { title, copy, resumeResult = false } = {}) {
   // WhatsApp is the primary way in: the number field is ready as soon as the sheet opens.
   // The unticked box is the only opt-in here; signing in alone never turns alerts on.
   signInVerify = createWhatsAppVerify($('#sign-in-whatsapp-verify'), {
-    purpose: 'login', source, consent: source === 'unsubscribe' ? 'none' : 'optional', submitLabel: 'Send sign-in code',
+    purpose: 'login', source, consent: TERMS_EXEMPT_SOURCES.has(source) ? 'none' : 'optional', submitLabel: 'Send sign-in code',
     // Once a code is on its way the box is locked, so the sign-in it finishes is the one agreed to.
     beforeSend: () => {
       if (!termsAgreed()) return TERMS_NEEDED;

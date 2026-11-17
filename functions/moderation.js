@@ -11,10 +11,9 @@ const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { defineSecret } = require('firebase-functions/params');
 const { getAuth } = require('firebase-admin/auth');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
+const { FORMER_EXPLORER, deleteRefs, deleteIfOwned, huntsOf, settleHunt } = require('./account');
 
 const REGION = 'us-central1';
-// How a banned explorer appears in the friend hunts kept for the other participant (CONTEXT.md).
-const FORMER_EXPLORER = 'Former explorer';
 const REMOVED_CLUE = 'This clue was removed by a moderator.';
 const USERNAME = /^[a-z][a-z0-9_]{2,19}$/;
 const USERNAME_RULE = 'Use 3–20 characters, starting with a letter. Letters, numbers and underscores work.';
@@ -121,55 +120,13 @@ async function isBlocked(db, ownerUid, otherUid) {
 }
 
 // ---------------------------------------------------------------------------
-// banExplorer. The same steps as account deletion (functions/account.js on the deleteAccount branch), except
+// banExplorer. The same steps as account deletion (functions/account.js, whose helpers it shares), except
 // that the Auth user is disabled rather than deleted, the WhatsApp number stays linked to the banned account
 // so it can't sign up again, the username stays reserved, and the explorer's clues are removed.
 // Every step tolerates documents that are already gone, so a failed ban can simply be run again.
 
-async function deleteRefs(db, refs) {
-  for (let index = 0; index < refs.length; index += BATCH_LIMIT) {
-    const batch = db.batch();
-    for (const ref of refs.slice(index, index + BATCH_LIMIT)) batch.delete(ref);
-    await batch.commit();
-  }
-}
-
-// Deletes a document keyed by a username only while it still belongs to this explorer.
-async function deleteIfOwned(db, ref, uid) {
-  await db.runTransaction(async transaction => {
-    const snapshot = await transaction.get(ref);
-    if (snapshot.exists && snapshot.data().uid === uid) transaction.delete(ref);
-  });
-}
-
-async function huntsOf(db, uid) {
-  const snapshots = await Promise.all(['hiderUid', 'seekerUid', 'targetUid']
-    .map(field => db.collection('friendHunts').where(field, '==', uid).get()));
-  const hunts = new Map();
-  for (const snapshot of snapshots) for (const doc of snapshot.docs) hunts.set(doc.id, doc);
-  return [...hunts.values()];
-}
-
-// A waiting hunt nobody joined, which the explorer hid or was challenged to, is deleted with its answer.
-// Any other hunt stays for the other explorer, with the banned side shown as a former explorer and the
-// banned hider's clues removed.
-async function settleHunt(db, uid, ref) {
-  await db.runTransaction(async transaction => {
-    const snapshot = await transaction.get(ref);
-    if (!snapshot.exists) return;
-    const hunt = snapshot.data();
-    if (hunt.status === 'waiting' && !hunt.seekerUid && (hunt.hiderUid === uid || hunt.targetUid === uid)) {
-      transaction.delete(ref.collection('private').doc('answer'));
-      transaction.delete(ref);
-      return;
-    }
-    const changes = {};
-    if (hunt.hiderUid === uid) Object.assign(changes, { hiderName: FORMER_EXPLORER, hiderUsername: null, clues: Array(3).fill(REMOVED_CLUE) });
-    if (hunt.seekerUid === uid) changes.seekerName = FORMER_EXPLORER;
-    if (hunt.targetUid === uid) changes.targetUsername = null;
-    if (Object.keys(changes).length) transaction.update(ref, changes);
-  });
-}
+// A kept hunt the banned explorer hid loses its clues as well as the hider's name.
+const BANNED_HIDER_CHANGES = { clues: Array(3).fill(REMOVED_CLUE) };
 
 async function ignoreMissingUser(promise) {
   try { await promise; } catch (error) { if (error?.code !== 'auth/user-not-found') throw error; }
@@ -201,7 +158,7 @@ async function banExplorerData(db, auth, uid, { reason = '', bannedBy = null } =
   await deleteRefs(db, hunts
     .filter(doc => doc.data().hiderUid === uid && typeof doc.data().targetUid === 'string' && doc.data().targetUid && doc.data().targetUid !== uid)
     .map(doc => db.doc(`users/${doc.data().targetUid}/notifications/${doc.id}`)));
-  for (const doc of hunts) await settleHunt(db, uid, doc.ref);
+  for (const doc of hunts) await settleHunt(db, uid, doc.ref, { hiderChanges: BANNED_HIDER_CHANGES });
 
   // 4. Public entries. The name is reserved before it is released, so nobody can take it in between.
   const months = await db.collection('monthlyLeaderboard').listDocuments();

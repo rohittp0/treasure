@@ -86,7 +86,7 @@ jobs:
       - name: Check deploy configuration (function secrets)
         env:
           RUNTIME_ACCOUNT: serviceAccount:555455406222-compute@developer.gserviceaccount.com
-          SECRETS: MODERATION_TELEGRAM_TOKEN MODERATION_TELEGRAM_CHAT_ID
+          SECRETS: MODERATION_TELEGRAM_TOKEN MODERATION_TELEGRAM_CHAT_ID REVIEW_TEST_PHONE REVIEW_TEST_CODE
         run: |
           for secret in $SECRETS; do
             gcloud secrets describe "$secret" --project treasurehunch --format='value(name)' >/dev/null \

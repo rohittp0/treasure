@@ -1,7 +1,7 @@
 // Account deletion, shared by the web game and the native apps through the deleteAccount callable.
 // Every step tolerates documents that are already gone, so a failed run can simply be retried.
 // The Auth user is deleted last: while it exists, the explorer can sign in and ask again.
-const { PURPOSES, challengeId, rateLimitRef, sha256, utcDay } = require('./whatsapp/otp');
+const { PURPOSES, challengeId, rateLimitRef, utcDay } = require('./whatsapp/otp');
 
 // How a deleted explorer appears in the friend hunts kept for the other participant (CONTEXT.md).
 const FORMER_EXPLORER = 'Former explorer';
@@ -33,21 +33,26 @@ async function huntsOf(db, uid) {
   return [...hunts.values()];
 }
 
-// A waiting hunt nobody joined is deleted with its answer. Any other hunt is kept for the other explorer,
-// with the deleted side shown as a former explorer.
-async function settleHunts(db, uid, hunts) {
-  for (const doc of hunts) {
-    const hunt = doc.data();
-    if (hunt.hiderUid === uid && hunt.status === 'waiting' && !hunt.seekerUid) {
-      await db.recursiveDelete(doc.ref);
-      continue;
+// A waiting hunt nobody joined, which the explorer hid or was challenged to, is deleted with its answer:
+// nobody could join it any more. Any other hunt is kept for the other explorer, with the deleted side
+// shown as a former explorer. Each hunt is re-read in its own transaction, so a hunt someone joins
+// meanwhile is anonymised, not deleted.
+async function settleHunt(db, uid, ref) {
+  await db.runTransaction(async transaction => {
+    const snapshot = await transaction.get(ref);
+    if (!snapshot.exists) return;
+    const hunt = snapshot.data();
+    if (hunt.status === 'waiting' && !hunt.seekerUid && (hunt.hiderUid === uid || hunt.targetUid === uid)) {
+      transaction.delete(ref.collection('private').doc('answer'));
+      transaction.delete(ref);
+      return;
     }
     const changes = {};
     if (hunt.hiderUid === uid) Object.assign(changes, { hiderName: FORMER_EXPLORER, hiderUsername: null });
     if (hunt.seekerUid === uid) changes.seekerName = FORMER_EXPLORER;
     if (hunt.targetUid === uid) changes.targetUsername = null;
-    await doc.ref.update(changes);
-  }
+    if (Object.keys(changes).length) transaction.update(ref, changes);
+  });
 }
 
 async function deleteAccountData(db, auth, uid, { clock = () => new Date() } = {}) {
@@ -58,14 +63,21 @@ async function deleteAccountData(db, auth, uid, { clock = () => new Date() } = {
   const username = profile.data()?.username;
   const phone = user.data()?.whatsapp?.phone;
 
-  // 2. Friend hunts. Challenges the explorer sent still show their username in the other explorer's inbox.
-  // They go first: once a waiting hunt is deleted, a retry could no longer find its challenge.
+  // 2. Friend hunts. Challenges the explorer sent still show their username in the other explorer's inbox,
+  // and their delivery limits are keyed by the explorer. They go first: once a waiting hunt is deleted,
+  // a retry could no longer find them.
   const hunts = await huntsOf(db, uid);
-  await deleteRefs(db, hunts.filter(doc => {
+  const sent = hunts.filter(doc => {
     const { hiderUid, targetUid } = doc.data();
     return hiderUid === uid && typeof targetUid === 'string' && targetUid && targetUid !== uid;
-  }).map(doc => db.doc(`users/${doc.data().targetUid}/notifications/${doc.id}`)));
-  await settleHunts(db, uid, hunts);
+  });
+  const targets = [...new Set(sent.map(doc => doc.data().targetUid))];
+  await deleteRefs(db, [
+    ...sent.map(doc => db.doc(`users/${doc.data().targetUid}/notifications/${doc.id}`)),
+    ...targets.flatMap(targetUid => ['push', 'email']
+      .map(channel => db.doc(`challengeDeliveryLimits/${channel}/recipients/${targetUid}/senders/${uid}`))),
+  ]);
+  for (const doc of hunts) await settleHunt(db, uid, doc.ref);
 
   // 3. Public data. Month entries are written without a month document, so the months are listed with
   // listDocuments, which includes missing parents; a collection-group query would need a new index.
@@ -87,10 +99,9 @@ async function deleteAccountData(db, auth, uid, { clock = () => new Date() } = {
     ...messages.docs.map(doc => doc.ref),
     rateLimitRef(db, 'uid', uid, today),
   ];
-  if (phone) {
-    serverRefs.push(...PURPOSES.map(purpose => db.doc(`otpChallenges/${challengeId(phone, purpose)}`)));
-    serverRefs.push(rateLimitRef(db, 'phone', sha256(phone), today));
-  }
+  // otpRateLimits/phone_* stays: it holds only a hash of the number, expires on its own (expiresAt), and
+  // deleting it would let anyone reset a number's daily code limit by deleting their account.
+  if (phone) serverRefs.push(...PURPOSES.map(purpose => db.doc(`otpChallenges/${challengeId(phone, purpose)}`)));
   await deleteRefs(db, serverRefs);
   for (const channel of ['push', 'email'])
     await db.recursiveDelete(db.doc(`challengeDeliveryLimits/${channel}/recipients/${uid}`));

@@ -225,7 +225,7 @@ exports.whatsappStatus = onRequest(webhookOptions, (request, response) => webhoo
 const { HttpsError } = require('firebase-functions/v2/https');
 const { deleteAccountData } = require('./account');
 
-exports.deleteAccount = onCall({ enforceAppCheck: true, region: 'us-central1' }, async request => {
+exports.deleteAccount = onCall({ enforceAppCheck: true, region: 'us-central1', timeoutSeconds: 300 }, async request => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in to delete your account.');
   try {
     await deleteAccountData(getFirestore(), getAuth(), request.auth.uid);

@@ -31,7 +31,7 @@ jobs:
       - run: npm test
       - name: Firestore rules tests (emulator)
         run: npx --yes firebase-tools@14 emulators:exec --only firestore --project demo-treasure-friend-tests 'node tests/friend-rules.rules.mjs'
-      - name: WhatsApp function tests (emulator, Twilio mocked)
+      - name: Function tests (emulator, Twilio mocked)
         run: npx --yes firebase-tools@14 emulators:exec --only firestore --project demo-treasure-friend-tests 'node --test --test-concurrency=1 tests/*.emulator.mjs'
 
   deploy_hosting:

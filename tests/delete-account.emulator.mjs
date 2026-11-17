@@ -21,7 +21,7 @@ const HUNT_B = 'DELBBBBBBB'; // u2 hid it, u1 is playing.
 const HUNT_C = 'DELCCCCCCC'; // u1 hid it, open to anyone, nobody joined yet.
 const HUNT_D = 'DELDDDDDDD'; // u1 hid it for u2, u2 has not joined yet.
 const HUNT_E = 'DELEEEEEEE'; // u2 hid it for u1, u1 lost.
-const HUNT_F = 'DELFFFFFFF'; // u2 hid it for u1, u1 has not joined yet.
+const HUNT_F = 'DELFFFFFFF'; // u2 hid it for u1, u1 never joined.
 const today = '2026-11-17';
 const clock = () => new Date('2026-11-17T09:30:00Z');
 
@@ -121,6 +121,8 @@ async function seed() {
   set(`dailyNotifications/${today}/whatsapp/u2`, { uid: 'u2', status: 'sent', sid: 'SMu2' });
   set('whatsappMessages/SMu2', { uid: 'u2', marker: `dailyNotifications/${today}/whatsapp/u2` });
   set('challengeDeliveryLimits/push/recipients/u2/senders/u1', { code: HUNT_A, lastAt: new Date() });
+  set('challengeDeliveryLimits/email/recipients/u2/senders/u1', { code: HUNT_A, lastAt: new Date() });
+  set('challengeDeliveryLimits/push/recipients/u2/senders/u9', { code: 'OTHERCODE2', lastAt: new Date() });
   await batch.commit();
 }
 
@@ -144,9 +146,12 @@ test('deleteAccountData erases the explorer, anonymises shared hunts and can run
     `dailyNotifications/${today}/whatsapp/u1`, 'dailyNotifications/2026-11-16/whatsapp/u1',
     'whatsappMessages/SMu1', 'whatsappMessages/SMu1old',
     `otpChallenges/${challengeId(PHONE, 'verify_phone')}`, `otpChallenges/${challengeId(PHONE, 'login')}`,
-    rateLimitRef(db, 'phone', sha256(PHONE), today).path, rateLimitRef(db, 'uid', 'u1', today).path,
+    rateLimitRef(db, 'uid', 'u1', today).path,
     'challengeDeliveryLimits/push/recipients/u1/senders/u2', 'challengeDeliveryLimits/email/recipients/u1/senders/u2',
+    'challengeDeliveryLimits/push/recipients/u2/senders/u1', 'challengeDeliveryLimits/email/recipients/u2/senders/u1',
   ]) assert.equal(await exists(path), false, `${path} should be deleted`);
+  // The number's daily code limit is abuse protection that expires on its own, so it stays.
+  assert.equal(await exists(rateLimitRef(db, 'phone', sha256(PHONE), today).path), true);
 
   // Hunt A: u1 hid it and u2 won. Kept for u2 with the hider anonymised.
   const a = await data(`friendHunts/${HUNT_A}`);
@@ -178,16 +183,15 @@ test('deleteAccountData erases the explorer, anonymises shared hunts and can run
   assert.equal(e.targetUsername, null);
   assert.deepEqual([e.hiderName, e.hiderUsername, e.status], ['Friend', 'friend', 'lost']);
 
-  // Hunt F: u2's challenge to u1, never joined. It is u2's hunt, so it stays, without u1's username.
-  const f = await data(`friendHunts/${HUNT_F}`);
-  assert.deepEqual([f.targetUid, f.targetUsername, f.status, f.hiderName], ['u1', null, 'waiting', 'Friend']);
-  assert.equal(await exists(`friendHunts/${HUNT_F}/private/answer`), true);
+  // Hunt F: u2's challenge to u1, never joined. Nobody else could join it, so it goes with its answer.
+  assert.equal(await exists(`friendHunts/${HUNT_F}`), false);
+  assert.equal(await exists(`friendHunts/${HUNT_F}/private/answer`), false);
 
   // Everything of u2's stays.
   for (const path of [
     'users/u2', 'users/u2/pushTokens/' + 'c'.repeat(64), 'profiles/u2', 'usernames/friend', 'leaderboard/u2',
     'monthlyLeaderboard/2026-11/entries/u2', `dailyNotifications/${today}/whatsapp/u2`, 'whatsappMessages/SMu2',
-    'challengeDeliveryLimits/push/recipients/u2/senders/u1', 'monthlyLeaderboard/2026-10', 'dailyNotifications/2026-11-16',
+    'challengeDeliveryLimits/push/recipients/u2/senders/u9', 'monthlyLeaderboard/2026-10', 'dailyNotifications/2026-11-16',
   ]) assert.equal(await exists(path), true, `${path} should be kept`);
 
   // The Auth user is deleted last, after the Firestore data.

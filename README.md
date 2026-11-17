@@ -73,6 +73,7 @@ The site is ready to be wrapped as a Trusted Web Activity; nothing is published 
 - Signed-in players save completed hunts in `users/{uid}/hunts` and daily attempts in `users/{uid}/daily`. Monthly leaderboard entries and explorer maps are publicly readable. Guest wins are kept in the current browser session until sign-in.
 - The leaderboard is a casual client-scored feature. Competitive anti-cheat would require server-validated rounds.
 - A friend hunt stores the hidden country and pin in a separate Firestore document. Rules only let the hider read it until the seeker pays for the reveal or the hunt ends. Guess transitions are checked against that document by Firestore rules. This is a casual game: rejected writes can still be probed by a modified client, so friend scores deliberately stay off the leaderboard.
+- **Account deletion.** The `deleteAccount` callable (App Check enforced, used by the web game and the native apps) runs `deleteAccountData` in `functions/account.js`. It erases the explorer's profile, username (free again at once), explorer map, leaderboard and monthly entries, `users/{uid}` with its hunts, daily quests, notifications and push tokens, the WhatsApp number index and server-only WhatsApp and challenge-delivery records, then the Auth user, last. A waiting friend hunt nobody joined is deleted with its answer; any other friend hunt stays for the other explorer, with the deleted side shown as "Former explorer". Every step tolerates missing documents, so a failed run is retried by calling it again. `tests/delete-account.emulator.mjs` covers it.
 - Run `npm run test:rules` with Java and the Firebase CLI installed to verify friend-hunt, daily-quest, monthly leaderboard and explorer-map rules in the Firestore emulator.
 
 ### Challenge delivery setup
@@ -165,7 +166,7 @@ node scripts/send-test-whatsapp.mjs +919020277399 --otp   # hunch_otp with a ran
 
 The script uses the same message helpers as the functions. It prints only the masked number, the message SID and its status (plus the test code for `--otp`), never the credentials.
 
-**Tests.** `npm test` covers phone normalisation, `safeName`, STOP matching, code hashing and expiry, and the local-time send window. `npm run test:functions` runs the OTP flows, the daily send loop and the webhooks against the Firestore emulator with Twilio and Admin Auth mocked.
+**Tests.** `npm test` covers phone normalisation, `safeName`, STOP matching, code hashing and expiry, and the local-time send window. `npm run test:functions` runs the OTP flows, the daily send loop, the webhooks and account deletion against the Firestore emulator with Twilio and Admin Auth mocked. The emulator test files run one at a time, because each clears or shares the same emulator database.
 
 ## Build and deploy
 

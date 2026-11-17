@@ -195,5 +195,5 @@ function createOtpHandlers({ db, auth, twilio, hmacKey, params, clock = () => ne
 
 module.exports = {
   PURPOSES, CODE_TTL_MS, RESEND_COOLDOWN_MS, MAX_ATTEMPTS, MAX_SENDS_PER_PHONE_PER_DAY, MAX_SENDS_PER_REQUESTER_PER_DAY,
-  generateCode, challengeId, hashCode, codesMatch, isExpired, createOtpHandlers,
+  sha256, utcDay, generateCode, challengeId, hashCode, codesMatch, isExpired, rateLimitRef, createOtpHandlers,
 };

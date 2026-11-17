@@ -219,3 +219,19 @@ function webhookHandlers() {
 const webhookOptions = { region: whatsappConfig.REGION, invoker: 'public', secrets: [whatsappConfig.twilioAuthToken] };
 exports.whatsappInbound = onRequest(webhookOptions, (request, response) => webhookHandlers().inbound(request, response));
 exports.whatsappStatus = onRequest(webhookOptions, (request, response) => webhookHandlers().status(request, response));
+
+// ---------------------------------------------------------------------------
+// Account deletion for the web game and the native apps. Safe to retry: see ./account.
+const { HttpsError } = require('firebase-functions/v2/https');
+const { deleteAccountData } = require('./account');
+
+exports.deleteAccount = onCall({ enforceAppCheck: true, region: 'us-central1' }, async request => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in to delete your account.');
+  try {
+    await deleteAccountData(getFirestore(), getAuth(), request.auth.uid);
+  } catch (error) {
+    console.error(`Account deletion for ${request.auth.uid} failed:`, error);
+    throw new HttpsError('internal', 'Your account could not be deleted. Try again.');
+  }
+  return { ok: true };
+});

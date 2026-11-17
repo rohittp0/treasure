@@ -14,7 +14,7 @@ Every UTC day has one **daily quest**: the same hidden country for every explore
 - **Explorer maps** (`atlases/{username}`): the countries each explorer has claimed. Anyone can open one from a leaderboard row or a `https://hunch.rohittp.com/?atlas=<username>` link, and signed-in explorers can share their own.
 - Guests can play straight away. A guest's win shows **Create a username to claim {country}**, which uses the normal sign-up: Google sign-in, then the username dialog, which also asks for notification permission. The country is claimed and entered on the monthly board once the username is saved. Until then the result is kept only on that device.
 - Attempts are stored in `users/{uid}/daily/{YYYY-MM-DD}`. The document is created when the quest starts and can be finished only once.
-- **Daily alerts:** the scheduled `notifyDailyQuest` function runs at 00:05 UTC. It sends a push notification to every browser registered in `users/{uid}/pushTokens` (the same tokens friend challenges use). Explorers who found yesterday's country get a keep-your-streak message. The notification opens `https://hunch.rohittp.com/?daily=1&utm_source=push&…`, which starts the quest. The WhatsApp alert's button opens the bare `?daily=1` (its URL is fixed in the approved template), so the app counts a `?daily=1` visit without `utm_source` as coming from WhatsApp (`dailyLinkSource` in `src/daily.js`). To tag WhatsApp explicitly, submit a new version of the template whose button URL ends in `&utm_source=whatsapp`; no code change is needed. A `dailyNotifications/{YYYY-MM-DD}` document stops a retried run from sending twice. Explorers who opt in also get the alert on WhatsApp at about 08:00–12:00 their local time. See [WhatsApp sign-in and daily quest alerts](#whatsapp-sign-in-and-daily-quest-alerts).
+- **Daily alerts:** the scheduled `notifyDailyQuest` function runs at 00:05 UTC. It sends a push notification to every device registered in `users/{uid}/pushTokens` (browsers and, through each token's optional `platform` field of `web`, `android` or `ios`, the native apps; a missing `platform` means `web`). Friend challenges use the same tokens. Explorers who found yesterday's country get a keep-your-streak message. `functions/push.js` (`pushMessage`) builds every push message: the absolute link goes in `data.link` (native apps open it on tap) and in `webpush.fcmOptions.link` (browsers), with Android channel `daily_quest` for `?daily=` links and `friend_challenge` for `?hunt=` links. The daily notification opens `https://hunch.rohittp.com/?daily=1&utm_source=push&…`, which starts the quest. The WhatsApp alert's button opens the bare `?daily=1` (its URL is fixed in the approved template), so the app counts a `?daily=1` visit without `utm_source` as coming from WhatsApp (`dailyLinkSource` in `src/daily.js`). To tag WhatsApp explicitly, submit a new version of the template whose button URL ends in `&utm_source=whatsapp`; no code change is needed. A `dailyNotifications/{YYYY-MM-DD}` document stops a retried run from sending twice. Explorers who opt in also get the alert on WhatsApp at about 08:00–12:00 their local time. See [WhatsApp sign-in and daily quest alerts](#whatsapp-sign-in-and-daily-quest-alerts).
 
 These boards are casual and client-scored like the solo leaderboard. The rules enforce one attempt per day per account and keep entries self-consistent, but a modified client could still post made-up results.
 
@@ -51,6 +51,8 @@ TreasureHunch is a Progressive Web App. Analytics, events and the handoff's meas
   - To take the worker out of service, deploy a `sw.js` that unregisters itself; the file is served `no-cache`, so browsers pick it up on their next visit.
   - Hosting keeps its default one-hour cache on `/assets`. Header rules also apply to a path's 404, so a year-long cache there could pin a missing file for anyone who asked for it between a deploy and a rollback; repeat visits are served by the worker anyway.
   - Paths under `/assets`, `/fonts`, `/icons`, `/illustrations` and `/.well-known` that do not exist return 404 instead of the page (`rewrites` in `firebase.json`), so a script that has been replaced by a deploy fails cleanly and the app reloads itself onto the new build.
+- **App Links and Universal Links.** `public/.well-known/assetlinks.json` (Android) and `public/.well-known/apple-app-site-association` (iOS, team `ZG6QASWQ43`) let the native apps `com.lascade.hunch` and `com.lascade.hunch.debug` open `/?daily`, `/?hunt`, `/?atlas`, `/?whatsapp` and `/?account` links; other paths stay in the browser. `firebase.json` deploys `.well-known` (its `ignore` skips every other dot-folder) and serves both files as `application/json`. `tests/well-known.test.mjs` checks the files and the config.
+  - **Follow-up:** after the first Play upload, add a statement for `com.lascade.hunch` to `assetlinks.json` with the SHA-256 fingerprint Play shows under **App integrity** (Play App Signing creates that key at the first upload). Until then only the debug app opens links on Android.
 - **Installing.** The install sheet opens by itself after a win and after signing in, at most once every two days per device, and stays away for two days after it is turned down. A sign-up ask always goes first: a guest's winning result shows the sign-in ask with a smaller install card beneath it, a new explorer chooses a username before the sheet, and the daily quest alert card is answered before it. The home screen always has an install entry. Chrome, Edge and Samsung Internet get their own install prompt from one tap; iPhone and iPad get Add to Home Screen steps, which is the only way iOS allows; an in-app browser is sent to Chrome or Safari first. `src/pwa.js` holds the decisions and `tests/pwa.test.mjs` covers them.
 - **Installed-app extras.** The screen stays on while a hunt's clock runs, the icon shows a badge while today's quest is unplayed or a challenge is unread (iOS and desktop), and on iOS an installed app can receive the daily quest as a push notification, which a Safari tab cannot.
 - **In-app browsers.** Most visits arrive inside Instagram's or Facebook's browser, whose storage is cut off from Chrome and Safari. `src/escape.js` is inlined into `index.html` and sends a first visit on to the real browser before the game loads; anyone who already has progress there stays. Campaign tags and click ids travel with the link. `?stay=1` on a link switches the redirect off for that visit.
@@ -62,7 +64,7 @@ The site is ready to be wrapped as a Trusted Web Activity; nothing is published 
 
 1. Create the app in the Play Console and choose a package name (it can never be changed).
 2. Build the Android package from the live manifest with [Bubblewrap](https://github.com/GoogleChromeLabs/bubblewrap) (`npx @bubblewrap/cli init --manifest https://hunch.rohittp.com/manifest.webmanifest`, then `build`) or [PWABuilder](https://www.pwabuilder.com/).
-3. Add `public/.well-known/assetlinks.json` with the package name and the SHA-256 fingerprint Play shows under **App integrity**, deploy, and check that `https://hunch.rohittp.com/.well-known/assetlinks.json` returns JSON. Without it the app shows a browser address bar.
+3. Add a statement to `public/.well-known/assetlinks.json` with the package name and the SHA-256 fingerprint Play shows under **App integrity**, deploy, and check that `https://hunch.rohittp.com/.well-known/assetlinks.json` returns JSON. Without it the app shows a browser address bar.
 4. Play requires in-app account deletion for apps with sign-up; the game has none yet.
 
 ## Curated puzzles and Firebase
@@ -73,6 +75,7 @@ The site is ready to be wrapped as a Trusted Web Activity; nothing is published 
 - Signed-in players save completed hunts in `users/{uid}/hunts` and daily attempts in `users/{uid}/daily`. Monthly leaderboard entries and explorer maps are publicly readable. Guest wins are kept in the current browser session until sign-in.
 - The leaderboard is a casual client-scored feature. Competitive anti-cheat would require server-validated rounds.
 - A friend hunt stores the hidden country and pin in a separate Firestore document. Rules only let the hider read it until the seeker pays for the reveal or the hunt ends. Guess transitions are checked against that document by Firestore rules. This is a casual game: rejected writes can still be probed by a modified client, so friend scores deliberately stay off the leaderboard.
+- **Account deletion.** The `deleteAccount` callable (App Check enforced, used by the web game and the native apps) runs `deleteAccountData` in `functions/account.js`. It erases the explorer's profile, username (free again at once), explorer map, leaderboard and monthly entries, `users/{uid}` with its hunts, daily quests, notifications and push tokens, the WhatsApp number index and server-only WhatsApp and challenge-delivery records, then the Auth user, last. The hashed per-number code limit in `otpRateLimits` is kept until it expires, so deleting an account does not reset it. A waiting friend hunt nobody joined, which the explorer hid or was challenged to, is deleted with its answer; any other friend hunt stays for the other explorer, with the deleted side shown as "Former explorer". Every step tolerates missing documents, so a failed run is retried by calling it again. `tests/delete-account.emulator.mjs` covers it.
 - Run `npm run test:rules` with Java and the Firebase CLI installed to verify friend-hunt, daily-quest, monthly leaderboard and explorer-map rules in the Firestore emulator.
 
 ### Challenge delivery setup
@@ -88,6 +91,50 @@ firebase deploy --only firestore:rules,functions,hosting --project treasurehunch
 ```
 
 The deploy prompts for `CHALLENGE_EMAIL_FROM`; enter a sender on your verified email domain. Challenge emails and background alerts link to `https://hunch.rohittp.com/`. Do not put the Resend key in a Vite or Hosting environment variable.
+
+### Moderation
+
+Friend-hunt clues and public usernames are user-generated content, so the game follows App Store Guideline 1.2 (spec decision 22). The code is in `functions/moderation.js`, `src/moderation.js` and `src/moderation-dialog.js`; the pages are `public/terms.html`, `public/privacy.html` and `public/support.html` (also served at `/terms`, `/privacy` and `/support`).
+
+- **Terms before sign-in.** The sign-in sheet has an unticked "I agree to the Terms of Use" box. Google and WhatsApp sign-in only start once it is ticked (the box locks once a WhatsApp code is sent), and the acceptance is stored once as `users/{uid}.termsAcceptedAt` (the server time), retried on the next sign-in event if that write fails. Signing in only to stop WhatsApp alerts (`?whatsapp=stop`) or to delete the account (`?account=delete`, source `account_delete`) shows no box and records nothing: that exemption covers only that action. **Choosing a username needs the Terms accepted**, and everything an explorer posts needs a username. So an account without `termsAcceptedAt` (from before the box, or from an exempt sign-in) gets the unticked box in the username dialog. `claimUsername` refuses with `failed-precondition` (`reason: 'terms'`), and the rules refuse a `profiles` create unless `users/{uid}.termsAcceptedAt` is set, before or in the same batch.
+- **Report.** Received challenges in My logs, the clue sheet during a friend hunt, friend-hunt results and other explorers' maps have Report. A report is a create-only `reports/{id}` document (`reporterUid`, `targetUid`, `kind` = `clue`, `hunt`, `profile` or `username`, an optional hunt `code`, a `reason` of at most 200 characters, `createdAt`), which clients can't read; the reported explorer must have a profile. The `onReportCreated` function sends it to the developer on Telegram, as plain text with Firebase console links to the report, the hunt, the explorer's map and `users/{uid}`, with a 10-second timeout per call. Network errors, timeouts, 429 and 5xx are retried. Other refusals (a bad token, a missing chat) are not: the report gets `alert: 'failed'` and `alertStatus`. The report records the outcome in `alert`:
+  - `sent`;
+  - `duplicate`: the same reporter, explorer, kind and hunt within 24 hours;
+  - `limited`: more than five alerts from one reporter in an hour. The report a Block files skips the limit while the block exists, once per reporter and blocked explorer a day;
+  - `failed` or `unconfigured`.
+
+  The scheduled `moderationDigest` runs every 6 hours. It sends one Telegram message listing the reports of the last 7 days that weren't alerted, oldest first and as many as fit in one message ("…and N more" for the rest), and marks only those as `digested`. Without the secrets it logs the count. **Act on every report within 24 hours**, as the Terms promise: remove the content and ban the explorer.
+- **Block.** Block hides that explorer's challenges and your friend hunts with them at once (`users/{uid}/blocks/{otherUid}`), refuses their invite links, and also files a report. `notifyFriendChallenge` and `emailFriendChallenge` skip a sender the recipient blocked.
+- **Ban.** `banExplorer` (callable, needs the `admin` custom claim) writes `bans/{uid}` first, so the rules refuse every public write from that account, then disables the Auth user and revokes its sessions, removes the leaderboard and monthly entries, explorer map, username and profile, reserves the username in `blockedUsernames`, deletes waiting hunts and the challenges the explorer sent, and shows the explorer as "Former explorer" in other friend hunts, with their clues replaced. The WhatsApp number stays linked to the banned account so it can't sign up again. Push tokens are deleted and the WhatsApp alert is switched off. A failed ban can be run again.
+- **Usernames.** The web game claims usernames through the `claimUsername` callable, which writes `profiles/{uid}` and `usernames/{name}` in one transaction and refuses names in `functions/moderation/blocklist.txt` (plain lines match the whole name, `~` lines match anywhere in it, ignoring underscores and digit swaps). The starter list is neutral and short: **add slurs and abusive words to it** before relying on it. Exact entries are mirrored to `blockedUsernames/{name}` on each claim, and the rules refuse those names on the older client path that writes the two documents directly. Rules can only compare whole names, so a name that merely contains a `~` word can still be claimed by an old client; `claimUsername` lists each such name it refuses, so it can't be taken that way afterwards. If the function itself is down or missing (`internal`, `unavailable`, `not-found`, `deadline-exceeded`), the web game re-reads the explorer's profile and otherwise falls back to the direct claim, tracked as `username_claim_fallback`; App Check and sign-in failures never fall back.
+- **Follow-up:** once `claimUsername` is confirmed live in production and old web bundles have gone, change the client creates of `profiles` and `usernames` in `firestore.rules` to `if false` (marked with a TODO there), so every claim passes the full blocklist.
+
+Setup, once:
+
+```sh
+# The bot that posts alerts (from @BotFather) and the chat it posts to (a private chat or group with the bot).
+firebase functions:secrets:set MODERATION_TELEGRAM_TOKEN --project treasurehunch
+firebase functions:secrets:set MODERATION_TELEGRAM_CHAT_ID --project treasurehunch
+```
+
+**Do this before merging**, or the deploy on merge breaks in a way that is worse than a failed function:
+
+- The merge workflow deploys Firestore rules and Cloud Functions in one `firebase deploy`. `onReportCreated` and `moderationDigest` declare the two secrets, so if either is missing, or the functions' runtime service account can't read it, the deploy fails while preparing the functions. The rules are then not released either. The Hosting job waits for that deploy (`needs: [test, deploy_backend]`), so the new web game is not released either: nothing goes live until the secrets are fixed, and the site keeps serving the previous version.
+- Granting the runtime account access is something `firebase deploy` normally does itself, but the CI deploy account only has Secret Manager Viewer and can't change a secret's IAM policy.
+
+So, after setting both secrets, either grant the access once:
+
+```sh
+for secret in MODERATION_TELEGRAM_TOKEN MODERATION_TELEGRAM_CHAT_ID; do
+  gcloud secrets add-iam-policy-binding "$secret" --project treasurehunch \
+    --member=serviceAccount:555455406222-compute@developer.gserviceaccount.com \
+    --role=roles/secretmanager.secretAccessor
+done
+```
+
+or run one `firebase deploy --only functions --project treasurehunch` from an owner account, which grants it. The merge workflow's "Check deploy configuration (function secrets)" step stops the deploy before anything is released if a secret is missing, has no enabled version, or isn't readable by the runtime account (or if the deploy account can't read the secret's metadata or IAM policy).
+
+To ban, run `node scripts/moderate.mjs ban <uid> "<reason>"` (the uid is in the alert). It needs `gcloud auth application-default login` with an account that can manage Auth and Firestore on the project. The same script grants the `admin` claim (`node scripts/moderate.mjs admin <uid>`) to an account that should be able to call `banExplorer` from an app. `banExplorer` is not behind App Check, so a signed-in admin can call it with their ID token.
 
 ### WhatsApp sign-in and daily quest alerts
 
@@ -136,6 +183,8 @@ The design and the decisions behind it are in [docs/whatsapp-daily-quest.md](doc
    firebase functions:secrets:set TWILIO_AUTH_TOKEN --project treasurehunch
    ```
    The emulator reads the same names from `functions/.secret.local` (gitignored). Never commit it.
+
+   **Reviewer test number.** Store reviewers cannot receive WhatsApp codes, so `requestWhatsAppOtp` accepts two more secrets, `REVIEW_TEST_PHONE` (E.164) and `REVIEW_TEST_CODE` (6 digits). When both are valid, that number gets the fixed code and no message is sent; rate limits and verification are unchanged. Before the first deploy, set both with `firebase functions:secrets:set`; use the placeholder value `disabled` to keep the bypass off. Use a fictitious number such as `+1 415 555 01xx`, never a real person's number. Put the values only in App Store Connect and Play review notes, and rotate both secrets after each store approval.
 2. **Parameters.** `WHATSAPP_FROM`, `WHATSAPP_DAILY_CONTENT_SID` and `WHATSAPP_OTP_CONTENT_SID` are in `functions/.env.treasurehunch`, next to `CHALLENGE_EMAIL_FROM`. The deploy workflow rewrites only the `CHALLENGE_EMAIL_FROM` line and keeps the WhatsApp values.
 3. **Custom-token signing.** WhatsApp sign-in calls `createCustomToken`, which needs `iam.serviceAccounts.signBlob` on the functions' runtime service account. It has Editor, which doesn't include it. Grant **Service Account Token Creator** once:
    ```sh
@@ -165,7 +214,7 @@ node scripts/send-test-whatsapp.mjs +919020277399 --otp   # hunch_otp with a ran
 
 The script uses the same message helpers as the functions. It prints only the masked number, the message SID and its status (plus the test code for `--otp`), never the credentials.
 
-**Tests.** `npm test` covers phone normalisation, `safeName`, STOP matching, code hashing and expiry, and the local-time send window. `npm run test:functions` runs the OTP flows, the daily send loop and the webhooks against the Firestore emulator with Twilio and Admin Auth mocked.
+**Tests.** `npm test` covers phone normalisation, `safeName`, STOP matching, code hashing and expiry, and the local-time send window. `npm run test:functions` runs the OTP flows, the daily send loop, the webhooks and account deletion against the Firestore emulator with Twilio and Admin Auth mocked. The emulator test files run one at a time, because each clears or shares the same emulator database.
 
 ## Build and deploy
 
@@ -176,7 +225,7 @@ npm run build
 firebase deploy --only firestore:rules,functions,hosting --project treasurehunch
 ```
 
-Firebase Hosting serves `dist/`. On every push to `main`, GitHub Actions (`.github/workflows/firebase-hosting-merge.yml`) runs the unit tests and the Firestore rules tests in the emulator. If they pass, it deploys Hosting, Firestore rules and Cloud Functions. Pull requests run the rules tests and get a Hosting preview channel. The manual command above is still useful for a first deploy or a hotfix.
+Firebase Hosting serves `dist/`. On every push to `main`, GitHub Actions (`.github/workflows/firebase-hosting-merge.yml`) runs the unit tests and the Firestore rules tests in the emulator. If they pass, it deploys Firestore rules and Cloud Functions, and then Hosting, so the site never goes live ahead of its rules. Pull requests run the rules tests and get a Hosting preview channel. The manual command above is still useful for a first deploy or a hotfix.
 
 The merge workflow needs these repository settings (**Settings → Secrets and variables → Actions**):
 
@@ -187,7 +236,7 @@ The merge workflow needs these repository settings (**Settings → Secrets and v
 | `CHALLENGE_EMAIL_FROM` | Variable | Verified sender address for challenge emails (a function parameter) |
 | `FIREBASE_WEB_VAPID_KEY` | Variable | Optional Web Push key override for the build |
 
-The deploy service account needs these roles on project `treasurehunch`: Firebase Rules Admin, Cloud Functions Admin, Service Account User, Artifact Registry Administrator, Cloud Build Editor, Eventarc Admin, Cloud Scheduler Admin, and Secret Manager Viewer. The daily alert needs the Cloud Scheduler API enabled on the project. `RESEND_API_KEY`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` and `OTP_HMAC_KEY` stay in Secret Manager; the workflow only references them. Separately, the functions' runtime service account needs Service Account Token Creator for WhatsApp sign-in (see [WhatsApp sign-in and daily quest alerts](#whatsapp-sign-in-and-daily-quest-alerts)). The workflow deploys with `--force`, so a function removed from `functions/index.js` is deleted from the project.
+The deploy service account needs these roles on project `treasurehunch`: Firebase Rules Admin, Cloud Functions Admin, Service Account User, Artifact Registry Administrator, Cloud Build Editor, Eventarc Admin, Cloud Scheduler Admin, and Secret Manager Viewer. The daily alert needs the Cloud Scheduler API enabled on the project. `RESEND_API_KEY`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `OTP_HMAC_KEY`, `MODERATION_TELEGRAM_TOKEN` and `MODERATION_TELEGRAM_CHAT_ID` stay in Secret Manager; the workflow only references them. Separately, the functions' runtime service account needs Service Account Token Creator for WhatsApp sign-in (see [WhatsApp sign-in and daily quest alerts](#whatsapp-sign-in-and-daily-quest-alerts)). The workflow deploys with `--force`, so a function removed from `functions/index.js` is deleted from the project.
 
 The map uses Natural Earth 1:110m public-domain country outlines; source and terms: https://www.naturalearthdata.com/about/terms-of-use/. The GeoJSON is compacted to the ID, name, and label position fields used by the game. MapLibre GL JS is BSD-3-Clause licensed. The bundled map-label glyphs come from MapLibre demo tiles.
 

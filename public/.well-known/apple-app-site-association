@@ -1,0 +1,16 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["ZG6QASWQ43.com.lascade.hunch", "ZG6QASWQ43.com.lascade.hunch.debug"],
+        "components": [
+          { "/": "/", "?": { "daily": "*" }, "comment": "The daily quest (?daily=1)" },
+          { "/": "/", "?": { "hunt": "*" }, "comment": "A friend hunt (?hunt=CODE)" },
+          { "/": "/", "?": { "atlas": "*" }, "comment": "An explorer map (?atlas=username)" },
+          { "/": "/", "?": { "whatsapp": "*" }, "comment": "WhatsApp alerts (?whatsapp=stop)" },
+          { "/": "/", "?": { "account": "*" }, "comment": "Account deletion (?account=delete)" }
+        ]
+      }
+    ]
+  }
+}

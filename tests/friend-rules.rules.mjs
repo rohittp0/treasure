@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
 import { doc, getDoc, setDoc, updateDoc, writeBatch, serverTimestamp, Timestamp, collection, getDocs, query, where } from 'firebase/firestore';
+import { testModerationRules } from './moderation-rules.rules.mjs';
 import { testWhatsAppRules } from './whatsapp-rules.rules.mjs';
+import { testPushRules } from './push-rules.rules.mjs';
 
 const projectId = 'demo-treasure-friend-tests';
 const environment = await initializeTestEnvironment({
@@ -132,10 +134,12 @@ try {
   await assertSucceeds(updateDoc(doc(hider, threeMinutePath), { status: 'lost', endedAt: serverTimestamp() }));
 
   const hiderName = writeBatch(hider);
+  hiderName.set(doc(hider, 'users/hider'), { termsAcceptedAt: serverTimestamp() }, { merge: true });
   hiderName.set(doc(hider, 'profiles/hider'), { username: 'mapmaker', createdAt: serverTimestamp() });
   hiderName.set(doc(hider, 'usernames/mapmaker'), { uid: 'hider', displayName: 'Hider', createdAt: serverTimestamp() });
   await assertSucceeds(hiderName.commit());
   const seekerName = writeBatch(seeker);
+  seekerName.set(doc(seeker, 'users/seeker'), { termsAcceptedAt: serverTimestamp() }, { merge: true });
   seekerName.set(doc(seeker, 'profiles/seeker'), { username: 'mapfinder', createdAt: serverTimestamp() });
   seekerName.set(doc(seeker, 'usernames/mapfinder'), { uid: 'seeker', displayName: 'Seeker', createdAt: serverTimestamp() });
   await assertSucceeds(seekerName.commit());
@@ -252,7 +256,9 @@ try {
     await assertFails(setDoc(doc(seeker, 'profiles/seeker'), { username: 'mapfinder', createdAt: serverTimestamp(), ...extra }));
     await assertFails(updateDoc(doc(seeker, 'usernames/mapfinder'), extra));
   }
+  await testModerationRules(environment);
   await testWhatsAppRules(environment);
+  await testPushRules(environment);
   console.log('Daily quest rules: one attempt per day, monthly board and explorer maps passed.');
   console.log('Friend hunt rules: username claims, direct challenges, private answer, join, time costs, guesses, reveal, and finish passed.');
 } finally {

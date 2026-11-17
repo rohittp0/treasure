@@ -1,6 +1,7 @@
 // A two-step WhatsApp number check (number, then 6-digit code), shared by sign-in, the username
 // dialog, the daily quest result card and settings. purpose: 'verify_phone' | 'login'.
 // consent: 'none' | 'required' (the box must be ticked to send a code) | 'optional' (an unticked offer).
+// beforeSend: optional; returns a message to stop the first code being sent (the sign-in sheet's Terms box).
 import { requestWhatsAppOtp, verifyWhatsAppOtp } from './firebase.js';
 import { trackEvent, EVENTS } from './events.js';
 import { CONSENT_COPY, countryFromNumber, countryOptions, detectCountry, formatCountdown, loadStoredCountry, maskPhone, normalizePhone, otpErrorMessage, otpErrorReason, storeCountry } from './whatsapp.js';
@@ -18,7 +19,7 @@ const clipboardCode = text => {
 };
 const canReadClipboard = () => typeof navigator !== 'undefined' && typeof navigator.clipboard?.readText === 'function';
 
-export function createWhatsAppVerify(container, { purpose, source, consent: consentMode = 'none', requireConsent = false, submitLabel, onVerified }) {
+export function createWhatsAppVerify(container, { purpose, source, consent: consentMode = 'none', requireConsent = false, submitLabel, beforeSend, onVerified }) {
   if (requireConsent) consentMode = 'required';
   const id = `wa${++instances}`;
   const initialCountry = detectCountry({ stored: loadStoredCountry() });
@@ -89,6 +90,8 @@ export function createWhatsAppVerify(container, { purpose, source, consent: cons
     const next = isResend ? phone : normalizePhone(number.value, country.value);
     if (!next) { setStatus('Enter a valid WhatsApp number, including the country code.'); number.focus(); return; }
     if (consentMode === 'required' && !consent.checked) { setStatus('Tick the box to get the daily quest on WhatsApp.'); return; }
+    const stop = isResend ? '' : beforeSend?.();
+    if (stop) { setStatus(stop); return; }
     busy = true; syncSend(); tick();
     setStatus(isResend ? 'Sending a new code…' : 'Sending your code…', 'pending');
     try {

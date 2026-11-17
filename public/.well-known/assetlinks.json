@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.lascade.hunch.debug",
+      "sha256_cert_fingerprints": [
+        "5E:CE:32:BC:C7:E6:2A:80:6E:80:13:C0:C1:06:7A:C1:F1:38:37:D3:FB:76:E3:F2:98:6B:62:EB:59:D3:08:D0"
+      ]
+    }
+  }
+]

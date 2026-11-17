@@ -5,8 +5,11 @@ const { initializeApp } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
 const { getFirestore } = require('firebase-admin/firestore');
 const { getMessaging } = require('firebase-admin/messaging');
+const { pushMessage } = require('./push');
 
 initializeApp();
+
+const { isBlocked } = require('./moderation');
 
 const resendKey = defineSecret('RESEND_API_KEY');
 const emailFrom = defineString('CHALLENGE_EMAIL_FROM');
@@ -19,6 +22,8 @@ async function checkedChallenge(event) {
   const hunt = (await getFirestore().doc(`friendHunts/${code}`).get()).data();
   if (!hunt || hunt.targetUid !== recipientUid || hunt.hiderUid !== notification.fromUid ||
       hunt.targetUsername == null || !/^[a-z][a-z0-9_]{2,19}$/.test(notification.fromUsername)) return null;
+  // Nothing is delivered from an explorer the recipient has blocked; the app hides the challenge too.
+  if (await isBlocked(getFirestore(), recipientUid, notification.fromUid)) return null;
   return { recipientUid, code, notification };
 }
 
@@ -45,14 +50,13 @@ exports.notifyFriendChallenge = onDocumentCreated({
   const tokens = await getFirestore().collection(`users/${recipientUid}/pushTokens`).limit(20).get();
   await Promise.allSettled(tokens.docs.map(async tokenDoc => {
     try {
-      await getMessaging().send({
+      await getMessaging().send(pushMessage({
         token: tokenDoc.data().token,
-        notification: {
-          title: 'A TreasureHunch challenge awaits',
-          body: 'A friend hid a treasure for you. Open TreasureHunch to play.',
-        },
-        webpush: { fcmOptions: { link: huntUrl(code) } },
-      });
+        platform: tokenDoc.data().platform,
+        title: 'A TreasureHunch challenge awaits',
+        body: 'A friend hid a treasure for you. Open TreasureHunch to play.',
+        link: huntUrl(code),
+      }));
     } catch (error) {
       if (['messaging/registration-token-not-registered', 'messaging/invalid-registration-token'].includes(error.code))
         await tokenDoc.ref.delete();
@@ -121,7 +125,8 @@ exports.notifyDailyQuest = onSchedule({
   const tokensByUser = new Map();
   for (const tokenDoc of (await db.collectionGroup('pushTokens').get()).docs) {
     const uid = tokenDoc.ref.parent.parent?.id;
-    if (!uid || typeof tokenDoc.data().token !== 'string') continue;
+    // dailyQuest: false is the device's "Daily quest notifications" switch turned off.
+    if (!uid || typeof tokenDoc.data().token !== 'string' || tokenDoc.data().dailyQuest === false) continue;
     if (!tokensByUser.has(uid)) tokensByUser.set(uid, []);
     if (tokensByUser.get(uid).length < 20) tokensByUser.get(uid).push(tokenDoc);
   }
@@ -135,11 +140,14 @@ exports.notifyDailyQuest = onSchedule({
     for (const tokenDoc of tokenDocs) {
       deliveries.push({
         tokenDoc,
-        message: {
+        message: pushMessage({
           token: tokenDoc.data().token,
-          notification: { title: 'A new TreasureHunch quest', body },
-          webpush: { fcmOptions: { link: DAILY_URL }, notification: { tag: `daily-${today}` } },
-        },
+          platform: tokenDoc.data().platform,
+          title: 'A new TreasureHunch quest',
+          body,
+          link: DAILY_URL,
+          tag: `daily-${today}`,
+        }),
       });
     }
   }
@@ -157,6 +165,14 @@ exports.notifyDailyQuest = onSchedule({
 });
 
 // ---------------------------------------------------------------------------
+// Moderation: report alerts, bans and username claims. See functions/moderation.js and README, Moderation.
+const moderation = require('./moderation');
+exports.onReportCreated = moderation.onReportCreated;
+exports.moderationDigest = moderation.moderationDigest;
+exports.claimUsername = moderation.claimUsername;
+exports.banExplorer = moderation.banExplorer;
+
+// ---------------------------------------------------------------------------
 // WhatsApp: one-time codes, sign-in, the daily quest alert and Twilio webhooks.
 // See docs/whatsapp-daily-quest.md. Logic lives in ./whatsapp so tests can inject a mocked Twilio client.
 const { onCall, onRequest } = require('firebase-functions/v2/https');
@@ -171,14 +187,20 @@ const otpOptions = {
   enforceAppCheck: true,
   secrets: [...twilioSecrets, whatsappConfig.otpHmacKey],
 };
+// Only requesting a code needs the reviewer secrets; verifying just compares the stored hash.
+const requestOtpOptions = {
+  ...otpOptions,
+  secrets: [...otpOptions.secrets, whatsappConfig.reviewTestPhone, whatsappConfig.reviewTestCode],
+};
 
-function otpHandlers() {
+function otpHandlers({ withReviewer = false } = {}) {
   return createOtpHandlers({
     db: getFirestore(),
     auth: getAuth(),
     twilio: whatsappConfig.twilioClient(),
     hmacKey: whatsappConfig.otpHmacKey.value(),
     params: whatsappConfig.whatsappParams(),
+    reviewer: withReviewer ? whatsappConfig.reviewerConfig() : undefined,
   });
 }
 
@@ -187,7 +209,7 @@ function requester(request) {
   return { uid: request.auth?.uid || null, ip: forwarded || request.rawRequest?.ip || null };
 }
 
-exports.requestWhatsAppOtp = onCall(otpOptions, request => otpHandlers().requestOtp(request.data, requester(request)));
+exports.requestWhatsAppOtp = onCall(requestOtpOptions, request => otpHandlers({ withReviewer: true }).requestOtp(request.data, requester(request)));
 exports.verifyWhatsAppOtp = onCall(otpOptions, request => otpHandlers().verifyOtp(request.data, requester(request)));
 
 // Every 4 hours; each explorer gets the alert in the run that falls in their local 08:00–12:00.
@@ -219,3 +241,21 @@ function webhookHandlers() {
 const webhookOptions = { region: whatsappConfig.REGION, invoker: 'public', secrets: [whatsappConfig.twilioAuthToken] };
 exports.whatsappInbound = onRequest(webhookOptions, (request, response) => webhookHandlers().inbound(request, response));
 exports.whatsappStatus = onRequest(webhookOptions, (request, response) => webhookHandlers().status(request, response));
+
+// ---------------------------------------------------------------------------
+// Account deletion for the web game and the native apps. Safe to retry: see ./account.
+const { HttpsError } = require('firebase-functions/v2/https');
+const { deleteAccountData } = require('./account');
+
+exports.deleteAccount = onCall({ enforceAppCheck: true, region: 'us-central1', timeoutSeconds: 300 }, async request => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in to delete your account.');
+  try {
+    await deleteAccountData(getFirestore(), getAuth(), request.auth.uid);
+  } catch (error) {
+    // A banned explorer is refused with permission-denied (see ./account).
+    if (error instanceof HttpsError) throw error;
+    console.error(`Account deletion for ${request.auth.uid} failed:`, error);
+    throw new HttpsError('internal', 'Your account could not be deleted. Try again.');
+  }
+  return { ok: true };
+});

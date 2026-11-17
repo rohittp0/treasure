@@ -54,9 +54,11 @@ Selections can instead lead to `selection_cancelled`; seekers can open additiona
 | `atlas_viewed` | An explorer map is opened; `owner=self/other`, `source=home/result/leaderboard/link`, `countries` collected |
 | `atlas_shared` | The explorer shares their map link; `method=native/clipboard`, `countries` collected |
 | `notifications_permission` | Browser notification permission prompt resolves, sent once this browser's push registration has finished; `permission=granted/denied/default`, `source=welcome/result_card`, `outcome=registered/unsupported/token_failed/save_failed` when granted (`unsupported`: no Web Push key, service worker or Firebase Messaging support; `token_failed`: the worker or FCM token could not be set up; `save_failed`: the token could not be stored), otherwise `denied` or `dismissed` (`signed_out` if the explorer signed out meanwhile) |
-| `sign_in_opened` | The shared sign-in sheet opens; `source=account/multiplayer/claim/leaderboard/atlas/unsubscribe/open_in_browser` (the last when a handoff link lands with `signin=google`) |
+| `sign_in_opened` | The shared sign-in sheet opens; `source=account/multiplayer/claim/leaderboard/atlas/unsubscribe/account_delete/open_in_browser` (the last when a handoff link lands with `signin=google`) |
 | `whatsapp_code_requested` | A WhatsApp code was sent; `source`, `purpose=verify_phone/login`, `step=request/resend` |
 | `whatsapp_verified` | A WhatsApp code was accepted; `source`, `purpose` |
+| `account_delete_opened` | The delete-account confirmation was shown; `source=account` (the button in My logs) or `link` (the public `?account=delete` link, after sign-in if needed) |
+| `account_deleted` | The `deleteAccount` callable succeeded and the explorer was signed out; `source` as above |
 | `daily_link_opened` | A daily quest alert link (`?daily=1`) was opened; `source=whatsapp` (the WhatsApp alert's button, which has no `utm_source`), `push` (browser notification) or any other `utm_source` on the link. The daily `hunt_started` that follows carries the same `source` |
 | `whatsapp_code_pasted` | A 6-digit code was taken from the clipboard after the explorer tapped Copy code in WhatsApp; `source`, `purpose`, `method=auto` (read on returning to the tab) or `button` (Paste code). The code itself is never sent |
 | `whatsapp_verify_failed` | Sending or checking a code failed; `source`, `purpose`, `step=request/verify`, `reason=invalid_number/cooldown/daily_limit/expired/no_code/wrong_code/too_many_attempts/number_taken/account_mismatch/send_failed/other` |
@@ -65,6 +67,9 @@ Selections can instead lead to `selection_cancelled`; seekers can open additiona
 | `whatsapp_prompt_shown` | The "Get tomorrow's country on WhatsApp" card was shown on a daily quest result (once per result); `source=result_card`, `step=verify` (number not yet verified) or `consent` (verified, one tap) |
 | `whatsapp_prompt_dismissed` | "Not now" was tapped on that card (it then stays hidden until the next daily quest, the next UTC day); `source=result_card` |
 | `whatsapp_unsubscribe_viewed` | The template's `?whatsapp=stop` link was opened, sent on page load before any sign-in; `source=link` |
+| `report_sent` | A report was filed from the Report sheet; `source=inbox` (a received challenge), `clues` (the clue sheet during a friend hunt), `result` (a friend-hunt result) or `map` (another explorer's map), `reason=offensive_clues/harassment/sexual/offensive_username/spam/other` (the option chosen, a fixed code; the explorer's own details are never sent) |
+| `explorer_blocked` | An explorer was blocked, from Block or from "Also block" on a report; `source` as for `report_sent` |
+| `username_claim_fallback` | The `claimUsername` function was down or missing and the explorer had no profile yet, so the username was claimed directly (sent just before that write); `reason=internal/unavailable/not-found/deadline-exceeded` |
 
 Daily-quest hunts reuse the hunt events with `mode=daily` and add `streak` on `hunt_completed`. Common properties include `account_status=guest/signed_in`, `mode=solo/daily/multiplayer`, `role`, and applicable hunt statistics. Time used includes paid clue, reveal and wrong-guess costs. Legacy friend hunts remain 120 seconds; current hunts use 180 seconds.
 

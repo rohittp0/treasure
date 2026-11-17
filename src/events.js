@@ -21,6 +21,7 @@ export const EVENTS = Object.freeze({
   POSTER_EXPORTED: 'poster_exported', LOGS_OPENED: 'logs_opened', HISTORY_OPENED: 'history_result_opened',
   LEADERBOARD_VIEWED: 'leaderboard_viewed', NOTIFICATIONS_PERMISSION: 'notifications_permission',
   ATLAS_VIEWED: 'atlas_viewed', ATLAS_SHARED: 'atlas_shared', SIGN_IN_OPENED: 'sign_in_opened',
+  REPORT_SENT: 'report_sent', EXPLORER_BLOCKED: 'explorer_blocked', USERNAME_CLAIM_FALLBACK: 'username_claim_fallback',
   WHATSAPP_PROMPT_SHOWN: 'whatsapp_prompt_shown', WHATSAPP_PROMPT_DISMISSED: 'whatsapp_prompt_dismissed',
   WHATSAPP_CODE_REQUESTED: 'whatsapp_code_requested', WHATSAPP_VERIFIED: 'whatsapp_verified',
   WHATSAPP_VERIFY_FAILED: 'whatsapp_verify_failed', WHATSAPP_OPT_IN: 'whatsapp_opt_in',
@@ -29,6 +30,7 @@ export const EVENTS = Object.freeze({
   ONBOARDING_HINT_SHOWN: 'onboarding_hint_shown', ONBOARDING_HINT_COMPLETED: 'onboarding_hint_completed',
   INSTALL_PROMPT_SHOWN: 'install_prompt_shown', INSTALL_PROMPT_DISMISSED: 'install_prompt_dismissed',
   INSTALL_STARTED: 'install_started', APP_INSTALLED: 'app_installed',
+  ACCOUNT_DELETE_OPENED: 'account_delete_opened', ACCOUNT_DELETED: 'account_deleted',
 });
 const eventNames = new Set(Object.values(EVENTS));
 const allowedParameters = new Set(['in_app', 'mode', 'role', 'level', 'difficulty', 'round_seconds', 'time_used',

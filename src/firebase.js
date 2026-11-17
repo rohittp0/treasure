@@ -4,11 +4,12 @@ import { googleErrorReason } from './inapp.js';
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, signInWithCustomToken } from 'firebase/auth';
 import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
-import { getFirestore, collection, doc, getDoc, getDocs, query, setDoc, where, orderBy, limit, runTransaction, serverTimestamp, onSnapshot, writeBatch, updateDoc, deleteDoc } from 'firebase/firestore';
+import { getFirestore, collection, doc, getDoc, getDocs, query, setDoc, where, orderBy, limit, runTransaction, serverTimestamp, onSnapshot, writeBatch, updateDoc, deleteDoc, addDoc } from 'firebase/firestore';
 import messagingWorkerUrl from './firebase-messaging-sw.js?worker&url';
 import { scoreSoloHunts } from './leaderboard.js';
 import { scoreMonth, validDailyRecord } from './daily.js';
 import { ROUND_SECONDS } from './game.js';
+import { reportFields } from './moderation.js';
 
 const app = initializeApp({
   apiKey: 'AIzaSyCDEJwlHrSfeSzfLwehsTFhCjOJOFayEc4',
@@ -76,7 +77,7 @@ let callables = null;
 async function callable(name, data) {
   callables ||= import('firebase/functions').then(({ getFunctions, httpsCallable }) => {
     const functions = getFunctions(app, 'us-central1');
-    return { requestWhatsAppOtp: httpsCallable(functions, 'requestWhatsAppOtp'), verifyWhatsAppOtp: httpsCallable(functions, 'verifyWhatsAppOtp') };
+    return { requestWhatsAppOtp: httpsCallable(functions, 'requestWhatsAppOtp'), verifyWhatsAppOtp: httpsCallable(functions, 'verifyWhatsAppOtp'), deleteAccount: httpsCallable(functions, 'deleteAccount') };
   });
   return (await (await callables)[name](data)).data;
 }
@@ -91,6 +92,24 @@ export async function verifyWhatsAppOtp(phone, purpose, code) {
   const credential = await signInWithCustomToken(auth, result.customToken);
   trackEvent(EVENTS.LOGIN, { method: 'whatsapp' });
   return { isNew: !!result.isNew, player: credential.user };
+}
+
+// Erases the signed-in explorer's account on the server, then drops the local session. The Auth user is
+// already gone by then, so this signs out directly: logout() would try to delete push tokens that are erased.
+export async function deleteAccount() {
+  const uid = auth.currentUser?.uid;
+  await callable('deleteAccount', {});
+  // From here the account is gone: nothing below may report a failure.
+  pushRegistration = null;
+  try {
+    if (uid) {
+      for (let index = localStorage.length - 1; index >= 0; index--) {
+        const key = localStorage.key(index);
+        if (key && key.includes(uid)) localStorage.removeItem(key);
+      }
+    }
+  } catch (error) { console.warn('Could not clear this browser\'s saved data:', error); }
+  try { await signOut(auth); } catch (error) { console.warn('Signed out locally failed after deletion:', error); }
 }
 
 const userRef = uid => doc(db, 'users', uid);
@@ -130,9 +149,37 @@ export async function loadProfile(user) {
   return snapshot.exists() ? snapshot.data() : null;
 }
 
+// The claimUsername function writes the profile and username together and checks the username blocklist.
+// Its verdicts (taken, not allowed, already chosen, banned) are written for explorers. Only when the function
+// itself is down or missing does the claim fall back to the direct batch, which the rules still allow and check
+// against bans and blockedUsernames. An App Check or sign-in failure never falls back.
+const CLAIM_FALLBACK_CODES = ['functions/internal', 'functions/unavailable', 'functions/not-found', 'functions/deadline-exceeded'];
 export async function claimUsername(user, username) {
   const handle = username.trim().toLowerCase();
   if (!/^[a-z][a-z0-9_]{2,19}$/.test(handle)) throw new Error('Use 3–20 characters, starting with a letter. Letters, numbers and underscores work.');
+  try { await callFunction('claimUsername', { username: handle }); }
+  catch (error) {
+    if (error.code === 'functions/already-exists') throw new Error('That username is taken. Try another.');
+    // reason 'terms': the Terms of Use aren't accepted yet; the username dialog then asks for them.
+    if (error.details?.reason === 'terms') throw Object.assign(new Error('Tick the box to agree to the Terms of Use first.'), { reason: 'terms' });
+    if (['functions/invalid-argument', 'functions/permission-denied', 'functions/failed-precondition'].includes(error.code)) throw new Error(error.message);
+    if (!CLAIM_FALLBACK_CODES.includes(error.code)) {
+      console.warn('Username claim failed:', error);
+      throw new Error('Your username could not be saved. Try again.');
+    }
+    // The function may have saved the claim before failing to answer.
+    const existing = (await getDoc(profileRef(user.uid))).data();
+    if (existing && existing.username !== handle) throw new Error('You already have a username.');
+    if (!existing) {
+      trackEvent(EVENTS.USERNAME_CLAIM_FALLBACK, { reason: error.code.replace('functions/', '') });
+      await claimUsernameDirectly(user, handle);
+    }
+  }
+  trackEvent(EVENTS.SIGN_UP, { method: signInMethod(user) });
+  return handle;
+}
+
+async function claimUsernameDirectly(user, handle) {
   const batch = writeBatch(db);
   batch.set(profileRef(user.uid), { username: handle, createdAt: serverTimestamp() });
   batch.set(usernameRef(handle), { uid: user.uid, displayName: (user.displayName || 'Explorer').slice(0, 48), createdAt: serverTimestamp() });
@@ -141,8 +188,6 @@ export async function claimUsername(user, username) {
     if (error.code === 'permission-denied' || error.code === 'already-exists') throw new Error('That username is taken. Try another.');
     throw error;
   }
-  trackEvent(EVENTS.SIGN_UP, { method: signInMethod(user) });
-  return handle;
 }
 
 export async function isUsernameAvailable(username) {
@@ -168,6 +213,40 @@ export async function markChallengeRead(user, code) {
   await updateDoc(doc(db, 'users', user.uid, 'notifications', code), { read: true });
 }
 
+// ---- Moderation (spec decision 22): Terms of Use acceptance, reports and blocks.
+// Callables other than the WhatsApp ones; each loads the Functions SDK only when first used.
+async function callFunction(name, data) {
+  const { getFunctions, httpsCallable } = await import('firebase/functions');
+  return (await httpsCallable(getFunctions(app, 'us-central1'), name)(data)).data;
+}
+
+export async function loadTermsAccepted(player) {
+  return (await getDoc(userRef(player.uid))).data()?.termsAcceptedAt != null;
+}
+
+// Recorded once on users/{uid}, with the server time. Rules refuse a second write, so it is checked first.
+export async function acceptTerms(player) {
+  await runTransaction(db, async transaction => {
+    const snapshot = await transaction.get(userRef(player.uid));
+    if (snapshot.data()?.termsAcceptedAt) return;
+    transaction.set(userRef(player.uid), { termsAcceptedAt: serverTimestamp() }, { merge: true });
+  });
+}
+
+// Reports are write-only for explorers; the onReportCreated function alerts the developer.
+export async function reportExplorer(player, report) {
+  await addDoc(collection(db, 'reports'), { reporterUid: player.uid, ...reportFields(report), createdAt: serverTimestamp() });
+}
+
+export async function blockExplorer(player, otherUid) {
+  await setDoc(doc(db, 'users', player.uid, 'blocks', otherUid), { createdAt: serverTimestamp() });
+}
+
+// The uids this explorer has blocked, as a Set. A new block arrives at once, before the server confirms it.
+export function watchBlocks(player, onChange, onError) {
+  return onSnapshot(collection(db, 'users', player.uid, 'blocks'), snapshot => onChange(new Set(snapshot.docs.map(item => item.id))), onError);
+}
+
 // Registers this browser for background alerts. Never throws; resolves to a fixed analytics outcome:
 // 'registered', 'denied' (no permission), 'unsupported' (no key, service worker or messaging support),
 // 'token_failed' (the worker or FCM token could not be set up) or 'save_failed' (the token was not stored).
@@ -190,7 +269,7 @@ export async function registerChallengePush(user) {
     const bytes = new TextEncoder().encode(token);
     const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))]
       .map(value => value.toString(16).padStart(2, '0')).join('');
-    await setDoc(doc(db, 'users', user.uid, 'pushTokens', hash), { token, createdAt: serverTimestamp() });
+    await setDoc(doc(db, 'users', user.uid, 'pushTokens', hash), { token, createdAt: serverTimestamp(), platform: 'web' });
     pushRegistration = { uid: user.uid, hash };
     return 'registered';
   } catch (error) {

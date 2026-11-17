@@ -366,3 +366,40 @@ test('webhooks: STOP replies opt out at once, an unreachable number only after t
   await webhooks.status(fakeRequest({ MessageSid: 'SMunknown0000', MessageStatus: 'sent' }), unknown);
   assert.equal(unknown.statusCode, 200);
 });
+
+const REVIEW_PHONE = '+14155550100';
+const REVIEW_CODE = '424242';
+
+test('reviewer number: no Twilio call, fixed code verifies, other numbers still send', async () => {
+  await reset();
+  const clock = { now: new Date('2026-11-09T10:00:00Z') };
+  const twilio = mockTwilio();
+  const handlers = createOtpHandlers({
+    db, auth, twilio, hmacKey: 'test-hmac-key', params, clock: () => clock.now, log: silent,
+    reviewer: { phone: REVIEW_PHONE, code: REVIEW_CODE },
+  });
+  assert.deepEqual(await handlers.requestOtp({ phone: '+1 415 555 0100', purpose: 'login' }, { ip: '1.1.1.1' }), { ok: true, resendAfter: 60 });
+  assert.equal(twilio.calls.length, 0, 'nothing is sent for the reviewer number');
+  const stored = JSON.stringify((await db.collection('otpChallenges').get()).docs[0].data());
+  assert.equal(stored.includes(REVIEW_CODE), false);
+  // Rate limits still apply.
+  await rejectsWith(handlers.requestOtp({ phone: REVIEW_PHONE, purpose: 'login' }, { ip: '1.1.1.1' }), 'resource-exhausted');
+  await rejectsWith(handlers.verifyOtp({ phone: REVIEW_PHONE, purpose: 'login', code: '000000' }, { ip: '1.1.1.1' }), 'permission-denied');
+  const result = await handlers.verifyOtp({ phone: REVIEW_PHONE, purpose: 'login', code: REVIEW_CODE }, { ip: '1.1.1.1' });
+  assert.equal(result.isNew, true);
+  assert.ok(result.customToken);
+
+  await handlers.requestOtp({ phone: OTHER_PHONE, purpose: 'login' }, { ip: '1.1.1.1' });
+  assert.equal(twilio.calls.length, 1, 'a normal number still calls Twilio');
+  assert.notEqual(twilio.lastCode(), REVIEW_CODE);
+});
+
+test('reviewer number: unset or malformed secrets leave behaviour unchanged', async () => {
+  for (const reviewer of [undefined, { phone: '', code: '' }, { phone: REVIEW_PHONE, code: '' }, { phone: '', code: REVIEW_CODE }, { phone: REVIEW_PHONE, code: '12' }]) {
+    await reset();
+    const twilio = mockTwilio();
+    const handlers = createOtpHandlers({ db, auth, twilio, hmacKey: 'k', params, log: silent, reviewer });
+    await handlers.requestOtp({ phone: REVIEW_PHONE, purpose: 'login' }, { ip: '2.2.2.2' });
+    assert.equal(twilio.calls.length, 1);
+  }
+});

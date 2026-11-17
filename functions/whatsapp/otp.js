@@ -41,7 +41,16 @@ function checkedInput(data) {
 // Daily send counters, server-only. Keys never contain a raw phone number or IP address.
 const rateLimitRef = (db, kind, id, day) => db.doc(`otpRateLimits/${kind}_${id}_${day}`);
 
-function createOtpHandlers({ db, auth, twilio, hmacKey, params, clock = () => new Date(), log = console }) {
+// Store reviewers cannot receive WhatsApp codes. One configured number gets a fixed code and no message.
+// Both values must be set and well formed, otherwise the bypass stays off.
+function reviewerBypass(reviewer) {
+  const phone = normalizePhone(reviewer?.phone);
+  const code = typeof reviewer?.code === 'string' ? reviewer.code.trim() : '';
+  return phone && /^\d{6}$/.test(code) ? { phone, code } : null;
+}
+
+function createOtpHandlers({ db, auth, twilio, hmacKey, params, reviewer, clock = () => new Date(), log = console }) {
+  const bypass = reviewerBypass(reviewer);
   async function requestOtp(data, context = {}) {
     const { phone, purpose } = checkedInput(data);
     const uid = context.uid || null;
@@ -52,7 +61,8 @@ function createOtpHandlers({ db, auth, twilio, hmacKey, params, clock = () => ne
     const phoneLimit = rateLimitRef(db, 'phone', sha256(phone), day);
     const requesterLimit = rateLimitRef(db, requester[0], requester[1], day);
     const challengeRef = db.doc(`otpChallenges/${challengeId(phone, purpose)}`);
-    const code = generateCode();
+    const isReviewer = bypass?.phone === phone;
+    const code = isReviewer ? bypass.code : generateCode();
 
     await db.runTransaction(async transaction => {
       const [phoneSnap, requesterSnap, challengeSnap] = await Promise.all([
@@ -82,6 +92,8 @@ function createOtpHandlers({ db, auth, twilio, hmacKey, params, clock = () => ne
         sendsDay: day,
       });
     });
+
+    if (isReviewer) return { ok: true, resendAfter: RESEND_COOLDOWN_MS / 1000 };
 
     try {
       await twilio.messages.create(otpMessage({ from: params.from, contentSid: params.otpContentSid, phone, code }));
@@ -195,5 +207,5 @@ function createOtpHandlers({ db, auth, twilio, hmacKey, params, clock = () => ne
 
 module.exports = {
   PURPOSES, CODE_TTL_MS, RESEND_COOLDOWN_MS, MAX_ATTEMPTS, MAX_SENDS_PER_PHONE_PER_DAY, MAX_SENDS_PER_REQUESTER_PER_DAY,
-  generateCode, challengeId, hashCode, codesMatch, isExpired, createOtpHandlers,
+  sha256, utcDay, generateCode, challengeId, hashCode, codesMatch, isExpired, rateLimitRef, createOtpHandlers,
 };

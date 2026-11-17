@@ -7,7 +7,7 @@ import './style.css';
 import fallbackPuzzles from '../data/countries.json';
 import bundledDailySchedules from '../data/daily-quests.json';
 import { choosePuzzle, createGame, difficultyForLevel, CLUE_COST, REVEAL_COST } from './game.js';
-import { loadFriendHunts, watchUser, login, logout, loadPuzzles, saveHunt, loadHunts, loadLeaderboard, enterLeaderboard, loadProfile, claimUsername, isUsernameAvailable, watchChallenges, markChallengeRead, registerChallengePush, loadDailySchedule, loadDailyRecords, startDailyRecord, finishDailyRecord, loadMonthlyLeaderboard, enterMonthlyLeaderboard, saveAtlas, loadAtlas, loadWhatsApp, setWhatsAppOptIn, setWhatsAppTimeZone, snoozeWhatsAppPrompt } from './firebase.js';
+import { loadFriendHunts, watchUser, login, logout, loadPuzzles, saveHunt, loadHunts, loadLeaderboard, enterLeaderboard, loadProfile, claimUsername, isUsernameAvailable, watchChallenges, markChallengeRead, registerChallengePush, loadDailySchedule, loadDailyRecords, startDailyRecord, finishDailyRecord, loadMonthlyLeaderboard, enterMonthlyLeaderboard, saveAtlas, loadAtlas, loadWhatsApp, setWhatsAppOptIn, setWhatsAppTimeZone, snoozeWhatsAppPrompt, deleteAccount } from './firebase.js';
 import { createWhatsAppVerify } from './whatsapp-verify.js';
 import { inAppBrowser, platform, googleErrorReason } from './inapp.js';
 import { arrival, clearHandoffParams, outboundHandoff, removeUrlParams, setUrlParam } from './handoff.js';
@@ -17,6 +17,9 @@ import { dailyLinkSource, dayKey, monthKey, daysInMonth, msUntilNextDay, dailyQu
 import { createFriendController } from './friend-controller.js';
 import { clockText, huntSheetKey } from './hunt-view.js';
 import { pickTapFeature, TAP_RADIUS } from './map-tap.js';
+import { acceptTerms, loadTermsAccepted, watchBlocks } from './firebase.js';
+import { visibleChallenges, visibleHunts } from './moderation.js';
+import { createModerationDialog } from './moderation-dialog.js';
 
 maplibregl.setWorkerUrl(mapWorkerUrl);
 
@@ -70,11 +73,20 @@ let dailyRecords = [];
 let dailySyncPromise = null;
 let leaderboardBoard = 'monthly';
 let atlasView = null;
+// Explorers this explorer blocked (users/{uid}/blocks), and the friend hunts last loaded into My logs.
+let blockedUids = new Set();
+let accountHistory = null;
+let inboxChallenges = [];
+// Settles once the signed-in explorer's blocked list has loaded, so a ?hunt= link can wait for it.
+let blocksLoaded = Promise.resolve();
 // WhatsApp daily quest alert: the explorer's private state, the result card and the ?whatsapp=stop link.
 let whatsappState = null;
 let resultAlertVerify = null;
 let resultAlertVersion = 0;
 let pendingUnsubscribe = new URLSearchParams(location.search).get('whatsapp') === 'stop';
+// ?account=delete (the public deletion link): sign in if needed, then ask to confirm.
+let deleteSource = 'account';
+let pendingDelete = new URLSearchParams(location.search).get('account') === 'delete';
 let signInContext = null;
 let signInVerify = null;
 // Opt-in from the WhatsApp sign-in form; the welcome dialog waits for it before offering WhatsApp again.
@@ -105,6 +117,10 @@ const DAILY_KEY_PREFIX = 'treasurehunch:daily:';
 const PENDING_ENTRY_KEY = 'treasurehunch:pending-leaderboard';
 const RESUME_RESULT_KEY = 'treasurehunch:resume-result';
 const MAP_HINT_KEY = 'treasurehunch:map-hint-seen';
+// Set when the Terms of Use box is ticked and a sign-in starts; a Google redirect reloads the page before it ends.
+// The in-memory flag covers browsers that block session storage (WhatsApp and the Google popup).
+const TERMS_KEY = 'treasurehunch:terms-accepted';
+let termsTicked = false;
 let completedWins = readCompletedWins();
 let soloFoundIds = readSoloFound();
 
@@ -333,6 +349,7 @@ function showWelcome(player, existingUsername = '') {
         : claim ? 'One alert a day keeps your streak going. You can also continue without it.'
           : "Tap to get an alert when each day's quest arrives or a friend challenges you.";
   renderWelcomeWhatsApp(player, !existingUsername);
+  renderWelcomeTerms(player, !existingUsername);
   if (!$('#welcome-dialog').open) $('#welcome-dialog').showModal();
   if (!existingUsername) setTimeout(() => input.focus(), 0);
 }
@@ -401,6 +418,8 @@ const SIGN_IN_COPY = {
   atlas: ['Share your <em>map.</em>', 'Sign in to keep the countries you claim and share your explorer map.'],
   unsubscribe: ['Manage WhatsApp <em>alerts.</em>', 'Sign in with the WhatsApp number that gets the daily quest alert, or the Google account it belongs to.'],
   open_in_browser: ['Continue with <em>Google.</em>', 'You’re in your browser now. Continue with Google below, or use WhatsApp.'],
+  // The ?account=delete link: signed out, the explorer signs in first, then confirms the deletion.
+  account_delete: ['Delete your <em>account.</em>', 'Sign in with the WhatsApp number or Google account you play with. You’ll confirm before anything is deleted.'],
 };
 
 function openSignIn(source, { title, copy, resumeResult = false } = {}) {
@@ -410,11 +429,21 @@ function openSignIn(source, { title, copy, resumeResult = false } = {}) {
   $('#sign-in-copy').textContent = copy || defaultCopy;
   $('#sign-in-status').textContent = '';
   $('#sign-in-google').disabled = false;
+  $('#sign-in-terms').checked = false;
+  $('#sign-in-terms').disabled = false;
+  // Signing in only to stop WhatsApp alerts or to delete the account asks for no new agreement.
+  $('#sign-in-dialog .sign-in-terms').classList.toggle('hidden', TERMS_EXEMPT_SOURCES.has(source));
   signInVerify?.destroy();
   // WhatsApp is the primary way in: the number field is ready as soon as the sheet opens.
   // The unticked box is the only opt-in here; signing in alone never turns alerts on.
   signInVerify = createWhatsAppVerify($('#sign-in-whatsapp-verify'), {
-    purpose: 'login', source, consent: source === 'unsubscribe' ? 'none' : 'optional', submitLabel: 'Send sign-in code',
+    purpose: 'login', source, consent: TERMS_EXEMPT_SOURCES.has(source) ? 'none' : 'optional', submitLabel: 'Send sign-in code',
+    // Once a code is on its way the box is locked, so the sign-in it finishes is the one agreed to.
+    beforeSend: () => {
+      if (!termsAgreed()) return TERMS_NEEDED;
+      $('#sign-in-terms').disabled = true;
+      return '';
+    },
     onVerified: ({ player, consent }) => {
       if (consent && player) signInOptInTask = optInAfterSignIn(player);
       closeSignIn();
@@ -424,6 +453,57 @@ function openSignIn(source, { title, copy, resumeResult = false } = {}) {
   trackEvent(EVENTS.SIGN_IN_OPENED, { source });
   if (!$('#sign-in-dialog').open) $('#sign-in-dialog').showModal();
   signInVerify.focus();
+}
+
+// Every sign-in needs the unticked Terms of Use box ticked first. The acceptance is stored once the
+// explorer is signed in (recordTermsAcceptance), since a Google redirect reloads the page first.
+const TERMS_NEEDED = 'Tick the box to agree to the Terms of Use first.';
+// Sign-ins that only stop WhatsApp alerts (?whatsapp=stop) or delete the account (?account=delete) are exempt.
+const TERMS_EXEMPT_SOURCES = new Set(['unsubscribe', 'account_delete']);
+let termsRecording = null;
+function termsAgreed() {
+  if (TERMS_EXEMPT_SOURCES.has(signInContext?.source)) return true;
+  if (!$('#sign-in-terms').checked) return false;
+  termsTicked = true;
+  session.set(TERMS_KEY, '1');
+  return true;
+}
+
+// An account without termsAcceptedAt (made before the box, or signed in only to unsubscribe or delete) ticks it in
+// the username dialog: every username needs it, and everything an explorer posts needs a username.
+function renderWelcomeTerms(player, choosing) {
+  const box = $('#welcome-terms');
+  box.classList.add('hidden');
+  box.querySelector('input').checked = false;
+  if (!choosing || termsTicked || session.get(TERMS_KEY) === '1') return;
+  loadTermsAccepted(player).then(accepted => {
+    if (!accepted && welcomeFor?.uid === player.uid && $('#welcome-dialog').open) box.classList.remove('hidden');
+  }).catch(error => console.warn('Could not check the Terms of Use acceptance:', error));
+}
+
+// Before a username is claimed: stores a pending acceptance now, or throws so the explorer can try again.
+async function ensureTermsAccepted(player) {
+  const box = $('#welcome-terms');
+  if (!box.classList.contains('hidden')) {
+    if (!box.querySelector('input').checked) throw Object.assign(new Error(TERMS_NEEDED), { reason: 'terms' });
+    termsTicked = true;
+    session.set(TERMS_KEY, '1');
+  }
+  if (!termsTicked && session.get(TERMS_KEY) !== '1') return;
+  await termsRecording;
+  if (!termsTicked && session.get(TERMS_KEY) !== '1') return;
+  await acceptTerms(player);
+  termsTicked = false;
+  session.remove(TERMS_KEY);
+}
+
+// The pending flags are cleared only once the acceptance is stored; after a failure the next auth event tries again.
+function recordTermsAcceptance(player) {
+  if (termsRecording || (!termsTicked && session.get(TERMS_KEY) !== '1')) return;
+  termsRecording = acceptTerms(player)
+    .then(() => { termsTicked = false; session.remove(TERMS_KEY); })
+    .catch(error => console.warn('Could not record the Terms of Use acceptance:', error))
+    .finally(() => { termsRecording = null; });
 }
 
 // In an in-app browser Google is hidden: WhatsApp works there, and a small link (tapped, never automatic)
@@ -464,18 +544,52 @@ async function optInAfterSignIn(player) {
   }
 }
 
+// ---- Account deletion: a confirmation, then the server erases everything and the explorer is a guest again.
+function openDeleteAccount(source) {
+  $('#delete-account-status').textContent = '';
+  $('#delete-account-confirm').disabled = false;
+  $('#delete-account-keep').disabled = false;
+  trackEvent(EVENTS.ACCOUNT_DELETE_OPENED, { source });
+  deleteSource = source;
+  if (!$('#delete-account-dialog').open) $('#delete-account-dialog').showModal();
+}
+
+async function confirmDeleteAccount() {
+  const confirm = $('#delete-account-confirm'), keep = $('#delete-account-keep');
+  confirm.disabled = keep.disabled = true;
+  $('#delete-account-status').textContent = 'Deleting…';
+  try {
+    await deleteAccount();
+  } catch (error) {
+    console.warn('Could not delete the account:', error);
+    confirm.disabled = keep.disabled = false;
+    $('#delete-account-status').textContent = 'Your account could not be deleted. Try again.';
+    return;
+  }
+  trackEvent(EVENTS.ACCOUNT_DELETED, { source: deleteSource });
+  $('#delete-account-dialog').close();
+  showToast('Your account has been deleted.');
+}
+
 function closeSignIn() {
   if ($('#sign-in-dialog').open) $('#sign-in-dialog').close();
 }
 
 // ---- The unsubscribe link waits until no other dialog or hunt is on screen.
 function dialogsBusy() {
-  return ['#welcome-dialog', '#sign-in-dialog', '#whatsapp-dialog', '#account-dialog', '#install-dialog'].some(selector => $(selector).open);
+  return ['#welcome-dialog', '#sign-in-dialog', '#delete-account-dialog', '#whatsapp-dialog', '#account-dialog', '#install-dialog'].some(selector => $(selector).open);
 }
 
 function showDeferredDialogs() {
   if (!user || profileReadyFor !== user.uid || dialogsBusy()) return;
   if (pendingUnsubscribe) showUnsubscribe();
+  else if (pendingDelete) showDeleteLink();
+}
+
+function showDeleteLink() {
+  pendingDelete = false;
+  removeUrlParams(['account']);
+  openDeleteAccount('link');
 }
 
 function openWhatsAppDialog(kicker, html) {
@@ -887,12 +1001,49 @@ async function renderAccountWhatsApp(player, changing = false) {
   $('#account-whatsapp-change').addEventListener('click', () => renderAccountWhatsApp(player, true));
 }
 
+// The inbox, without challenges from blocked explorers. Blocks are watched alongside, so a new block hides
+// that explorer's challenges and friend hunts at once.
 function watchInbox(player) {
   stopChallenges?.();
   let firstSnapshot = true;
   let known = new Set();
-  stopChallenges = watchChallenges(player, challenges => {
+  // Nothing is shown until both the inbox and the blocks have loaded once, so no blocked challenge flashes up.
+  let received = null;
+  let blocksReady = false;
+  blockedUids = new Set();
+  let markBlocksLoaded;
+  blocksLoaded = new Promise(resolve => { markBlocksLoaded = resolve; });
+  const stopInbox = watchChallenges(player, next => {
     if (user?.uid !== player.uid) return;
+    received = next;
+    renderInbox();
+  }, error => console.warn('Could not load challenges:', error));
+  const stopBlocks = watchBlocks(player, blocked => {
+    if (user?.uid !== player.uid) return;
+    blockedUids = blocked;
+    blocksReady = true;
+    markBlocksLoaded();
+    renderInbox();
+    renderAccountHistory();
+  }, error => {
+    console.warn('Could not load blocked explorers:', error);
+    blocksReady = true;
+    markBlocksLoaded();
+    renderInbox();
+  });
+  stopChallenges = () => {
+    stopInbox();
+    stopBlocks();
+    blockedUids = new Set();
+    inboxChallenges = [];
+    accountHistory = null;
+    blocksLoaded = Promise.resolve();
+  };
+
+  function renderInbox() {
+    if (user?.uid !== player.uid || !received || !blocksReady) return;
+    const challenges = visibleChallenges(received, blockedUids);
+    inboxChallenges = challenges;
     const unread = challenges.filter(challenge => !challenge.read);
     unreadChallenges = unread.length;
     refreshBadge();
@@ -903,7 +1054,7 @@ function watchInbox(player) {
       : 'Open explorer log');
     $('#challenge-inbox-count').textContent = String(unread.length);
     $('#challenge-list').innerHTML = challenges.length
-      ? challenges.map(challenge => `<button class="challenge-item ${challenge.read ? '' : 'unread'}" type="button" data-code="${escapeHTML(challenge.code)}"><span><strong>@${escapeHTML(challenge.fromUsername)}</strong> hid a treasure for you.<small>${challenge.read ? 'Open hunt' : 'New challenge · open hunt'}</small></span><span aria-hidden="true">↗</span></button>`).join('')
+      ? challenges.map(challenge => `<div class="challenge-row"><button class="challenge-item ${challenge.read ? '' : 'unread'}" type="button" data-code="${escapeHTML(challenge.code)}"><span><strong>@${escapeHTML(challenge.fromUsername)}</strong> hid a treasure for you.<small>${challenge.read ? 'Open hunt' : 'New challenge · open hunt'}</small></span><span aria-hidden="true">↗</span></button><span class="moderation-actions"><button class="text-button" type="button" data-report="${escapeHTML(challenge.code)}" aria-label="Report @${escapeHTML(challenge.fromUsername)}">Report</button><button class="text-button" type="button" data-block="${escapeHTML(challenge.code)}" aria-label="Block @${escapeHTML(challenge.fromUsername)}">Block</button></span></div>`).join('')
       : 'No challenges yet. Ask a friend to find you by username.';
     if (!firstSnapshot && document.visibilityState === 'visible' && browserNotificationsAvailable() && Notification.permission === 'granted') {
       for (const challenge of unread) {
@@ -917,7 +1068,19 @@ function watchInbox(player) {
     }
     known = new Set(challenges.map(challenge => challenge.id));
     firstSnapshot = false;
-  }, error => console.warn('Could not load challenges:', error));
+  }
+}
+
+function inboxSender(code) {
+  const challenge = inboxChallenges.find(item => item.code === code);
+  return challenge ? { uid: challenge.fromUid, name: `@${challenge.fromUsername}` } : null;
+}
+
+// Friend hunts in My logs, without those played with blocked explorers.
+function renderAccountHistory() {
+  const container = $('#multiplayer-log');
+  if (!accountHistory || !container?.isConnected || user?.uid !== accountHistory.uid) return;
+  container.innerHTML = historyContent(visibleHunts(accountHistory.hunts, accountHistory.uid, blockedUids), accountHistory.uid);
 }
 
 function clearMapSelection() {
@@ -1120,6 +1283,7 @@ function openHuntScreen() {
   elements.home.classList.add('hidden');
   elements.result.classList.add('hidden');
   elements.game.classList.remove('hidden');
+  $('#hunt-moderation').classList.add('hidden');
   elements.hud.classList.remove('hidden');
   document.body.classList.add('in-game', 'solo-game');
   $('#end-level-button').classList.remove('hidden');
@@ -1488,6 +1652,7 @@ function renderAtlas() {
   $('#atlas-sign-in').classList.toggle('hidden', !self || (!!user && !!username));
   $('#atlas-sign-in').innerHTML = user ? 'Choose a username to share your map <span aria-hidden="true">↗</span>' : 'Sign in to share your map <span aria-hidden="true">↗</span>';
   $('#atlas-own-button').classList.toggle('hidden', self);
+  $('#atlas-moderation').classList.toggle('hidden', self || loading || missing || !atlasView.uid || atlasView.uid === user?.uid);
   applyAtlasLayers();
   requestAnimationFrame(focusAtlas);
 }
@@ -1518,7 +1683,7 @@ async function openAtlas(handle = '', source = 'home') {
   try {
     const atlas = await loadAtlas(normalized);
     if (atlasView?.version !== version) return;
-    atlasView = { ...atlasView, loading: false, missing: !atlas, countries: atlas?.countries || {} };
+    atlasView = { ...atlasView, loading: false, missing: !atlas, countries: atlas?.countries || {}, uid: atlas?.uid || '' };
     trackEvent(EVENTS.ATLAS_VIEWED, { owner: 'other', source, countries: Object.keys(atlasView.countries).length });
   } catch (error) {
     console.error(error);
@@ -1741,7 +1906,7 @@ async function openAccount(purpose = 'log') {
     friend.openLobby();
     return;
   }
-  elements.accountContent.innerHTML = `<h2>Welcome back, ${username ? `@${escapeHTML(username)}` : escapeHTML(user.displayName?.split(' ')[0] || 'Explorer')}.</h2><p>Your discoveries live here.</p><h3 class="log-heading">SOLO EXPLORATIONS</h3><div id="account-stats" class="account-stats">Loading your log…</div><section class="account-whatsapp" aria-labelledby="account-whatsapp-heading"><h3 id="account-whatsapp-heading" class="log-heading">DAILY QUEST ALERT ON WHATSAPP</h3><div id="account-whatsapp-body" class="log-caption">Loading…</div></section><section class="multiplayer-history" aria-labelledby="multiplayer-log-heading"><h3 id="multiplayer-log-heading" class="log-heading">FRIEND HUNTS</h3><p class="log-caption">Your rivalries, kept apart from the solo leaderboard.</p><div id="multiplayer-log" role="status">Loading friend hunts…</div><button id="multiplayer-log-retry" class="text-button hidden" type="button">Retry friend hunts ↗</button></section><button id="dialog-sign-out" class="text-button" type="button">Sign out ↗</button>`;
+  elements.accountContent.innerHTML = `<h2>Welcome back, ${username ? `@${escapeHTML(username)}` : escapeHTML(user.displayName?.split(' ')[0] || 'Explorer')}.</h2><p>Your discoveries live here.</p><h3 class="log-heading">SOLO EXPLORATIONS</h3><div id="account-stats" class="account-stats">Loading your log…</div><section class="account-whatsapp" aria-labelledby="account-whatsapp-heading"><h3 id="account-whatsapp-heading" class="log-heading">DAILY QUEST ALERT ON WHATSAPP</h3><div id="account-whatsapp-body" class="log-caption">Loading…</div></section><section class="multiplayer-history" aria-labelledby="multiplayer-log-heading"><h3 id="multiplayer-log-heading" class="log-heading">FRIEND HUNTS</h3><p class="log-caption">Your rivalries, kept apart from the solo leaderboard.</p><div id="multiplayer-log" role="status">Loading friend hunts…</div><button id="multiplayer-log-retry" class="text-button hidden" type="button">Retry friend hunts ↗</button></section><button id="dialog-sign-out" class="text-button" type="button">Sign out ↗</button><button id="dialog-delete-account" class="text-button" type="button">Delete account</button>`;
   const logUser = user;
   const logContainer = $('#multiplayer-log');
   const retry = $('#multiplayer-log-retry');
@@ -1751,7 +1916,8 @@ async function openAccount(purpose = 'log') {
     try {
       const hunts = await loadFriendHunts(logUser);
       if (user?.uid !== logUser.uid || !logContainer.isConnected) return;
-      logContainer.innerHTML = historyContent(hunts, logUser.uid);
+      accountHistory = { uid: logUser.uid, hunts };
+      renderAccountHistory();
     } catch (error) {
       if (user?.uid !== logUser.uid || !logContainer.isConnected) return;
       console.warn('Friend history unavailable:', error);
@@ -1777,6 +1943,7 @@ async function openAccount(purpose = 'log') {
   loadMultiplayerLog();
   renderAccountWhatsApp(logUser);
   $('#dialog-sign-out').addEventListener('click', async () => { await logout(); elements.accountDialog.close(); });
+  $('#dialog-delete-account').addEventListener('click', () => { elements.accountDialog.close(); openDeleteAccount('account'); });
   try {
     const hunts = await loadHunts(user);
     if (!elements.accountDialog.open) return;
@@ -1802,6 +1969,22 @@ const friend = createFriendController({
   requestUsername: () => { if (user) showWelcome(user); },
   clearMapSelection,
   setSheetCollapsed,
+  isBlocked: uid => blockedUids.has(uid),
+  // Never waits long: a slow or failed list must not keep an invite from opening.
+  whenBlocksLoaded: () => Promise.race([blocksLoaded, new Promise(resolve => setTimeout(resolve, 5000))]),
+  openModeration: (action, target) => moderation.open(action, target),
+});
+
+const moderation = createModerationDialog({
+  getUser: () => user,
+  requestSignIn: () => openSignIn('account'),
+  // The toast sits under an open modal, so a report made from My logs is confirmed in the inbox too.
+  showToast: message => {
+    showToast(message);
+    if (elements.accountDialog.open) $('#account-challenge-status').textContent = message;
+  },
+  // Blocking the other explorer of a hunt leaves it (result or clue sheet); a map stays, since maps are public anyway.
+  onBlocked: target => { if (target.context === 'hunt' && friend.mode !== 'idle') friend.home(); },
 });
 
 $('#welcome-notifications').addEventListener('click', async () => {
@@ -1860,6 +2043,7 @@ $('#welcome-form').addEventListener('submit', async event => {
         status.dataset.state = 'unavailable';
         throw new Error(`@${handle} is taken. Try another.`);
       }
+      await ensureTermsAccepted(welcomeFor);
       username = await claimUsername(welcomeFor, handle);
       installDue = 'sign_in';
       setAnalyticsUser({ uid: welcomeFor.uid, username });
@@ -1874,8 +2058,8 @@ $('#welcome-form').addEventListener('submit', async event => {
     }
     $('#welcome-dialog').close();
     welcomeFor = null;
-    friend.onAuth(user);
     watchInbox(user);
+    friend.onAuth(user);
     renderLeaderboardGate();
     postPendingGuestEntry(user);
     const claimedCountry = lastResult?.mode === 'daily' && lastResult.status === 'won' ? lastResult.puzzle.country : '';
@@ -1891,7 +2075,12 @@ $('#welcome-form').addEventListener('submit', async event => {
   } catch (error) {
     console.error(error);
     status.textContent = error.message || 'Your username could not be saved. Try again.';
-    if (error.message?.includes('taken')) status.dataset.state = 'unavailable';
+    // The server found no accepted Terms (a stale view, or another device): ask for the box here.
+    if (error.reason === 'terms') {
+      $('#welcome-terms').classList.remove('hidden');
+      $('#welcome-terms').querySelector('input').focus();
+    }
+    if (error.message?.includes('taken') || error.message?.includes('allowed')) status.dataset.state = 'unavailable';
   } finally {
     if ($('#welcome-dialog').open) saveButton.disabled = !username && status.dataset.state !== 'available';
   }
@@ -1904,6 +2093,13 @@ $('#welcome-dialog').addEventListener('close', () => {
   offerInstallSoon();
 });
 $('#challenge-list').addEventListener('click', async event => {
+  const action = event.target.closest('button[data-report], button[data-block]');
+  if (action && user) {
+    const code = action.dataset.report || action.dataset.block;
+    const sender = inboxSender(code);
+    if (sender) moderation.open(action.dataset.report ? 'report' : 'block', { ...sender, context: 'challenge', code, source: 'inbox' });
+    return;
+  }
   const button = event.target.closest('button[data-code]');
   if (!button || !user) return;
   const code = button.dataset.code;
@@ -1928,6 +2124,11 @@ $('#result-atlas-button').addEventListener('click', () => {
 $('#atlas-own-button').addEventListener('click', () => openAtlas('', atlasView?.source || 'home'));
 $('#atlas-share-button').addEventListener('click', () => shareAtlas(true));
 $('#atlas-copy-button').addEventListener('click', () => shareAtlas(false));
+for (const [selector, action] of [['#atlas-report-button', 'report'], ['#atlas-block-button', 'block']]) {
+  $(selector).addEventListener('click', () => {
+    if (atlasView?.uid) moderation.open(action, { uid: atlasView.uid, name: `@${atlasView.name}`, context: 'map', source: 'map' });
+  });
+}
 $('#atlas-sign-in').addEventListener('click', () => {
   if (user) showWelcome(user);
   else openSignIn('atlas');
@@ -1974,6 +2175,11 @@ elements.leaderboardSignIn.addEventListener('click', async () => {
   });
 });
 $('#sign-in-google').addEventListener('click', async () => {
+  if (!termsAgreed()) {
+    $('#sign-in-status').textContent = TERMS_NEEDED;
+    $('#sign-in-terms').focus();
+    return;
+  }
   const context = signInContext;
   // A redirect sign-in reloads the page, so the result screen is restored from session storage.
   if (context?.resumeResult && lastResult) session.set(RESUME_RESULT_KEY, JSON.stringify(lastResult));
@@ -2027,6 +2233,8 @@ $('#close-sign-in').addEventListener('click', closeSignIn);
 $('#sign-in-dialog').addEventListener('close', () => {
   signInVerify?.destroy();
   signInVerify = null;
+  // Closed without signing in: the ?account=delete confirmation must not appear later, unprompted.
+  if (!user) pendingDelete = false;
   showDeferredDialogs();
   offerInstallSoon();
 });
@@ -2042,6 +2250,10 @@ $('#install-dialog').addEventListener('close', () => {
 $('#home-install-button').addEventListener('click', () => startInstall('home'));
 installer.onChange(() => { renderInstallEntry(); maybeOfferInstall(); });
 renderInstallEntry();
+$('#delete-account-dialog').addEventListener('cancel', event => { if ($('#delete-account-confirm').disabled) event.preventDefault(); });
+$('#delete-account-keep').addEventListener('click', () => $('#delete-account-dialog').close());
+$('#delete-account-confirm').addEventListener('click', confirmDeleteAccount);
+$('#close-delete-account').addEventListener('click', () => { if (!$('#delete-account-confirm').disabled) $('#delete-account-dialog').close(); });
 $('#close-whatsapp').addEventListener('click', () => $('#whatsapp-dialog').close());
 $('#whatsapp-dialog').addEventListener('close', () => {
   whatsappDialogVerify?.destroy();
@@ -2174,6 +2386,7 @@ watchUser(async nextUser => {
   whatsappState = null;
   hideResultAlert();
   if (!nextUser && pendingUnsubscribe) openSignIn('unsubscribe');
+  else if (!nextUser && pendingDelete) openSignIn('account_delete');
   else if (!nextUser && pendingGoogleSignIn) openSignIn('open_in_browser');
   pendingGoogleSignIn = false;
   elements.accountButton.innerHTML = nextUser ? `<span class="account-avatar">${escapeHTML((nextUser.displayName || 'E')[0])}</span><span class="account-label">My logs</span><span id="account-challenge-count" class="account-alert-count hidden">0</span>` : 'Sign in <span aria-hidden="true">↗</span>';
@@ -2193,8 +2406,8 @@ watchUser(async nextUser => {
         showWelcome(nextUser, username);
       }
       if (username) {
-        friend.onAuth(nextUser);
         watchInbox(nextUser);
+        friend.onAuth(nextUser);
         if (browserNotificationsAvailable() && Notification.permission === 'granted')
           registerChallengePush(nextUser).catch(error => console.warn('Background alerts could not start:', error));
       }
@@ -2205,6 +2418,7 @@ watchUser(async nextUser => {
   }
   renderLeaderboardGate();
   if (nextUser) {
+    recordTermsAcceptance(nextUser);
     session.remove(RESUME_RESULT_KEY);
     if (username) postPendingGuestEntry(nextUser);
     const claimedCountry = username && lastResult?.mode === 'daily' && lastResult.status === 'won' ? lastResult.puzzle.country : '';

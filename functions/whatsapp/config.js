@@ -4,6 +4,9 @@ const { defineSecret, defineString } = require('firebase-functions/params');
 const twilioAccountSid = defineSecret('TWILIO_ACCOUNT_SID');
 const twilioAuthToken = defineSecret('TWILIO_AUTH_TOKEN');
 const otpHmacKey = defineSecret('OTP_HMAC_KEY');
+// Optional: a fixed number and code for App Store and Play reviewers. Leave unset to disable.
+const reviewTestPhone = defineSecret('REVIEW_TEST_PHONE');
+const reviewTestCode = defineSecret('REVIEW_TEST_CODE');
 const whatsappFrom = defineString('WHATSAPP_FROM');
 const whatsappDailyContentSid = defineString('WHATSAPP_DAILY_CONTENT_SID');
 const whatsappOtpContentSid = defineString('WHATSAPP_OTP_CONTENT_SID');
@@ -18,6 +21,11 @@ function twilioClient() {
   return twilio(twilioAccountSid.value(), twilioAuthToken.value());
 }
 
+// Unset secrets read as empty, which keeps the bypass off.
+function reviewerConfig() {
+  return { phone: reviewTestPhone.value(), code: reviewTestCode.value() };
+}
+
 function whatsappParams() {
   return {
     from: whatsappFrom.value(),
@@ -27,7 +35,7 @@ function whatsappParams() {
 }
 
 module.exports = {
-  REGION, twilioAccountSid, twilioAuthToken, otpHmacKey,
+  REGION, twilioAccountSid, twilioAuthToken, otpHmacKey, reviewTestPhone, reviewTestCode,
   whatsappFrom, whatsappDailyContentSid, whatsappOtpContentSid,
-  functionUrl, twilioClient, whatsappParams,
+  functionUrl, twilioClient, whatsappParams, reviewerConfig,
 };

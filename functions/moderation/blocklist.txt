@@ -1,0 +1,109 @@
+# TreasureHunch username blocklist, checked by the claimUsername function (functions/moderation.js).
+#
+# This starter list is deliberately small and neutral: names that could pass for the game's staff.
+# Extend it with slurs and abusive words before relying on it; keep entries lowercase.
+#
+# - A plain line blocks that exact username (also when written with underscores, like "ad_min").
+#   Exact entries are also copied to blockedUsernames/{name}, so the Firestore rules refuse them
+#   on the older client path that writes the username directly.
+# - A line starting with "~" blocks every username that contains the word, after underscores are
+#   removed and common digit swaps are undone (0→o, 1→i, 3→e, 4→a, 5→s, 7→t, 8→b, 9→g).
+#   Use it for slurs. Pick words that don't occur inside ordinary names: "~ass" would block "glassmaker".
+admin
+administrator
+moderator
+mod
+support
+helpdesk
+staff
+official
+system
+root
+security
+everyone
+~treasurehunch
+~hunchteam
+~hunchsupport
+
+# Slurs and abuse, English. "~" only where the word doesn't hide inside ordinary names
+# (so "shit" is exact because of "shital", "nazi" because of "nazir", "rape" because of "grape").
+~fuck
+~fuk
+~cunt
+~nigger
+~nigga
+~faggot
+~fagot
+~retard
+~whore
+~bitch
+~slut
+~pussy
+~penis
+~vagina
+~porn
+~hitler
+~tranny
+~wanker
+~jizz
+~asshole
+~bullshit
+~shithead
+~dickhead
+~motherf
+~terrorist
+~pedophile
+pedo
+shit
+nazi
+rape
+rapist
+raper
+dick
+cock
+cum
+kike
+chink
+paki
+spic
+fag
+twat
+isis
+kkk
+sex
+sexy
+nude
+nudes
+boobs
+# Hindi and Hinglish abuse (most explorers are in India).
+~chutiy
+~chutia
+~madarchod
+~maderchod
+~behenchod
+~bhenchod
+~benchod
+~bhosd
+~gandu
+~haramkhor
+~jhaat
+~randwa
+~lavde
+~lawde
+laude
+chut
+gaand
+gand
+lund
+lauda
+lavda
+lawda
+randi
+harami
+kutta
+kutte
+kamina
+kamine
+tatti
+chinal
+bsdk

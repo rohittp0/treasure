@@ -29,6 +29,7 @@ export const EVENTS = Object.freeze({
   ONBOARDING_HINT_SHOWN: 'onboarding_hint_shown', ONBOARDING_HINT_COMPLETED: 'onboarding_hint_completed',
   INSTALL_PROMPT_SHOWN: 'install_prompt_shown', INSTALL_PROMPT_DISMISSED: 'install_prompt_dismissed',
   INSTALL_STARTED: 'install_started', APP_INSTALLED: 'app_installed',
+  ACCOUNT_DELETE_OPENED: 'account_delete_opened', ACCOUNT_DELETED: 'account_deleted',
 });
 const eventNames = new Set(Object.values(EVENTS));
 const allowedParameters = new Set(['in_app', 'mode', 'role', 'level', 'difficulty', 'round_seconds', 'time_used',

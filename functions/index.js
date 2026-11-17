@@ -8,6 +8,8 @@ const { getMessaging } = require('firebase-admin/messaging');
 
 initializeApp();
 
+const { isBlocked } = require('./moderation');
+
 const resendKey = defineSecret('RESEND_API_KEY');
 const emailFrom = defineString('CHALLENGE_EMAIL_FROM');
 const huntUrl = code => `https://hunch.rohittp.com/?hunt=${encodeURIComponent(code)}`;
@@ -19,6 +21,8 @@ async function checkedChallenge(event) {
   const hunt = (await getFirestore().doc(`friendHunts/${code}`).get()).data();
   if (!hunt || hunt.targetUid !== recipientUid || hunt.hiderUid !== notification.fromUid ||
       hunt.targetUsername == null || !/^[a-z][a-z0-9_]{2,19}$/.test(notification.fromUsername)) return null;
+  // Nothing is delivered from an explorer the recipient has blocked; the app hides the challenge too.
+  if (await isBlocked(getFirestore(), recipientUid, notification.fromUid)) return null;
   return { recipientUid, code, notification };
 }
 
@@ -121,7 +125,8 @@ exports.notifyDailyQuest = onSchedule({
   const tokensByUser = new Map();
   for (const tokenDoc of (await db.collectionGroup('pushTokens').get()).docs) {
     const uid = tokenDoc.ref.parent.parent?.id;
-    if (!uid || typeof tokenDoc.data().token !== 'string') continue;
+    // dailyQuest: false is the device's "Daily quest notifications" switch turned off.
+    if (!uid || typeof tokenDoc.data().token !== 'string' || tokenDoc.data().dailyQuest === false) continue;
     if (!tokensByUser.has(uid)) tokensByUser.set(uid, []);
     if (tokensByUser.get(uid).length < 20) tokensByUser.get(uid).push(tokenDoc);
   }
@@ -155,6 +160,13 @@ exports.notifyDailyQuest = onSchedule({
   await db.doc(`dailyNotifications/${today}`).set({ recipients: tokensByUser.size, sent, finishedAt: new Date() }, { merge: true });
   console.log(`Daily quest ${today}: ${sent} of ${deliveries.length} notifications sent to ${tokensByUser.size} explorers.`);
 });
+
+// ---------------------------------------------------------------------------
+// Moderation: report alerts, bans and username claims. See functions/moderation.js and README, Moderation.
+const moderation = require('./moderation');
+exports.onReportCreated = moderation.onReportCreated;
+exports.claimUsername = moderation.claimUsername;
+exports.banExplorer = moderation.banExplorer;
 
 // ---------------------------------------------------------------------------
 // WhatsApp: one-time codes, sign-in, the daily quest alert and Twilio webhooks.

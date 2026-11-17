@@ -132,9 +132,10 @@ export async function loadProfile(user) {
 }
 
 // The claimUsername function writes the profile and username together and checks the username blocklist.
-// Its verdicts (taken, not allowed, already chosen) are written for explorers. If the function can't be
-// reached at all (not deployed yet, App Check unavailable), the claim falls back to the direct batch, which
-// the rules still allow and check against bans and blockedUsernames.
+// Its verdicts (taken, not allowed, already chosen, banned) are written for explorers. Only when the function
+// itself is down or missing does the claim fall back to the direct batch, which the rules still allow and check
+// against bans and blockedUsernames. An App Check or sign-in failure never falls back.
+const CLAIM_FALLBACK_CODES = ['functions/internal', 'functions/unavailable', 'functions/not-found', 'functions/deadline-exceeded'];
 export async function claimUsername(user, username) {
   const handle = username.trim().toLowerCase();
   if (!/^[a-z][a-z0-9_]{2,19}$/.test(handle)) throw new Error('Use 3–20 characters, starting with a letter. Letters, numbers and underscores work.');
@@ -142,8 +143,15 @@ export async function claimUsername(user, username) {
   catch (error) {
     if (error.code === 'functions/already-exists') throw new Error('That username is taken. Try another.');
     if (['functions/invalid-argument', 'functions/permission-denied', 'functions/failed-precondition'].includes(error.code)) throw new Error(error.message);
-    console.warn('claimUsername unavailable, claiming directly:', error.code || error);
-    await claimUsernameDirectly(user, handle);
+    if (!CLAIM_FALLBACK_CODES.includes(error.code)) {
+      console.warn('Username claim failed:', error);
+      throw new Error('Your username could not be saved. Try again.');
+    }
+    trackEvent(EVENTS.USERNAME_CLAIM_FALLBACK, { reason: error.code.replace('functions/', '') });
+    // The function may have saved the claim before failing to answer.
+    const existing = (await getDoc(profileRef(user.uid))).data();
+    if (existing && existing.username !== handle) throw new Error('You already have a username.');
+    if (!existing) await claimUsernameDirectly(user, handle);
   }
   trackEvent(EVENTS.SIGN_UP, { method: signInMethod(user) });
   return handle;

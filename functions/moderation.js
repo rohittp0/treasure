@@ -7,6 +7,7 @@ const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { onDocumentCreated } = require('firebase-functions/v2/firestore');
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
+const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { defineSecret } = require('firebase-functions/params');
 const { getAuth } = require('firebase-admin/auth');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
@@ -18,6 +19,15 @@ const REMOVED_CLUE = 'This clue was removed by a moderator.';
 const USERNAME = /^[a-z][a-z0-9_]{2,19}$/;
 const USERNAME_RULE = 'Use 3–20 characters, starting with a letter. Letters, numbers and underscores work.';
 const ALERTS_PER_REPORTER_PER_HOUR = 5;
+// The same report (reporter, explorer, kind and hunt) within this window is alerted once.
+const DUPLICATE_WINDOW_MS = 24 * 3_600_000;
+const DIGEST_WINDOW_MS = 48 * 3_600_000;
+const TELEGRAM_TIMEOUT_MS = 10_000;
+// The reason the app gives the report that every Block files (BLOCK_REASON in src/moderation.js).
+// Those reports don't count against the reporter's alert limit while the block exists.
+const BLOCK_REASON = 'Blocked by the reporting explorer.';
+// Report states that need no further alert: sent alone, a repeat of one that was, or sent in a digest.
+const ALERTED = ['sent', 'duplicate', 'digested'];
 const BATCH_LIMIT = 500;
 
 const telegramToken = defineSecret('MODERATION_TELEGRAM_TOKEN');
@@ -170,8 +180,9 @@ async function banExplorerData(db, auth, uid, { reason = '', bannedBy = null } =
   // 1. The ban first: from here the rules refuse every public write, so nothing removed below comes back.
   await db.doc(`bans/${uid}`).set({
     bannedAt: previous.data()?.bannedAt || FieldValue.serverTimestamp(),
-    bannedBy: typeof bannedBy === 'string' ? bannedBy : null,
-    reason: String(reason || '').slice(0, 500),
+    // Running the ban again without a reason or admin keeps the ones stored the first time.
+    bannedBy: typeof bannedBy === 'string' ? bannedBy : previous.data()?.bannedBy || null,
+    reason: reason ? String(reason).slice(0, 500) : previous.data()?.reason || '',
     username,
   }, { merge: true });
 
@@ -237,50 +248,104 @@ function reportAlertText({ projectId, reportId, report, targetName, reporterName
   return lines.join('\n');
 }
 
-// A reporter gets at most ALERTS_PER_REPORTER_PER_HOUR alerts an hour; later reports are kept but not sent.
-async function claimAlertSlot(db, reporterUid, now) {
-  const reference = db.doc(`moderationLimits/${reporterUid}`);
+// Decides, once per report, whether it is alerted on its own:
+// - 'send': alert it. Retries of the same report keep this answer without counting again.
+// - 'duplicate': the same reporter reported the same thing in the last 24 hours, and that was alerted.
+// - 'limited': the reporter had ALERTS_PER_REPORTER_PER_HOUR alerts this hour. The daily digest picks it up.
+// The report every Block files doesn't count against the limit while the block is in place.
+async function claimAlert(db, reportId, report, now) {
+  const reportRef = db.doc(`reports/${reportId}`);
+  const limitRef = db.doc(`moderationLimits/${report.reporterUid}`);
+  const keyRef = limitRef.collection('reports').doc(`${report.targetUid}_${report.kind}_${report.code || 'none'}`);
+  const blockRef = db.doc(`users/${report.reporterUid}/blocks/${report.targetUid}`);
   return db.runTransaction(async transaction => {
-    const previous = (await transaction.get(reference)).data();
-    const windowStart = previous?.windowStart?.toMillis?.() ?? 0;
-    if (!previous || now.getTime() - windowStart >= 3_600_000) {
-      transaction.set(reference, { windowStart: now, count: 1 });
-      return true;
+    const [stored, limit, key, block] = await transaction.getAll(reportRef, limitRef, keyRef, blockRef);
+    if (stored.data()?.alertClaimed) return 'send';
+    const lastAt = key.data()?.lastAt?.toMillis?.() ?? 0;
+    if (key.exists && key.data().reportId !== reportId && now.getTime() - lastAt < DUPLICATE_WINDOW_MS) return 'duplicate';
+    const exempt = report.reason === BLOCK_REASON && block.exists;
+    if (!exempt) {
+      const windowStart = limit.data()?.windowStart?.toMillis?.() ?? 0;
+      const fresh = !limit.exists || now.getTime() - windowStart >= 3_600_000;
+      if (!fresh && limit.data().count >= ALERTS_PER_REPORTER_PER_HOUR) return 'limited';
+      transaction.set(limitRef, fresh ? { windowStart: now, count: 1 } : { windowStart: limit.data().windowStart, count: limit.data().count + 1 });
     }
-    if (previous.count >= ALERTS_PER_REPORTER_PER_HOUR) return false;
-    transaction.update(reference, { count: previous.count + 1 });
-    return true;
+    transaction.set(keyRef, { reportId, lastAt: now });
+    transaction.set(reportRef, { alertClaimed: true }, { merge: true });
+    return 'send';
   });
 }
 
+async function sendTelegram({ fetch, token, chatId, text }) {
+  // Plain text: report reasons are explorers' own words and must not be read as Markdown or HTML.
+  const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: chatId, text: text.slice(0, 4000), disable_web_page_preview: true }),
+    signal: AbortSignal.timeout(TELEGRAM_TIMEOUT_MS),
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    // The token is in the URL, so the URL is never part of the error.
+    throw new Error(`Telegram sendMessage failed (${response.status}): ${detail.slice(0, 200)}`);
+  }
+}
+
+// One report's alert. The trigger retries on failure; a report already alerted is left alone.
 function createReportAlert({ db, fetch, token, chatId, projectId, clock = () => new Date(), log = console }) {
   return async function alert(reportId, report) {
     if (!report || typeof report.reporterUid !== 'string' || typeof report.targetUid !== 'string') return;
     const reference = db.doc(`reports/${reportId}`);
+    if (ALERTED.includes((await reference.get()).data()?.alert)) return;
     if (!token || !chatId) {
       log.error('Report alert skipped: set the MODERATION_TELEGRAM_TOKEN and MODERATION_TELEGRAM_CHAT_ID secrets.');
       await reference.set({ alert: 'unconfigured' }, { merge: true });
       return;
     }
-    if (!await claimAlertSlot(db, report.reporterUid, clock())) {
-      await reference.set({ alert: 'limited' }, { merge: true });
+    const decision = await claimAlert(db, reportId, report, clock());
+    if (decision !== 'send') {
+      await reference.set({ alert: decision }, { merge: true });
       return;
     }
     const [target, reporter] = await db.getAll(db.doc(`profiles/${report.targetUid}`), db.doc(`profiles/${report.reporterUid}`));
     const text = reportAlertText({ projectId, reportId, report, targetName: target.data()?.username, reporterName: reporter.data()?.username });
-    // Plain text: the reason is the reporter's own words and must not be read as Markdown or HTML.
-    const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text: text.slice(0, 4000), disable_web_page_preview: true }),
-    });
-    if (!response.ok) {
+    try {
+      await sendTelegram({ fetch, token, chatId, text });
+    } catch (error) {
       await reference.set({ alert: 'failed' }, { merge: true });
-      const detail = await response.text().catch(() => '');
-      throw new Error(`Telegram alert for report ${reportId} failed (${response.status}): ${detail.slice(0, 200)}`);
+      throw new Error(`Telegram alert for report ${reportId} failed: ${error.message}`);
     }
     await reference.set({ alert: 'sent', alertedAt: FieldValue.serverTimestamp() }, { merge: true });
   };
+}
+
+// The daily digest: every report from the last 48 hours that wasn't alerted (limited, failed, unconfigured, or
+// never processed), so none waits past the 24 hours the Terms promise. Without Telegram it only logs a count.
+async function sendReportDigest({ db, fetch, token, chatId, projectId, clock = () => new Date(), log = console }) {
+  const since = new Date(clock().getTime() - DIGEST_WINDOW_MS);
+  const snapshot = await db.collection('reports').where('createdAt', '>=', since).get();
+  const pending = snapshot.docs.filter(doc => !ALERTED.includes(doc.data().alert));
+  if (!pending.length) return { pending: 0, sent: false };
+  if (!token || !chatId) {
+    log.error(`Report digest: ${pending.length} reports from the last 48 hours were not alerted. Set the MODERATION_TELEGRAM_TOKEN and MODERATION_TELEGRAM_CHAT_ID secrets, and review them in the reports collection.`);
+    return { pending: pending.length, sent: false };
+  }
+  const shown = pending.slice(0, 30);
+  const lines = [
+    `TreasureHunch report digest: ${pending.length} reports from the last 48 hours were not alerted one by one. Review each within 24 hours.`,
+    ...shown.map(doc => {
+      const report = doc.data();
+      return `\n- ${report.kind}${report.code ? ` (hunt ${report.code})` : ''}: uid ${report.targetUid}, reported by ${report.reporterUid}, ${report.alert || 'not processed'}\n  Reason: ${report.reason || '(none given)'}\n  ${consoleLink(projectId, `reports/${doc.id}`)}`;
+    }),
+  ];
+  if (pending.length > shown.length) lines.push(`\n…and ${pending.length - shown.length} more: ${consoleLink(projectId, 'reports')}`);
+  await sendTelegram({ fetch, token, chatId, text: lines.join('\n') });
+  for (let index = 0; index < shown.length; index += BATCH_LIMIT) {
+    const batch = db.batch();
+    for (const doc of shown.slice(index, index + BATCH_LIMIT)) batch.set(doc.ref, { alert: 'digested', digestedAt: FieldValue.serverTimestamp() }, { merge: true });
+    await batch.commit();
+  }
+  return { pending: pending.length, sent: true };
 }
 
 const currentProjectId = () =>
@@ -289,9 +354,11 @@ const currentProjectId = () =>
 // ---------------------------------------------------------------------------
 // Cloud Functions, exported from index.js.
 
+// Retried until Telegram accepts the alert; createReportAlert does nothing for a report already alerted.
 const onReportCreated = onDocumentCreated({
   document: 'reports/{reportId}',
   region: REGION,
+  retry: true,
   secrets: [telegramToken, telegramChatId],
 }, event => createReportAlert({
   db: getFirestore(),
@@ -300,6 +367,19 @@ const onReportCreated = onDocumentCreated({
   chatId: telegramChatId.value(),
   projectId: currentProjectId(),
 })(event.params.reportId, event.data?.data()));
+
+const moderationDigest = onSchedule({
+  schedule: '0 6 * * *',
+  timeZone: 'Etc/UTC',
+  region: REGION,
+  retryCount: 1,
+  secrets: [telegramToken, telegramChatId],
+}, async () => {
+  const result = await sendReportDigest({
+    db: getFirestore(), fetch, token: telegramToken.value(), chatId: telegramChatId.value(), projectId: currentProjectId(),
+  });
+  console.log(`Report digest: ${result.pending} pending, ${result.sent ? 'sent' : 'not sent'}.`);
+});
 
 const claimUsername = onCall({ region: REGION, enforceAppCheck: true }, async request => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in to choose a username.');
@@ -326,8 +406,8 @@ const banExplorer = onCall({ region: REGION, timeoutSeconds: 300 }, async reques
 });
 
 module.exports = {
-  FORMER_EXPLORER, REMOVED_CLUE, ALERTS_PER_REPORTER_PER_HOUR,
+  FORMER_EXPLORER, REMOVED_CLUE, ALERTS_PER_REPORTER_PER_HOUR, BLOCK_REASON,
   loadBlocklist, blockedReason, syncBlockedUsernames, claimUsernameData, isBlocked, banExplorerData,
-  requireAdmin, consoleLink, reportAlertText, createReportAlert,
-  onReportCreated, claimUsername, banExplorer,
+  requireAdmin, consoleLink, reportAlertText, createReportAlert, sendReportDigest,
+  onReportCreated, moderationDigest, claimUsername, banExplorer,
 };

@@ -9,7 +9,8 @@ const $ = selector => document.querySelector(selector);
 // The report kind a block files, by where the block was made.
 const BLOCK_KIND = { challenge: 'clue', hunt: 'hunt', map: 'profile' };
 
-// target: { uid, name (shown, e.g. '@scout'), context: 'challenge' | 'hunt' | 'map', code?, source: 'inbox' | 'result' | 'map' }
+// target: { uid, name (shown, e.g. '@scout'), context: 'challenge' | 'hunt' | 'map', code?, kind? (files every report
+// as this kind), source: 'inbox' | 'result' | 'clues' | 'map' }
 export function createModerationDialog({ getUser, requestSignIn, showToast, onBlocked = () => {} }) {
   const dialog = $('#moderation-dialog');
   let target = null;
@@ -51,7 +52,7 @@ export function createModerationDialog({ getUser, requestSignIn, showToast, onBl
       const reason = reportReason(option, $('#moderation-details').value);
       await submit(async (player, current) => {
         if (alsoBlock) await block(player, current);
-        await reportExplorer(player, { targetUid: current.uid, kind: option.kind, code: current.code, reason });
+        await reportExplorer(player, { targetUid: current.uid, kind: current.kind || option.kind, code: current.code, reason });
         trackEvent(EVENTS.REPORT_SENT, { source: current.source, reason: option.id });
       }, alsoBlock ? `Thanks. ${target.name || 'This explorer'} is blocked, and we'll review your report within 24 hours.`
         : "Thanks. We'll review your report within 24 hours.", alsoBlock);
@@ -69,7 +70,7 @@ export function createModerationDialog({ getUser, requestSignIn, showToast, onBl
     $('#moderation-block').addEventListener('click', () => submit(async (player, current) => {
       await block(player, current);
       // The block already hides them; the report only lets the developer look, so a failure is not the explorer's problem.
-      await reportExplorer(player, { targetUid: current.uid, kind: BLOCK_KIND[current.context] || 'profile', code: current.code, reason: BLOCK_REASON })
+      await reportExplorer(player, { targetUid: current.uid, kind: current.kind || BLOCK_KIND[current.context] || 'profile', code: current.code, reason: BLOCK_REASON })
         .catch(error => console.warn('The report for this block was not sent:', error));
     }, `${target.name || 'This explorer'} is blocked.`, true));
   }

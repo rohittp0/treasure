@@ -65,8 +65,9 @@ Selections can instead lead to `selection_cancelled`; seekers can open additiona
 | `whatsapp_prompt_shown` | The "Get tomorrow's country on WhatsApp" card was shown on a daily quest result (once per result); `source=result_card`, `step=verify` (number not yet verified) or `consent` (verified, one tap) |
 | `whatsapp_prompt_dismissed` | "Not now" was tapped on that card (it then stays hidden until the next daily quest, the next UTC day); `source=result_card` |
 | `whatsapp_unsubscribe_viewed` | The template's `?whatsapp=stop` link was opened, sent on page load before any sign-in; `source=link` |
-| `report_sent` | A report was filed from the Report sheet; `source=inbox` (a received challenge), `result` (a friend-hunt result) or `map` (another explorer's map), `reason=offensive_clues/harassment/sexual/offensive_username/spam/other` (the option chosen, a fixed code; the explorer's own details are never sent) |
+| `report_sent` | A report was filed from the Report sheet; `source=inbox` (a received challenge), `clues` (the clue sheet during a friend hunt), `result` (a friend-hunt result) or `map` (another explorer's map), `reason=offensive_clues/harassment/sexual/offensive_username/spam/other` (the option chosen, a fixed code; the explorer's own details are never sent) |
 | `explorer_blocked` | An explorer was blocked, from Block or from "Also block" on a report; `source` as for `report_sent` |
+| `username_claim_fallback` | The `claimUsername` function was down or missing, so the username was claimed directly; `reason=internal/unavailable/not-found/deadline-exceeded` |
 
 Daily-quest hunts reuse the hunt events with `mode=daily` and add `streak` on `hunt_completed`. Common properties include `account_status=guest/signed_in`, `mode=solo/daily/multiplayer`, `role`, and applicable hunt statistics. Time used includes paid clue, reveal and wrong-guess costs. Legacy friend hunts remain 120 seconds; current hunts use 180 seconds.
 

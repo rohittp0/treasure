@@ -6,6 +6,8 @@ service cloud.firestore {
       return !exists(/databases/$(database)/documents/bans/$(request.auth.uid));
     }
 
+    // TODO: once the claimUsername function is confirmed live and old web bundles have gone, change the client
+    // creates of profiles and usernames to `if false`, so every claim goes through the server's blocklist.
     match /profiles/{userId} {
       allow get: if request.auth != null && request.auth.uid == userId;
       allow list: if false;
@@ -341,6 +343,8 @@ service cloud.firestore {
         && request.resource.data.targetUid.size() > 0
         && request.resource.data.targetUid.size() <= 128
         && request.resource.data.targetUid != request.auth.uid
+        // Every reportable explorer has a profile: sending challenges, playing friend hunts and keeping a map all need a username.
+        && exists(/databases/$(database)/documents/profiles/$(request.resource.data.targetUid))
         && request.resource.data.kind in ['clue', 'profile', 'hunt', 'username']
         && (!('code' in request.resource.data) ||
           (request.resource.data.code is string && request.resource.data.code.matches('[A-HJ-NP-Z2-9]{10}')))
@@ -354,7 +358,8 @@ service cloud.firestore {
     match /blockedUsernames/{username} {
       allow read, write: if false;
     }
-    match /moderationLimits/{uid} {
+    // Per-reporter alert limits, and under them the keys that spot a repeated report.
+    match /moderationLimits/{document=**} {
       allow read, write: if false;
     }
 

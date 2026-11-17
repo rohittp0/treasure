@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { BLOCK_REASON, REPORT_OPTIONS, otherExplorer, reportFields, reportReason, visibleChallenges, visibleHunts } from '../src/moderation.js';
 import { EVENTS, createEventTracker } from '../src/events.js';
+import { readFileSync } from 'node:fs';
 
 test('report options file only kinds the rules accept', () => {
   for (const options of Object.values(REPORT_OPTIONS)) {
@@ -54,6 +55,7 @@ test("blocked explorers' challenges and friend hunts are hidden", () => {
 test('report and block events carry only fixed codes', () => {
   assert.equal(EVENTS.REPORT_SENT, 'report_sent');
   assert.equal(EVENTS.EXPLORER_BLOCKED, 'explorer_blocked');
+  assert.equal(EVENTS.USERNAME_CLAIM_FALLBACK, 'username_claim_fallback');
   const calls = [];
   const tracker = createEventTracker({ google: (...args) => calls.push(args) });
   tracker.track(EVENTS.REPORT_SENT, { source: 'inbox', reason: 'offensive_clues', uid: 'secret', code: 'ABCDEFGHJK' });
@@ -62,4 +64,9 @@ test('report and block events carry only fixed codes', () => {
     { source: 'inbox', reason: 'offensive_clues', account_status: 'guest' },
     { source: 'map', account_status: 'guest' },
   ]);
+});
+
+test("the server recognises the app's block reports by the same reason", () => {
+  const server = readFileSync(new URL('../functions/moderation.js', import.meta.url), 'utf8');
+  assert.ok(server.includes(`const BLOCK_REASON = '${BLOCK_REASON}';`), 'BLOCK_REASON differs between src/moderation.js and functions/moderation.js');
 });

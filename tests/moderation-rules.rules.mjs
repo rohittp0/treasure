@@ -44,6 +44,7 @@ export async function testModerationRules(environment) {
     { ...report, reporterUid: 'mod-other' },
     { ...report, targetUid: 'mod-ok' },
     { ...report, targetUid: '' },
+    { ...report, targetUid: 'mod-nobody' },
     { ...report, kind: 'spam' },
     { ...report, code: 'not a code' },
     { ...report, reason: 'x'.repeat(201) },

@@ -77,6 +77,8 @@ let atlasView = null;
 let blockedUids = new Set();
 let accountHistory = null;
 let inboxChallenges = [];
+// Settles once the signed-in explorer's blocked list has loaded, so a ?hunt= link can wait for it.
+let blocksLoaded = Promise.resolve();
 // WhatsApp daily quest alert: the explorer's private state, the result card and the ?whatsapp=stop link.
 let whatsappState = null;
 let resultAlertVerify = null;
@@ -422,12 +424,20 @@ function openSignIn(source, { title, copy, resumeResult = false } = {}) {
   $('#sign-in-status').textContent = '';
   $('#sign-in-google').disabled = false;
   $('#sign-in-terms').checked = false;
+  $('#sign-in-terms').disabled = false;
+  // Signing in only to stop WhatsApp alerts or to delete the account asks for no new agreement.
+  $('#sign-in-dialog .sign-in-terms').classList.toggle('hidden', TERMS_EXEMPT_SOURCES.has(source));
   signInVerify?.destroy();
   // WhatsApp is the primary way in: the number field is ready as soon as the sheet opens.
   // The unticked box is the only opt-in here; signing in alone never turns alerts on.
   signInVerify = createWhatsAppVerify($('#sign-in-whatsapp-verify'), {
     purpose: 'login', source, consent: source === 'unsubscribe' ? 'none' : 'optional', submitLabel: 'Send sign-in code',
-    beforeSend: () => termsAgreed() ? '' : TERMS_NEEDED,
+    // Once a code is on its way the box is locked, so the sign-in it finishes is the one agreed to.
+    beforeSend: () => {
+      if (!termsAgreed()) return TERMS_NEEDED;
+      $('#sign-in-terms').disabled = true;
+      return '';
+    },
     onVerified: ({ player, consent }) => {
       if (consent && player) signInOptInTask = optInAfterSignIn(player);
       closeSignIn();
@@ -442,18 +452,24 @@ function openSignIn(source, { title, copy, resumeResult = false } = {}) {
 // Every sign-in needs the unticked Terms of Use box ticked first. The acceptance is stored once the
 // explorer is signed in (recordTermsAcceptance), since a Google redirect reloads the page first.
 const TERMS_NEEDED = 'Tick the box to agree to the Terms of Use first.';
+// Sign-ins that only stop WhatsApp alerts (?whatsapp=stop) or delete the account (?account=delete) are exempt.
+const TERMS_EXEMPT_SOURCES = new Set(['unsubscribe', 'account_delete']);
+let termsRecording = null;
 function termsAgreed() {
+  if (TERMS_EXEMPT_SOURCES.has(signInContext?.source)) return true;
   if (!$('#sign-in-terms').checked) return false;
   termsTicked = true;
   session.set(TERMS_KEY, '1');
   return true;
 }
 
+// The pending flags are cleared only once the acceptance is stored; after a failure the next auth event tries again.
 function recordTermsAcceptance(player) {
-  if (!termsTicked && session.get(TERMS_KEY) !== '1') return;
-  termsTicked = false;
-  session.remove(TERMS_KEY);
-  acceptTerms(player).catch(error => console.warn('Could not record the Terms of Use acceptance:', error));
+  if (termsRecording || (!termsTicked && session.get(TERMS_KEY) !== '1')) return;
+  termsRecording = acceptTerms(player)
+    .then(() => { termsTicked = false; session.remove(TERMS_KEY); })
+    .catch(error => console.warn('Could not record the Terms of Use acceptance:', error))
+    .finally(() => { termsRecording = null; });
 }
 
 // In an in-app browser Google is hidden: WhatsApp works there, and a small link (tapped, never automatic)
@@ -927,6 +943,8 @@ function watchInbox(player) {
   let received = null;
   let blocksReady = false;
   blockedUids = new Set();
+  let markBlocksLoaded;
+  blocksLoaded = new Promise(resolve => { markBlocksLoaded = resolve; });
   const stopInbox = watchChallenges(player, next => {
     if (user?.uid !== player.uid) return;
     received = next;
@@ -936,11 +954,13 @@ function watchInbox(player) {
     if (user?.uid !== player.uid) return;
     blockedUids = blocked;
     blocksReady = true;
+    markBlocksLoaded();
     renderInbox();
     renderAccountHistory();
   }, error => {
     console.warn('Could not load blocked explorers:', error);
     blocksReady = true;
+    markBlocksLoaded();
     renderInbox();
   });
   stopChallenges = () => {
@@ -949,6 +969,7 @@ function watchInbox(player) {
     blockedUids = new Set();
     inboxChallenges = [];
     accountHistory = null;
+    blocksLoaded = Promise.resolve();
   };
 
   function renderInbox() {
@@ -1194,6 +1215,7 @@ function openHuntScreen() {
   elements.home.classList.add('hidden');
   elements.result.classList.add('hidden');
   elements.game.classList.remove('hidden');
+  $('#hunt-moderation').classList.add('hidden');
   elements.hud.classList.remove('hidden');
   document.body.classList.add('in-game', 'solo-game');
   $('#end-level-button').classList.remove('hidden');
@@ -1879,6 +1901,8 @@ const friend = createFriendController({
   clearMapSelection,
   setSheetCollapsed,
   isBlocked: uid => blockedUids.has(uid),
+  // Never waits long: a slow or failed list must not keep an invite from opening.
+  whenBlocksLoaded: () => Promise.race([blocksLoaded, new Promise(resolve => setTimeout(resolve, 5000))]),
   openModeration: (action, target) => moderation.open(action, target),
 });
 
@@ -1890,8 +1914,8 @@ const moderation = createModerationDialog({
     showToast(message);
     if (elements.accountDialog.open) $('#account-challenge-status').textContent = message;
   },
-  // A blocked explorer's result closes; their map stays, since maps are public anyway.
-  onBlocked: target => { if (target.context === 'hunt' && friend.mode.endsWith('-result')) friend.home(); },
+  // Blocking the other explorer of a hunt leaves it (result or clue sheet); a map stays, since maps are public anyway.
+  onBlocked: target => { if (target.context === 'hunt' && friend.mode !== 'idle') friend.home(); },
 });
 
 $('#welcome-notifications').addEventListener('click', async () => {
@@ -1964,8 +1988,8 @@ $('#welcome-form').addEventListener('submit', async event => {
     }
     $('#welcome-dialog').close();
     welcomeFor = null;
-    friend.onAuth(user);
     watchInbox(user);
+    friend.onAuth(user);
     renderLeaderboardGate();
     postPendingGuestEntry(user);
     const claimedCountry = lastResult?.mode === 'daily' && lastResult.status === 'won' ? lastResult.puzzle.country : '';
@@ -2300,8 +2324,8 @@ watchUser(async nextUser => {
         showWelcome(nextUser, username);
       }
       if (username) {
-        friend.onAuth(nextUser);
         watchInbox(nextUser);
+        friend.onAuth(nextUser);
         if (browserNotificationsAvailable() && Notification.permission === 'granted')
           registerChallengePush(nextUser).catch(error => console.warn('Background alerts could not start:', error));
       }

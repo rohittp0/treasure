@@ -474,3 +474,4 @@ button.leaderboard-row:hover{background:#f4e7cb}
 .moderation-dialog textarea{width:100%;min-height:64px;border:1px solid #bba780;background:#fff9e8;color:#17383a;border-radius:5px;padding:10px 12px;font:13px DM Sans,sans-serif;resize:vertical}
 .moderation-dialog .primary-button,.moderation-dialog .secondary-button{width:100%;margin:10px 0 0}
 .moderation-dialog .friend-status{min-height:0;margin:8px 0 0}
+.game-panel .hunt-moderation{justify-content:center;margin:-14px 22px 18px}

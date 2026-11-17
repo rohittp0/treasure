@@ -165,6 +165,7 @@ exports.notifyDailyQuest = onSchedule({
 // Moderation: report alerts, bans and username claims. See functions/moderation.js and README, Moderation.
 const moderation = require('./moderation');
 exports.onReportCreated = moderation.onReportCreated;
+exports.moderationDigest = moderation.moderationDigest;
 exports.claimUsername = moderation.claimUsername;
 exports.banExplorer = moderation.banExplorer;
 

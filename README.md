@@ -136,6 +136,8 @@ The design and the decisions behind it are in [docs/whatsapp-daily-quest.md](doc
    firebase functions:secrets:set TWILIO_AUTH_TOKEN --project treasurehunch
    ```
    The emulator reads the same names from `functions/.secret.local` (gitignored). Never commit it.
+
+   **Reviewer test number.** Store reviewers cannot receive WhatsApp codes, so `requestWhatsAppOtp` accepts two more secrets, `REVIEW_TEST_PHONE` (E.164) and `REVIEW_TEST_CODE` (6 digits). When both are valid, that number gets the fixed code and no message is sent; rate limits and verification are unchanged. Before the first deploy, set both with `firebase functions:secrets:set`; use the placeholder value `disabled` to keep the bypass off. Use a fictitious number such as `+1 415 555 01xx`, never a real person's number. Put the values only in App Store Connect and Play review notes, and rotate both secrets after each store approval.
 2. **Parameters.** `WHATSAPP_FROM`, `WHATSAPP_DAILY_CONTENT_SID` and `WHATSAPP_OTP_CONTENT_SID` are in `functions/.env.treasurehunch`, next to `CHALLENGE_EMAIL_FROM`. The deploy workflow rewrites only the `CHALLENGE_EMAIL_FROM` line and keeps the WhatsApp values.
 3. **Custom-token signing.** WhatsApp sign-in calls `createCustomToken`, which needs `iam.serviceAccounts.signBlob` on the functions' runtime service account. It has Editor, which doesn't include it. Grant **Service Account Token Creator** once:
    ```sh

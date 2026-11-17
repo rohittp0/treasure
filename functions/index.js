@@ -169,7 +169,7 @@ const twilioSecrets = [whatsappConfig.twilioAccountSid, whatsappConfig.twilioAut
 const otpOptions = {
   region: whatsappConfig.REGION,
   enforceAppCheck: true,
-  secrets: [...twilioSecrets, whatsappConfig.otpHmacKey],
+  secrets: [...twilioSecrets, whatsappConfig.otpHmacKey, whatsappConfig.reviewTestPhone, whatsappConfig.reviewTestCode],
 };
 
 function otpHandlers() {
@@ -179,6 +179,7 @@ function otpHandlers() {
     twilio: whatsappConfig.twilioClient(),
     hmacKey: whatsappConfig.otpHmacKey.value(),
     params: whatsappConfig.whatsappParams(),
+    reviewer: whatsappConfig.reviewerConfig(),
   });
 }
 

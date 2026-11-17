@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
 import { doc, getDoc, setDoc, updateDoc, writeBatch, serverTimestamp, Timestamp, collection, getDocs, query, where } from 'firebase/firestore';
+import { testModerationRules } from './moderation-rules.rules.mjs';
 import { testWhatsAppRules } from './whatsapp-rules.rules.mjs';
 
 const projectId = 'demo-treasure-friend-tests';
@@ -252,6 +253,7 @@ try {
     await assertFails(setDoc(doc(seeker, 'profiles/seeker'), { username: 'mapfinder', createdAt: serverTimestamp(), ...extra }));
     await assertFails(updateDoc(doc(seeker, 'usernames/mapfinder'), extra));
   }
+  await testModerationRules(environment);
   await testWhatsAppRules(environment);
   console.log('Daily quest rules: one attempt per day, monthly board and explorer maps passed.');
   console.log('Friend hunt rules: username claims, direct challenges, private answer, join, time costs, guesses, reveal, and finish passed.');

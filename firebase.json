@@ -54,6 +54,9 @@
       }
     ],
     "rewrites": [
+      { "source": "/terms", "destination": "/terms.html" },
+      { "source": "/privacy", "destination": "/privacy.html" },
+      { "source": "/support", "destination": "/support.html" },
       {
         "source": "!/@(assets|fonts|icons|illustrations|.well-known)/**",
         "destination": "/index.html"

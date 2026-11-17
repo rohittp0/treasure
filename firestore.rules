@@ -1,6 +1,13 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // A banned explorer (bans/{uid}, written by the banExplorer function) can't write anything public.
+    function notBanned() {
+      return !exists(/databases/$(database)/documents/bans/$(request.auth.uid));
+    }
+
+    // TODO: once the claimUsername function is confirmed live and old web bundles have gone, change the client
+    // creates of profiles and usernames to `if false`, so every claim goes through the server's blocklist.
     match /profiles/{userId} {
       allow get: if request.auth != null && request.auth.uid == userId;
       allow list: if false;
@@ -11,7 +18,10 @@ service cloud.firestore {
         && request.resource.data.username.matches('[a-z][a-z0-9_]{2,19}')
         && request.resource.data.createdAt == request.time
         && !exists(/databases/$(database)/documents/usernames/$(request.resource.data.username))
-        && getAfter(/databases/$(database)/documents/usernames/$(request.resource.data.username)).data.uid == userId;
+        && getAfter(/databases/$(database)/documents/usernames/$(request.resource.data.username)).data.uid == userId
+        // Everything an explorer posts needs a username, so the Terms of Use must be accepted first
+        // (before, or in the same batch).
+        && getAfter(/databases/$(database)/documents/users/$(userId)).data.get('termsAcceptedAt', null) != null;
       allow update, delete: if false;
     }
 
@@ -20,6 +30,8 @@ service cloud.firestore {
       allow list: if false;
       allow create: if request.auth != null
         && username.matches('[a-z][a-z0-9_]{2,19}')
+        && notBanned()
+        && !exists(/databases/$(database)/documents/blockedUsernames/$(username))
         && request.resource.data.keys().hasOnly(['uid', 'displayName', 'createdAt'])
         && request.resource.data.keys().hasAll(['uid', 'displayName', 'createdAt'])
         && request.resource.data.uid == request.auth.uid
@@ -70,6 +82,7 @@ service cloud.firestore {
       }
       function validCreate() {
         return request.auth != null
+          && notBanned()
           && code.matches('[A-HJ-NP-Z2-9]{10}')
           && request.resource.data.keys().hasOnly(fields().concat(['hiderUsername', 'roundSeconds']))
           && request.resource.data.keys().hasAll(fields())
@@ -115,6 +128,7 @@ service cloud.firestore {
       }
       function validJoin() {
         return request.auth != null
+          && notBanned()
           && resource.data.status == 'waiting'
           && request.auth.uid != resource.data.hiderUid
           && (resource.data.targetUid == null || resource.data.targetUid == request.auth.uid)
@@ -221,6 +235,7 @@ service cloud.firestore {
       function validEntry() {
         return request.auth != null
           && request.auth.uid == userId
+          && notBanned()
           && request.resource.data.keys().hasOnly(['uid', 'name', 'averageTenths', 'levelsCompleted', 'highestLevel', 'dailyFinds', 'updatedAt'])
           && request.resource.data.keys().hasAll(['uid', 'name', 'averageTenths', 'levelsCompleted', 'highestLevel', 'updatedAt'])
           && request.resource.data.uid == userId
@@ -259,6 +274,7 @@ service cloud.firestore {
         let data = request.resource.data;
         return request.auth != null
           && request.auth.uid == userId
+          && notBanned()
           && month.matches('[0-9]{4}-[0-9]{2}')
           && data.keys().hasOnly(['uid', 'name', 'month', 'found', 'played', 'timeUsed', 'rankScore', 'updatedAt'])
           && data.keys().hasAll(['uid', 'name', 'month', 'found', 'played', 'timeUsed', 'rankScore', 'updatedAt'])
@@ -285,6 +301,7 @@ service cloud.firestore {
       function validAtlas() {
         let data = request.resource.data;
         return request.auth != null
+          && notBanned()
           && data.keys().hasOnly(['uid', 'name', 'countries', 'count', 'updatedAt'])
           && data.keys().hasAll(['uid', 'name', 'countries', 'count', 'updatedAt'])
           && data.uid == request.auth.uid
@@ -314,6 +331,38 @@ service cloud.firestore {
     }
     // Daily alert message SID → recipient marker, for Twilio status callbacks.
     match /whatsappMessages/{messageSid} {
+      allow read, write: if false;
+    }
+
+    // Moderation (see functions/moderation.js). Explorers file reports; only the server reads them,
+    // alerts the developer and bans. bans, blockedUsernames and the alert limits are server-only.
+    match /reports/{reportId} {
+      allow read, update, delete: if false;
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly(['reporterUid', 'targetUid', 'kind', 'code', 'reason', 'createdAt'])
+        && request.resource.data.keys().hasAll(['reporterUid', 'targetUid', 'kind', 'reason', 'createdAt'])
+        && request.resource.data.reporterUid == request.auth.uid
+        && request.resource.data.targetUid is string
+        && request.resource.data.targetUid.size() > 0
+        && request.resource.data.targetUid.size() <= 128
+        && request.resource.data.targetUid != request.auth.uid
+        // Every reportable explorer has a profile: sending challenges, playing friend hunts and keeping a map all need a username.
+        && exists(/databases/$(database)/documents/profiles/$(request.resource.data.targetUid))
+        && request.resource.data.kind in ['clue', 'profile', 'hunt', 'username']
+        && (!('code' in request.resource.data) ||
+          (request.resource.data.code is string && request.resource.data.code.matches('[A-HJ-NP-Z2-9]{10}')))
+        && request.resource.data.reason is string
+        && request.resource.data.reason.size() <= 200
+        && request.resource.data.createdAt == request.time;
+    }
+    match /bans/{uid} {
+      allow read, write: if false;
+    }
+    match /blockedUsernames/{username} {
+      allow read, write: if false;
+    }
+    // Per-reporter alert limits, and under them the keys that spot a repeated report.
+    match /moderationLimits/{document=**} {
       allow read, write: if false;
     }
 
@@ -347,10 +396,14 @@ service cloud.firestore {
       allow read: if owner();
       allow create: if owner()
         && !('whatsapp' in request.resource.data)
-        && (!('whatsappPromptSnoozedAt' in request.resource.data) || request.resource.data.whatsappPromptSnoozedAt == request.time);
+        && (!('whatsappPromptSnoozedAt' in request.resource.data) || request.resource.data.whatsappPromptSnoozedAt == request.time)
+        && (!('termsAcceptedAt' in request.resource.data) || request.resource.data.termsAcceptedAt == request.time);
       allow update: if owner()
         && (!changed().hasAny(['whatsappPromptSnoozedAt']) || request.resource.data.whatsappPromptSnoozedAt == request.time)
-        && (!changed().hasAny(['whatsapp']) || validWhatsAppChange());
+        && (!changed().hasAny(['whatsapp']) || validWhatsAppChange())
+        // Terms of Use acceptance is recorded once, with the server time.
+        && (!changed().hasAny(['termsAcceptedAt'])
+          || (!('termsAcceptedAt' in resource.data) && request.resource.data.termsAcceptedAt == request.time));
       allow delete: if false;
 
       match /hunts/{huntId} {
@@ -397,6 +450,16 @@ service cloud.firestore {
         allow delete: if false;
       }
 
+      // Explorers this explorer has blocked: their challenges and hunts are hidden, and pushes from them skipped.
+      match /blocks/{otherUid} {
+        allow get, list, delete: if request.auth != null && request.auth.uid == userId;
+        // Blocking again just restamps the time, so a retried block never fails.
+        allow create, update: if request.auth != null && request.auth.uid == userId
+          && otherUid != userId
+          && request.resource.data.keys().hasOnly(['createdAt'])
+          && request.resource.data.createdAt == request.time;
+      }
+
       match /notifications/{code} {
         allow get, list: if request.auth != null && request.auth.uid == userId;
         allow create: if request.auth != null
@@ -423,9 +486,11 @@ service cloud.firestore {
         allow list: if false;
         allow create, update: if request.auth != null && request.auth.uid == userId
           && tokenHash.matches('[a-f0-9]{64}')
-          && request.resource.data.keys().hasOnly(['token', 'createdAt', 'platform'])
+          && request.resource.data.keys().hasOnly(['token', 'createdAt', 'platform', 'dailyQuest'])
           && request.resource.data.keys().hasAll(['token', 'createdAt'])
           && (!('platform' in request.resource.data) || request.resource.data.platform in ['web', 'android', 'ios'])
+          // dailyQuest: false turns the daily quest push off for this device (notifyDailyQuest skips it).
+          && (!('dailyQuest' in request.resource.data) || request.resource.data.dailyQuest is bool)
           && request.resource.data.token is string
           && request.resource.data.token.size() > 20
           && request.resource.data.token.size() < 500

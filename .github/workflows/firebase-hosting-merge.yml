@@ -34,8 +34,9 @@ jobs:
       - name: Function tests (emulator, Twilio mocked)
         run: npx --yes firebase-tools@14 emulators:exec --only firestore --project demo-treasure-friend-tests 'node --test --test-concurrency=1 tests/*.emulator.mjs'
 
+  # Hosting waits for the rules and functions, so a new web game never goes live against old rules.
   deploy_hosting:
-    needs: test
+    needs: [test, deploy_backend]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -77,6 +78,25 @@ jobs:
       - uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.FIREBASE_DEPLOY_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v2
+      # A secret the functions declare must exist, with a version, and the runtime service account must already be
+      # able to read it: this account (Secret Manager Viewer) can't grant that, so the deploy would fail in
+      # "prepare" and take the Firestore rules release down with it. Viewer can read the metadata and IAM policy
+      # checked here. See README, Moderation.
+      - name: Check deploy configuration (function secrets)
+        env:
+          RUNTIME_ACCOUNT: serviceAccount:555455406222-compute@developer.gserviceaccount.com
+          SECRETS: MODERATION_TELEGRAM_TOKEN MODERATION_TELEGRAM_CHAT_ID
+        run: |
+          for secret in $SECRETS; do
+            gcloud secrets describe "$secret" --project treasurehunch --format='value(name)' >/dev/null \
+              || { echo "::error::Secret $secret is missing or not readable by the deploy account. Set it with: firebase functions:secrets:set $secret --project treasurehunch"; exit 1; }
+            [ -n "$(gcloud secrets versions list "$secret" --project treasurehunch --filter="state:'ENABLED'" --limit=1 --format='value(name)')" ] \
+              || { echo "::error::Secret $secret has no enabled version, or its versions are not readable by the deploy account. Set it again with firebase functions:secrets:set."; exit 1; }
+            [ -n "$(gcloud secrets get-iam-policy "$secret" --project treasurehunch --flatten='bindings[].members' \
+                --filter="bindings.role='roles/secretmanager.secretAccessor' AND bindings.members='$RUNTIME_ACCOUNT'" --format='value(bindings.members)')" ] \
+              || { echo "::error::The functions runtime account can't read $secret, or the secret's IAM policy is missing or not readable by the deploy account. Grant roles/secretmanager.secretAccessor (README, Moderation)."; exit 1; }
+          done
       # The functions read CHALLENGE_EMAIL_FROM as a parameter; CI cannot answer the deploy prompt for it.
       # The committed file already holds the WhatsApp parameters, so only this line is replaced.
       - name: Write function parameters

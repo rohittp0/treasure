@@ -90,6 +90,50 @@ firebase deploy --only firestore:rules,functions,hosting --project treasurehunch
 
 The deploy prompts for `CHALLENGE_EMAIL_FROM`; enter a sender on your verified email domain. Challenge emails and background alerts link to `https://hunch.rohittp.com/`. Do not put the Resend key in a Vite or Hosting environment variable.
 
+### Moderation
+
+Friend-hunt clues and public usernames are user-generated content, so the game follows App Store Guideline 1.2 (spec decision 22). The code is in `functions/moderation.js`, `src/moderation.js` and `src/moderation-dialog.js`; the pages are `public/terms.html`, `public/privacy.html` and `public/support.html` (also served at `/terms`, `/privacy` and `/support`).
+
+- **Terms before sign-in.** The sign-in sheet has an unticked "I agree to the Terms of Use" box. Google and WhatsApp sign-in only start once it is ticked (the box locks once a WhatsApp code is sent), and the acceptance is stored once as `users/{uid}.termsAcceptedAt` (the server time), retried on the next sign-in event if that write fails. Signing in only to stop WhatsApp alerts (`?whatsapp=stop`) or to delete the account (`?account=delete`, source `account_delete`) shows no box and records nothing: that exemption covers only that action. **Choosing a username needs the Terms accepted**, and everything an explorer posts needs a username. So an account without `termsAcceptedAt` (from before the box, or from an exempt sign-in) gets the unticked box in the username dialog. `claimUsername` refuses with `failed-precondition` (`reason: 'terms'`), and the rules refuse a `profiles` create unless `users/{uid}.termsAcceptedAt` is set, before or in the same batch.
+- **Report.** Received challenges in My logs, the clue sheet during a friend hunt, friend-hunt results and other explorers' maps have Report. A report is a create-only `reports/{id}` document (`reporterUid`, `targetUid`, `kind` = `clue`, `hunt`, `profile` or `username`, an optional hunt `code`, a `reason` of at most 200 characters, `createdAt`), which clients can't read; the reported explorer must have a profile. The `onReportCreated` function sends it to the developer on Telegram, as plain text with Firebase console links to the report, the hunt, the explorer's map and `users/{uid}`, with a 10-second timeout per call. Network errors, timeouts, 429 and 5xx are retried. Other refusals (a bad token, a missing chat) are not: the report gets `alert: 'failed'` and `alertStatus`. The report records the outcome in `alert`:
+  - `sent`;
+  - `duplicate`: the same reporter, explorer, kind and hunt within 24 hours;
+  - `limited`: more than five alerts from one reporter in an hour. The report a Block files skips the limit while the block exists, once per reporter and blocked explorer a day;
+  - `failed` or `unconfigured`.
+
+  The scheduled `moderationDigest` runs every 6 hours. It sends one Telegram message listing the reports of the last 7 days that weren't alerted, oldest first and as many as fit in one message ("…and N more" for the rest), and marks only those as `digested`. Without the secrets it logs the count. **Act on every report within 24 hours**, as the Terms promise: remove the content and ban the explorer.
+- **Block.** Block hides that explorer's challenges and your friend hunts with them at once (`users/{uid}/blocks/{otherUid}`), refuses their invite links, and also files a report. `notifyFriendChallenge` and `emailFriendChallenge` skip a sender the recipient blocked.
+- **Ban.** `banExplorer` (callable, needs the `admin` custom claim) writes `bans/{uid}` first, so the rules refuse every public write from that account, then disables the Auth user and revokes its sessions, removes the leaderboard and monthly entries, explorer map, username and profile, reserves the username in `blockedUsernames`, deletes waiting hunts and the challenges the explorer sent, and shows the explorer as "Former explorer" in other friend hunts, with their clues replaced. The WhatsApp number stays linked to the banned account so it can't sign up again. Push tokens are deleted and the WhatsApp alert is switched off. A failed ban can be run again.
+- **Usernames.** The web game claims usernames through the `claimUsername` callable, which writes `profiles/{uid}` and `usernames/{name}` in one transaction and refuses names in `functions/moderation/blocklist.txt` (plain lines match the whole name, `~` lines match anywhere in it, ignoring underscores and digit swaps). The starter list is neutral and short: **add slurs and abusive words to it** before relying on it. Exact entries are mirrored to `blockedUsernames/{name}` on each claim, and the rules refuse those names on the older client path that writes the two documents directly. Rules can only compare whole names, so a name that merely contains a `~` word can still be claimed by an old client; `claimUsername` lists each such name it refuses, so it can't be taken that way afterwards. If the function itself is down or missing (`internal`, `unavailable`, `not-found`, `deadline-exceeded`), the web game re-reads the explorer's profile and otherwise falls back to the direct claim, tracked as `username_claim_fallback`; App Check and sign-in failures never fall back.
+- **Follow-up:** once `claimUsername` is confirmed live in production and old web bundles have gone, change the client creates of `profiles` and `usernames` in `firestore.rules` to `if false` (marked with a TODO there), so every claim passes the full blocklist.
+
+Setup, once:
+
+```sh
+# The bot that posts alerts (from @BotFather) and the chat it posts to (a private chat or group with the bot).
+firebase functions:secrets:set MODERATION_TELEGRAM_TOKEN --project treasurehunch
+firebase functions:secrets:set MODERATION_TELEGRAM_CHAT_ID --project treasurehunch
+```
+
+**Do this before merging**, or the deploy on merge breaks in a way that is worse than a failed function:
+
+- The merge workflow deploys Firestore rules and Cloud Functions in one `firebase deploy`. `onReportCreated` and `moderationDigest` declare the two secrets, so if either is missing, or the functions' runtime service account can't read it, the deploy fails while preparing the functions. The rules are then not released either. The Hosting job waits for that deploy (`needs: [test, deploy_backend]`), so the new web game is not released either: nothing goes live until the secrets are fixed, and the site keeps serving the previous version.
+- Granting the runtime account access is something `firebase deploy` normally does itself, but the CI deploy account only has Secret Manager Viewer and can't change a secret's IAM policy.
+
+So, after setting both secrets, either grant the access once:
+
+```sh
+for secret in MODERATION_TELEGRAM_TOKEN MODERATION_TELEGRAM_CHAT_ID; do
+  gcloud secrets add-iam-policy-binding "$secret" --project treasurehunch \
+    --member=serviceAccount:555455406222-compute@developer.gserviceaccount.com \
+    --role=roles/secretmanager.secretAccessor
+done
+```
+
+or run one `firebase deploy --only functions --project treasurehunch` from an owner account, which grants it. The merge workflow's "Check deploy configuration (function secrets)" step stops the deploy before anything is released if a secret is missing, has no enabled version, or isn't readable by the runtime account (or if the deploy account can't read the secret's metadata or IAM policy).
+
+To ban, run `node scripts/moderate.mjs ban <uid> "<reason>"` (the uid is in the alert). It needs `gcloud auth application-default login` with an account that can manage Auth and Firestore on the project. The same script grants the `admin` claim (`node scripts/moderate.mjs admin <uid>`) to an account that should be able to call `banExplorer` from an app. `banExplorer` is not behind App Check, so a signed-in admin can call it with their ID token.
+
 ### WhatsApp sign-in and daily quest alerts
 
 The design and the decisions behind it are in [docs/whatsapp-daily-quest.md](docs/whatsapp-daily-quest.md). Messages go through Twilio from the WhatsApp sender `whatsapp:+12296143014` ("Lascade"). The app only ever sends two approved Content templates and never free-form text:
@@ -179,7 +223,7 @@ npm run build
 firebase deploy --only firestore:rules,functions,hosting --project treasurehunch
 ```
 
-Firebase Hosting serves `dist/`. On every push to `main`, GitHub Actions (`.github/workflows/firebase-hosting-merge.yml`) runs the unit tests and the Firestore rules tests in the emulator. If they pass, it deploys Hosting, Firestore rules and Cloud Functions. Pull requests run the rules tests and get a Hosting preview channel. The manual command above is still useful for a first deploy or a hotfix.
+Firebase Hosting serves `dist/`. On every push to `main`, GitHub Actions (`.github/workflows/firebase-hosting-merge.yml`) runs the unit tests and the Firestore rules tests in the emulator. If they pass, it deploys Firestore rules and Cloud Functions, and then Hosting, so the site never goes live ahead of its rules. Pull requests run the rules tests and get a Hosting preview channel. The manual command above is still useful for a first deploy or a hotfix.
 
 The merge workflow needs these repository settings (**Settings → Secrets and variables → Actions**):
 
@@ -190,7 +234,7 @@ The merge workflow needs these repository settings (**Settings → Secrets and v
 | `CHALLENGE_EMAIL_FROM` | Variable | Verified sender address for challenge emails (a function parameter) |
 | `FIREBASE_WEB_VAPID_KEY` | Variable | Optional Web Push key override for the build |
 
-The deploy service account needs these roles on project `treasurehunch`: Firebase Rules Admin, Cloud Functions Admin, Service Account User, Artifact Registry Administrator, Cloud Build Editor, Eventarc Admin, Cloud Scheduler Admin, and Secret Manager Viewer. The daily alert needs the Cloud Scheduler API enabled on the project. `RESEND_API_KEY`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` and `OTP_HMAC_KEY` stay in Secret Manager; the workflow only references them. Separately, the functions' runtime service account needs Service Account Token Creator for WhatsApp sign-in (see [WhatsApp sign-in and daily quest alerts](#whatsapp-sign-in-and-daily-quest-alerts)). The workflow deploys with `--force`, so a function removed from `functions/index.js` is deleted from the project.
+The deploy service account needs these roles on project `treasurehunch`: Firebase Rules Admin, Cloud Functions Admin, Service Account User, Artifact Registry Administrator, Cloud Build Editor, Eventarc Admin, Cloud Scheduler Admin, and Secret Manager Viewer. The daily alert needs the Cloud Scheduler API enabled on the project. `RESEND_API_KEY`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `OTP_HMAC_KEY`, `MODERATION_TELEGRAM_TOKEN` and `MODERATION_TELEGRAM_CHAT_ID` stay in Secret Manager; the workflow only references them. Separately, the functions' runtime service account needs Service Account Token Creator for WhatsApp sign-in (see [WhatsApp sign-in and daily quest alerts](#whatsapp-sign-in-and-daily-quest-alerts)). The workflow deploys with `--force`, so a function removed from `functions/index.js` is deleted from the project.
 
 The map uses Natural Earth 1:110m public-domain country outlines; source and terms: https://www.naturalearthdata.com/about/terms-of-use/. The GeoJSON is compacted to the ID, name, and label position fields used by the game. MapLibre GL JS is BSD-3-Clause licensed. The bundled map-label glyphs come from MapLibre demo tiles.
 

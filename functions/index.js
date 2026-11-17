@@ -5,6 +5,7 @@ const { initializeApp } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
 const { getFirestore } = require('firebase-admin/firestore');
 const { getMessaging } = require('firebase-admin/messaging');
+const { pushMessage } = require('./push');
 
 initializeApp();
 
@@ -45,14 +46,13 @@ exports.notifyFriendChallenge = onDocumentCreated({
   const tokens = await getFirestore().collection(`users/${recipientUid}/pushTokens`).limit(20).get();
   await Promise.allSettled(tokens.docs.map(async tokenDoc => {
     try {
-      await getMessaging().send({
+      await getMessaging().send(pushMessage({
         token: tokenDoc.data().token,
-        notification: {
-          title: 'A TreasureHunch challenge awaits',
-          body: 'A friend hid a treasure for you. Open TreasureHunch to play.',
-        },
-        webpush: { fcmOptions: { link: huntUrl(code) } },
-      });
+        platform: tokenDoc.data().platform,
+        title: 'A TreasureHunch challenge awaits',
+        body: 'A friend hid a treasure for you. Open TreasureHunch to play.',
+        link: huntUrl(code),
+      }));
     } catch (error) {
       if (['messaging/registration-token-not-registered', 'messaging/invalid-registration-token'].includes(error.code))
         await tokenDoc.ref.delete();
@@ -135,11 +135,14 @@ exports.notifyDailyQuest = onSchedule({
     for (const tokenDoc of tokenDocs) {
       deliveries.push({
         tokenDoc,
-        message: {
+        message: pushMessage({
           token: tokenDoc.data().token,
-          notification: { title: 'A new TreasureHunch quest', body },
-          webpush: { fcmOptions: { link: DAILY_URL }, notification: { tag: `daily-${today}` } },
-        },
+          platform: tokenDoc.data().platform,
+          title: 'A new TreasureHunch quest',
+          body,
+          link: DAILY_URL,
+          tag: `daily-${today}`,
+        }),
       });
     }
   }

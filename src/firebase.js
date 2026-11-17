@@ -190,7 +190,7 @@ export async function registerChallengePush(user) {
     const bytes = new TextEncoder().encode(token);
     const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))]
       .map(value => value.toString(16).padStart(2, '0')).join('');
-    await setDoc(doc(db, 'users', user.uid, 'pushTokens', hash), { token, createdAt: serverTimestamp() });
+    await setDoc(doc(db, 'users', user.uid, 'pushTokens', hash), { token, createdAt: serverTimestamp(), platform: 'web' });
     pushRegistration = { uid: user.uid, hash };
     return 'registered';
   } catch (error) {

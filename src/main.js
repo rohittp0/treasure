@@ -2065,6 +2065,8 @@ $('#close-sign-in').addEventListener('click', closeSignIn);
 $('#sign-in-dialog').addEventListener('close', () => {
   signInVerify?.destroy();
   signInVerify = null;
+  // Closed without signing in: the ?account=delete confirmation must not appear later, unprompted.
+  if (!user) pendingDelete = false;
   showDeferredDialogs();
   offerInstallSoon();
 });
@@ -2080,6 +2082,7 @@ $('#install-dialog').addEventListener('close', () => {
 $('#home-install-button').addEventListener('click', () => startInstall('home'));
 installer.onChange(() => { renderInstallEntry(); maybeOfferInstall(); });
 renderInstallEntry();
+$('#delete-account-dialog').addEventListener('cancel', event => { if ($('#delete-account-confirm').disabled) event.preventDefault(); });
 $('#delete-account-keep').addEventListener('click', () => $('#delete-account-dialog').close());
 $('#delete-account-confirm').addEventListener('click', confirmDeleteAccount);
 $('#close-delete-account').addEventListener('click', () => { if (!$('#delete-account-confirm').disabled) $('#delete-account-dialog').close(); });

@@ -54,7 +54,7 @@ Selections can instead lead to `selection_cancelled`; seekers can open additiona
 | `atlas_viewed` | An explorer map is opened; `owner=self/other`, `source=home/result/leaderboard/link`, `countries` collected |
 | `atlas_shared` | The explorer shares their map link; `method=native/clipboard`, `countries` collected |
 | `notifications_permission` | Browser notification permission prompt resolves, sent once this browser's push registration has finished; `permission=granted/denied/default`, `source=welcome/result_card`, `outcome=registered/unsupported/token_failed/save_failed` when granted (`unsupported`: no Web Push key, service worker or Firebase Messaging support; `token_failed`: the worker or FCM token could not be set up; `save_failed`: the token could not be stored), otherwise `denied` or `dismissed` (`signed_out` if the explorer signed out meanwhile) |
-| `sign_in_opened` | The shared sign-in sheet opens; `source=account/multiplayer/claim/leaderboard/atlas/unsubscribe/open_in_browser` (the last when a handoff link lands with `signin=google`) |
+| `sign_in_opened` | The shared sign-in sheet opens; `source=account/multiplayer/claim/leaderboard/atlas/unsubscribe/account_delete/open_in_browser` (the last when a handoff link lands with `signin=google`) |
 | `whatsapp_code_requested` | A WhatsApp code was sent; `source`, `purpose=verify_phone/login`, `step=request/resend` |
 | `whatsapp_verified` | A WhatsApp code was accepted; `source`, `purpose` |
 | `account_delete_opened` | The delete-account confirmation was shown; `source=account` (the button in My logs) or `link` (the public `?account=delete` link, after sign-in if needed) |

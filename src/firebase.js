@@ -96,9 +96,19 @@ export async function verifyWhatsAppOtp(phone, purpose, code) {
 // Erases the signed-in explorer's account on the server, then drops the local session. The Auth user is
 // already gone by then, so this signs out directly: logout() would try to delete push tokens that are erased.
 export async function deleteAccount() {
+  const uid = auth.currentUser?.uid;
   await callable('deleteAccount', {});
+  // From here the account is gone: nothing below may report a failure.
   pushRegistration = null;
-  await signOut(auth);
+  try {
+    if (uid) {
+      for (let index = localStorage.length - 1; index >= 0; index--) {
+        const key = localStorage.key(index);
+        if (key && key.includes(uid)) localStorage.removeItem(key);
+      }
+    }
+  } catch (error) { console.warn('Could not clear this browser\'s saved data:', error); }
+  try { await signOut(auth); } catch (error) { console.warn('Signed out locally failed after deletion:', error); }
 }
 
 const userRef = uid => doc(db, 'users', uid);

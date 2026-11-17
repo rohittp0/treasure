@@ -455,3 +455,22 @@ button.leaderboard-row:hover{background:#f4e7cb}
 .result-install .wa-caption{margin:0 0 4px}
 @media(max-width:700px){.home-install-button{width:100%}}
 .install-dialog .text-button{display:flex;width:100%;margin-top:6px}
+
+/* Moderation: the Terms box on sign-in, legal links, and Report / Block (spec decision 22). */
+.account-dialog .sign-in-terms{margin:0 0 14px;padding:10px 12px;border:1px solid #c5b08d;border-radius:6px;background:#f7ecd3}
+.sign-in-terms a,.legal-links a,.moderation-dialog p a{color:#925f3d;text-underline-offset:3px}
+.account-dialog p.legal-links{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin:16px 0 0;font-size:11px;color:#8a8e7b}
+.challenge-row{margin:5px 0}
+.challenge-row .challenge-item{margin:0}
+.moderation-actions{display:flex;justify-content:flex-end;gap:4px}
+.moderation-actions .text-button{min-height:36px;padding:4px 8px;font-size:11px}
+.friend-result .moderation-actions,.atlas-screen .moderation-actions{justify-content:center;margin-top:4px}
+.moderation-dialog h2 em{color:#b87642;font-weight:500}
+.moderation-dialog p{margin-bottom:14px}
+.moderation-options{margin:0 0 12px;padding:0;border:0}
+.moderation-options legend,.moderation-label{display:block;margin-bottom:4px;color:#526d66;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase}
+.moderation-options .wa-consent{margin:8px 0 0}
+.moderation-label small{text-transform:none;letter-spacing:0;font-weight:500}
+.moderation-dialog textarea{width:100%;min-height:64px;border:1px solid #bba780;background:#fff9e8;color:#17383a;border-radius:5px;padding:10px 12px;font:13px DM Sans,sans-serif;resize:vertical}
+.moderation-dialog .primary-button,.moderation-dialog .secondary-button{width:100%;margin:10px 0 0}
+.moderation-dialog .friend-status{min-height:0;margin:8px 0 0}

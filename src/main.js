@@ -17,6 +17,9 @@ import { dailyLinkSource, dayKey, monthKey, daysInMonth, msUntilNextDay, dailyQu
 import { createFriendController } from './friend-controller.js';
 import { clockText, huntSheetKey } from './hunt-view.js';
 import { pickTapFeature, TAP_RADIUS } from './map-tap.js';
+import { acceptTerms, watchBlocks } from './firebase.js';
+import { visibleChallenges, visibleHunts } from './moderation.js';
+import { createModerationDialog } from './moderation-dialog.js';
 
 maplibregl.setWorkerUrl(mapWorkerUrl);
 
@@ -70,6 +73,10 @@ let dailyRecords = [];
 let dailySyncPromise = null;
 let leaderboardBoard = 'monthly';
 let atlasView = null;
+// Explorers this explorer blocked (users/{uid}/blocks), and the friend hunts last loaded into My logs.
+let blockedUids = new Set();
+let accountHistory = null;
+let inboxChallenges = [];
 // WhatsApp daily quest alert: the explorer's private state, the result card and the ?whatsapp=stop link.
 let whatsappState = null;
 let resultAlertVerify = null;
@@ -105,6 +112,8 @@ const DAILY_KEY_PREFIX = 'treasurehunch:daily:';
 const PENDING_ENTRY_KEY = 'treasurehunch:pending-leaderboard';
 const RESUME_RESULT_KEY = 'treasurehunch:resume-result';
 const MAP_HINT_KEY = 'treasurehunch:map-hint-seen';
+// Set when the Terms of Use box is ticked and a sign-in starts; a Google redirect reloads the page before it ends.
+const TERMS_KEY = 'treasurehunch:terms-accepted';
 let completedWins = readCompletedWins();
 let soloFoundIds = readSoloFound();
 
@@ -410,11 +419,13 @@ function openSignIn(source, { title, copy, resumeResult = false } = {}) {
   $('#sign-in-copy').textContent = copy || defaultCopy;
   $('#sign-in-status').textContent = '';
   $('#sign-in-google').disabled = false;
+  $('#sign-in-terms').checked = false;
   signInVerify?.destroy();
   // WhatsApp is the primary way in: the number field is ready as soon as the sheet opens.
   // The unticked box is the only opt-in here; signing in alone never turns alerts on.
   signInVerify = createWhatsAppVerify($('#sign-in-whatsapp-verify'), {
     purpose: 'login', source, consent: source === 'unsubscribe' ? 'none' : 'optional', submitLabel: 'Send sign-in code',
+    beforeSend: () => termsAgreed() ? '' : TERMS_NEEDED,
     onVerified: ({ player, consent }) => {
       if (consent && player) signInOptInTask = optInAfterSignIn(player);
       closeSignIn();
@@ -424,6 +435,21 @@ function openSignIn(source, { title, copy, resumeResult = false } = {}) {
   trackEvent(EVENTS.SIGN_IN_OPENED, { source });
   if (!$('#sign-in-dialog').open) $('#sign-in-dialog').showModal();
   signInVerify.focus();
+}
+
+// Every sign-in needs the unticked Terms of Use box ticked first. The acceptance is stored once the
+// explorer is signed in (recordTermsAcceptance), since a Google redirect reloads the page first.
+const TERMS_NEEDED = 'Tick the box to agree to the Terms of Use first.';
+function termsAgreed() {
+  if (!$('#sign-in-terms').checked) return false;
+  session.set(TERMS_KEY, '1');
+  return true;
+}
+
+function recordTermsAcceptance(player) {
+  if (session.get(TERMS_KEY) !== '1') return;
+  session.remove(TERMS_KEY);
+  acceptTerms(player).catch(error => console.warn('Could not record the Terms of Use acceptance:', error));
 }
 
 // In an in-app browser Google is hidden: WhatsApp works there, and a small link (tapped, never automatic)
@@ -887,12 +913,38 @@ async function renderAccountWhatsApp(player, changing = false) {
   $('#account-whatsapp-change').addEventListener('click', () => renderAccountWhatsApp(player, true));
 }
 
+// The inbox, without challenges from blocked explorers. Blocks are watched alongside, so a new block hides
+// that explorer's challenges and friend hunts at once.
 function watchInbox(player) {
   stopChallenges?.();
   let firstSnapshot = true;
   let known = new Set();
-  stopChallenges = watchChallenges(player, challenges => {
+  // Nothing is shown until both the inbox and the blocks have loaded once, so no blocked challenge flashes up.
+  let received = null;
+  let blocksReady = false;
+  blockedUids = new Set();
+  const stopInbox = watchChallenges(player, next => {
     if (user?.uid !== player.uid) return;
+    received = next;
+    renderInbox();
+  }, error => console.warn('Could not load challenges:', error));
+  const stopBlocks = watchBlocks(player, blocked => {
+    if (user?.uid !== player.uid) return;
+    blockedUids = blocked;
+    blocksReady = true;
+    renderInbox();
+    renderAccountHistory();
+  }, error => {
+    console.warn('Could not load blocked explorers:', error);
+    blocksReady = true;
+    renderInbox();
+  });
+  stopChallenges = () => { stopInbox(); stopBlocks(); };
+
+  function renderInbox() {
+    if (user?.uid !== player.uid || !received || !blocksReady) return;
+    const challenges = visibleChallenges(received, blockedUids);
+    inboxChallenges = challenges;
     const unread = challenges.filter(challenge => !challenge.read);
     unreadChallenges = unread.length;
     refreshBadge();
@@ -903,7 +955,7 @@ function watchInbox(player) {
       : 'Open explorer log');
     $('#challenge-inbox-count').textContent = String(unread.length);
     $('#challenge-list').innerHTML = challenges.length
-      ? challenges.map(challenge => `<button class="challenge-item ${challenge.read ? '' : 'unread'}" type="button" data-code="${escapeHTML(challenge.code)}"><span><strong>@${escapeHTML(challenge.fromUsername)}</strong> hid a treasure for you.<small>${challenge.read ? 'Open hunt' : 'New challenge · open hunt'}</small></span><span aria-hidden="true">↗</span></button>`).join('')
+      ? challenges.map(challenge => `<div class="challenge-row"><button class="challenge-item ${challenge.read ? '' : 'unread'}" type="button" data-code="${escapeHTML(challenge.code)}"><span><strong>@${escapeHTML(challenge.fromUsername)}</strong> hid a treasure for you.<small>${challenge.read ? 'Open hunt' : 'New challenge · open hunt'}</small></span><span aria-hidden="true">↗</span></button><span class="moderation-actions"><button class="text-button" type="button" data-report="${escapeHTML(challenge.code)}" aria-label="Report @${escapeHTML(challenge.fromUsername)}">Report</button><button class="text-button" type="button" data-block="${escapeHTML(challenge.code)}" aria-label="Block @${escapeHTML(challenge.fromUsername)}">Block</button></span></div>`).join('')
       : 'No challenges yet. Ask a friend to find you by username.';
     if (!firstSnapshot && document.visibilityState === 'visible' && browserNotificationsAvailable() && Notification.permission === 'granted') {
       for (const challenge of unread) {
@@ -917,7 +969,19 @@ function watchInbox(player) {
     }
     known = new Set(challenges.map(challenge => challenge.id));
     firstSnapshot = false;
-  }, error => console.warn('Could not load challenges:', error));
+  }
+}
+
+function inboxSender(code) {
+  const challenge = inboxChallenges.find(item => item.code === code);
+  return challenge ? { uid: challenge.fromUid, name: `@${challenge.fromUsername}` } : null;
+}
+
+// Friend hunts in My logs, without those played with blocked explorers.
+function renderAccountHistory() {
+  const container = $('#multiplayer-log');
+  if (!accountHistory || !container?.isConnected || user?.uid !== accountHistory.uid) return;
+  container.innerHTML = historyContent(visibleHunts(accountHistory.hunts, accountHistory.uid, blockedUids), accountHistory.uid);
 }
 
 function clearMapSelection() {
@@ -1488,6 +1552,7 @@ function renderAtlas() {
   $('#atlas-sign-in').classList.toggle('hidden', !self || (!!user && !!username));
   $('#atlas-sign-in').innerHTML = user ? 'Choose a username to share your map <span aria-hidden="true">↗</span>' : 'Sign in to share your map <span aria-hidden="true">↗</span>';
   $('#atlas-own-button').classList.toggle('hidden', self);
+  $('#atlas-moderation').classList.toggle('hidden', self || loading || missing || !atlasView.uid || atlasView.uid === user?.uid);
   applyAtlasLayers();
   requestAnimationFrame(focusAtlas);
 }
@@ -1518,7 +1583,7 @@ async function openAtlas(handle = '', source = 'home') {
   try {
     const atlas = await loadAtlas(normalized);
     if (atlasView?.version !== version) return;
-    atlasView = { ...atlasView, loading: false, missing: !atlas, countries: atlas?.countries || {} };
+    atlasView = { ...atlasView, loading: false, missing: !atlas, countries: atlas?.countries || {}, uid: atlas?.uid || '' };
     trackEvent(EVENTS.ATLAS_VIEWED, { owner: 'other', source, countries: Object.keys(atlasView.countries).length });
   } catch (error) {
     console.error(error);
@@ -1751,7 +1816,8 @@ async function openAccount(purpose = 'log') {
     try {
       const hunts = await loadFriendHunts(logUser);
       if (user?.uid !== logUser.uid || !logContainer.isConnected) return;
-      logContainer.innerHTML = historyContent(hunts, logUser.uid);
+      accountHistory = { uid: logUser.uid, hunts };
+      renderAccountHistory();
     } catch (error) {
       if (user?.uid !== logUser.uid || !logContainer.isConnected) return;
       console.warn('Friend history unavailable:', error);
@@ -1802,6 +1868,16 @@ const friend = createFriendController({
   requestUsername: () => { if (user) showWelcome(user); },
   clearMapSelection,
   setSheetCollapsed,
+  isBlocked: uid => blockedUids.has(uid),
+  openModeration: (action, target) => moderation.open(action, target),
+});
+
+const moderation = createModerationDialog({
+  getUser: () => user,
+  requestSignIn: () => openSignIn('account'),
+  showToast,
+  // A blocked explorer's result closes; their map stays, since maps are public anyway.
+  onBlocked: target => { if (target.context === 'hunt' && friend.mode.endsWith('-result')) friend.home(); },
 });
 
 $('#welcome-notifications').addEventListener('click', async () => {
@@ -1891,7 +1967,7 @@ $('#welcome-form').addEventListener('submit', async event => {
   } catch (error) {
     console.error(error);
     status.textContent = error.message || 'Your username could not be saved. Try again.';
-    if (error.message?.includes('taken')) status.dataset.state = 'unavailable';
+    if (error.message?.includes('taken') || error.message?.includes('allowed')) status.dataset.state = 'unavailable';
   } finally {
     if ($('#welcome-dialog').open) saveButton.disabled = !username && status.dataset.state !== 'available';
   }
@@ -1904,6 +1980,13 @@ $('#welcome-dialog').addEventListener('close', () => {
   offerInstallSoon();
 });
 $('#challenge-list').addEventListener('click', async event => {
+  const action = event.target.closest('button[data-report], button[data-block]');
+  if (action && user) {
+    const code = action.dataset.report || action.dataset.block;
+    const sender = inboxSender(code);
+    if (sender) moderation.open(action.dataset.report ? 'report' : 'block', { ...sender, context: 'challenge', code, source: 'inbox' });
+    return;
+  }
   const button = event.target.closest('button[data-code]');
   if (!button || !user) return;
   const code = button.dataset.code;
@@ -1928,6 +2011,11 @@ $('#result-atlas-button').addEventListener('click', () => {
 $('#atlas-own-button').addEventListener('click', () => openAtlas('', atlasView?.source || 'home'));
 $('#atlas-share-button').addEventListener('click', () => shareAtlas(true));
 $('#atlas-copy-button').addEventListener('click', () => shareAtlas(false));
+for (const [selector, action] of [['#atlas-report-button', 'report'], ['#atlas-block-button', 'block']]) {
+  $(selector).addEventListener('click', () => {
+    if (atlasView?.uid) moderation.open(action, { uid: atlasView.uid, name: `@${atlasView.name}`, context: 'map', source: 'map' });
+  });
+}
 $('#atlas-sign-in').addEventListener('click', () => {
   if (user) showWelcome(user);
   else openSignIn('atlas');
@@ -1974,6 +2062,11 @@ elements.leaderboardSignIn.addEventListener('click', async () => {
   });
 });
 $('#sign-in-google').addEventListener('click', async () => {
+  if (!termsAgreed()) {
+    $('#sign-in-status').textContent = TERMS_NEEDED;
+    $('#sign-in-terms').focus();
+    return;
+  }
   const context = signInContext;
   // A redirect sign-in reloads the page, so the result screen is restored from session storage.
   if (context?.resumeResult && lastResult) session.set(RESUME_RESULT_KEY, JSON.stringify(lastResult));
@@ -2205,6 +2298,7 @@ watchUser(async nextUser => {
   }
   renderLeaderboardGate();
   if (nextUser) {
+    recordTermsAcceptance(nextUser);
     session.remove(RESUME_RESULT_KEY);
     if (username) postPendingGuestEntry(nextUser);
     const claimedCountry = username && lastResult?.mode === 'daily' && lastResult.status === 'won' ? lastResult.puzzle.country : '';

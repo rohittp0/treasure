@@ -445,11 +445,11 @@ service cloud.firestore {
       // Explorers this explorer has blocked: their challenges and hunts are hidden, and pushes from them skipped.
       match /blocks/{otherUid} {
         allow get, list, delete: if request.auth != null && request.auth.uid == userId;
-        allow create: if request.auth != null && request.auth.uid == userId
+        // Blocking again just restamps the time, so a retried block never fails.
+        allow create, update: if request.auth != null && request.auth.uid == userId
           && otherUid != userId
           && request.resource.data.keys().hasOnly(['createdAt'])
           && request.resource.data.createdAt == request.time;
-        allow update: if false;
       }
 
       match /notifications/{code} {

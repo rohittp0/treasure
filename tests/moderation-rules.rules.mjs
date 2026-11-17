@@ -71,7 +71,8 @@ export async function testModerationRules(environment) {
   await assertFails(setDoc(doc(other, 'users/mod-ok/blocks/mod-other'), { createdAt: serverTimestamp() }));
   await assertFails(getDoc(doc(other, 'users/mod-ok/blocks/mod-hider')));
   await assertFails(getDocs(collection(other, 'users/mod-ok/blocks')));
-  await assertFails(updateDoc(block, { createdAt: serverTimestamp() }));
+  await assertSucceeds(setDoc(block, { createdAt: serverTimestamp() }));
+  await assertFails(updateDoc(block, { createdAt: past }));
   await assertFails(deleteDoc(doc(other, 'users/mod-ok/blocks/mod-hider')));
   await assertSucceeds(deleteDoc(block));
 

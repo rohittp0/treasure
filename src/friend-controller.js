@@ -3,13 +3,14 @@ import { friendResult, resultContent } from './friend-result.js';
 import { renderVictoryPoster, sharePosterFile } from './friend-poster.js';
 import * as maplibregl from 'maplibre-gl';
 import { canRevealFriendCountry, canUnlockFriendClue, friendRoundSeconds, friendSecondsLeft, makeHuntCode, normaliseHuntCode, validHuntCode } from './friend.js';
+import { otherExplorer } from './moderation.js';
 import { createFriendHunt, findUsername, getFriendHunt, joinFriendHunt, loadFriendAnswer, revealFriendCountry, submitFriendGuess, timeOutFriendHunt, unlockFriendClue, watchFriendHunt } from './firebase.js';
 
 const $ = selector => document.querySelector(selector);
 const friendScreens = ['#friend-lobby', '#friend-hide', '#friend-wait', '#friend-result'];
 const escapeHTML = value => String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
 
-export function createFriendController({ getUser, getUsername, getMap, getCountries, showToast, playVictory, clearVictory, requestSignIn, requestUsername, clearMapSelection, setSheetCollapsed }) {
+export function createFriendController({ getUser, getUsername, getMap, getCountries, showToast, playVictory, clearVictory, requestSignIn, requestUsername, clearMapSelection, setSheetCollapsed, isBlocked = () => false, openModeration = () => {} }) {
   let mode = 'idle';
   let code = '';
   let match = null;
@@ -259,6 +260,7 @@ export function createFriendController({ getUser, getUsername, getMap, getCountr
     }
     const existing = await getFriendHunt(nextCode);
     if (!existing) throw new Error('That hunt code was not found.');
+    if (existing.hiderUid !== getUser().uid && isBlocked(existing.hiderUid)) throw new Error("You blocked this hunt's hider.");
     if (existing.status === 'playing' && friendSecondsLeft(existing) <= 0 &&
         [existing.hiderUid, existing.seekerUid].includes(getUser().uid)) {
       try { await timeOutFriendHunt(nextCode); }
@@ -407,6 +409,7 @@ export function createFriendController({ getUser, getUsername, getMap, getCountr
     $('#friend-result-content').textContent = spectator ? 'Opening this challenge…' : 'Uncovering the treasure location…';
     $('#friend-poster-button').classList.add('hidden');
     $('#friend-challenge-back-button').classList.add('hidden');
+    $('#friend-result-moderation').classList.add('hidden');
     let place = spectator ? null : answer;
     if (!spectator && !place) {
       try { place = await loadFriendAnswer(resultCode); if (code === resultCode) answer = place; }
@@ -428,6 +431,8 @@ export function createFriendController({ getUser, getUsername, getMap, getCountr
       playVictory($('#friend-result'));
     }
     $('#friend-challenge-back-button').classList.toggle('hidden', model.role !== 'seeker');
+    // Report or block the other explorer in this hunt; a spectator has no one in particular to report.
+    $('#friend-result-moderation').classList.toggle('hidden', model.role === 'spectator' || !otherExplorer(match, getUser()?.uid));
     $('#friend-challenge-back-button').textContent = model.action;
     $('#friend-again-button').classList.toggle('hidden', model.role === 'seeker');
     $('#friend-again-button').textContent = model.role === 'spectator' ? 'Start a friend hunt' : model.action;
@@ -576,6 +581,15 @@ export function createFriendController({ getUser, getUsername, getMap, getCountr
   });
   $('#friend-again-button').addEventListener('click', () => mode === 'spectator-result' ? openLobby() : openHide());
   $('#friend-challenge-back-button').addEventListener('click', challengeBack);
+  function moderate(action) {
+    const uid = otherExplorer(match, getUser()?.uid);
+    if (!uid || !match) return;
+    const hider = match.hiderUid === uid;
+    const name = hider ? (match.hiderUsername ? `@${match.hiderUsername}` : match.hiderName) : match.seekerName || (match.targetUsername ? `@${match.targetUsername}` : '');
+    openModeration(action, { uid, name, context: 'hunt', code, source: 'result' });
+  }
+  $('#friend-report-button').addEventListener('click', () => moderate('report'));
+  $('#friend-block-button').addEventListener('click', () => moderate('block'));
   document.querySelectorAll('.friend-back').forEach(button => button.addEventListener('click', home));
 
   return {

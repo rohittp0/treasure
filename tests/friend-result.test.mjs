@@ -55,3 +55,15 @@ test('sent challenges show acceptance state instead of a loss', () => {
   assert.match(html, /Not yet accepted/);
   assert.doesNotMatch(html, /You lost/);
 });
+test('a hunt the seeker gave up says so, and a time-out still blames the clock', () => {
+  const gaveUp = { ...match, status: 'lost', lastGuessOutcome: 'gave-up' };
+  assert.equal(friendResult(gaveUp, 's').detail, 'You gave up before finding the treasure.');
+  assert.equal(friendResult(gaveUp, 'h').detail, 'Maya gave up before finding the treasure.');
+  assert.equal(friendResult(gaveUp, 'other').detail, 'Maya gave up before finding the treasure.');
+  assert.equal(friendResult({ ...gaveUp, seekerName: '' }, 'h').detail, 'The seeker gave up before finding the treasure.');
+  assert.equal(friendResult(gaveUp, 'h').gaveUp, true);
+  assert.match(resultContent(friendResult(gaveUp, 'h')), /Maya gave up/);
+  const timedOut = { ...match, status: 'lost', lastGuessOutcome: 'wrong' };
+  assert.equal(friendResult(timedOut, 'h').detail, 'The clock ran out before the seeker found the treasure.');
+  assert.equal(friendResult(timedOut, 'h').gaveUp, false);
+});

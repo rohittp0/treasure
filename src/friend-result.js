@@ -9,6 +9,8 @@ export function friendResult(match, viewerUid, answer = null, code = '') {
   if (!['won', 'lost'].includes(match.status)) throw new Error('This hunt has not finished.');
   const role = viewerUid && viewerUid === match.hiderUid ? 'hider' : viewerUid && viewerUid === match.seekerUid ? 'seeker' : 'spectator';
   const seekerWon = match.status === 'won';
+  // A seeker who gave up in the native app (End game) lost too, but not to the clock.
+  const gaveUp = !seekerWon && match.lastGuessOutcome === 'gave-up';
   const winnerRole = seekerWon ? 'seeker' : 'hider';
   const personalWin = role === winnerRole;
   const hider = match.hiderName || 'The hider';
@@ -19,12 +21,14 @@ export function friendResult(match, viewerUid, answer = null, code = '') {
     ? `${seeker} cracked ${hider}’s ${country ? `${country} ` : ''}hunt.`
     : `${hider} outwitted ${seeker}. The treasure${country ? ` in ${country}` : ''} stayed hidden.`;
   return {
-    code, role, winnerRole, personalWin, hider, seeker, winner, country, seekerWon,
+    code, role, winnerRole, personalWin, hider, seeker, winner, country, seekerWon, gaveUp,
     challenge: `${hider} challenged ${seeker}`,
     title: role === 'spectator' ? `${winner} wins!` : personalWin ? (seekerWon ? 'Nice hiding. Better seeking.' : 'Your secret. Your victory.') : seekerWon ? 'A worthy rival, indeed.' : 'The treasure kept its secret.',
     eyebrow: role === 'spectator' ? 'A FRIENDLY RIVALRY' : personalWin ? 'VICTORY IS YOURS' : `${winner} wins this round`,
     story,
-    detail: seekerWon ? 'The clues were cracked. The treasure was found.' : 'The clock ran out before the seeker found the treasure.',
+    detail: seekerWon ? 'The clues were cracked. The treasure was found.'
+      : gaveUp ? `${role === 'seeker' ? 'You' : seeker} gave up before finding the treasure.`
+        : 'The clock ran out before the seeker found the treasure.',
     timeUsed: Math.max(0, friendRoundSeconds(match) - friendSecondsLeft(match)),
     roundSeconds: friendRoundSeconds(match), clues: match.cluesVisible ?? 1, wrongGuesses: match.wrongGuesses ?? 0,
     completedAt: timestampMillis(match.endedAt),

@@ -1,11 +1,26 @@
 [
   {
-    "relation": ["delegate_permission/common.handle_all_urls"],
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
     "target": {
       "namespace": "android_app",
       "package_name": "com.lascade.hunch.debug",
       "sha256_cert_fingerprints": [
         "5E:CE:32:BC:C7:E6:2A:80:6E:80:13:C0:C1:06:7A:C1:F1:38:37:D3:FB:76:E3:F2:98:6B:62:EB:59:D3:08:D0"
+      ]
+    }
+  },
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.lascade.hunch",
+      "sha256_cert_fingerprints": [
+        "FC:66:3A:23:0D:97:95:99:E1:B9:BB:91:D0:E5:0B:18:83:D4:C1:F0:92:8A:BC:F4:50:23:19:87:A0:43:55:52",
+        "15:40:4B:A0:D0:EF:EF:CD:27:9A:8E:55:E0:1A:3D:DC:7B:D0:86:CF:AE:39:2B:81:3B:9E:5A:7E:AA:DF:B2:33"
       ]
     }
   }

@@ -189,14 +189,16 @@ service cloud.firestore {
           && request.resource.data.endedAt == request.time;
       }
       // The seeker gives up (the native app's End game): lost at any time while playing, so the hunt goes to the hider.
+      // The 'gave-up' mark keeps an early time-out (the web's timer runs on the device clock) from passing as one.
       function validGiveUp() {
         return request.auth != null
           && request.auth.uid == resource.data.seekerUid
           && request.auth.uid != resource.data.hiderUid
           && resource.data.status == 'playing'
-          && changedOnly(['status', 'endedAt'])
+          && changedOnly(['status', 'endedAt', 'lastGuessOutcome'])
           && request.resource.data.status == 'lost'
-          && request.resource.data.endedAt == request.time;
+          && request.resource.data.endedAt == request.time
+          && request.resource.data.lastGuessOutcome == 'gave-up';
       }
 
       allow get: if request.auth != null &&

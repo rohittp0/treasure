@@ -54,7 +54,7 @@ try {
   await assertFails(getDoc(doc(seeker, secretPath)));
   await assertFails(getDoc(doc(stranger, huntPath)));
   await assertFails(updateDoc(hunt, { clues: ['Changed', 'Changed', 'Changed'] }));
-  // Only the seeker may end the hunt before its round runs out (giving up, below); the hider may not.
+  await assertFails(updateDoc(doc(seeker, huntPath), { status: 'lost', endedAt: serverTimestamp() }));
   await assertFails(updateDoc(hunt, { status: 'lost', endedAt: serverTimestamp() }));
   await assertFails(updateDoc(hunt, { status: 'won', endedAt: serverTimestamp(), lastGuessId: 'ITA', lastGuessOutcome: 'correct' }));
   await assertFails(updateDoc(doc(seeker, huntPath), {
@@ -134,8 +134,9 @@ try {
   });
   await assertSucceeds(updateDoc(doc(hider, threeMinutePath), { status: 'lost', endedAt: serverTimestamp() }));
 
-  // Giving up (the native app's End game): the seeker ends a playing hunt as lost at any time; nobody else can, a
-  // finished hunt stays as it is, and nothing else may change with it.
+  // Giving up (the native app's End game): the seeker ends a playing hunt as lost at any time, marked 'gave-up'; nobody
+  // else can, a finished hunt stays as it is, and nothing else may change with it. An early time-out (the web's timer
+  // runs on the device clock) carries no mark, so it is still denied rather than taken as a give-up.
   const giveUpPath = 'friendHunts/WXYZ234567';
   const seedGiveUp = overrides => environment.withSecurityRulesDisabled(async context => {
     const database = context.firestore();
@@ -150,17 +151,21 @@ try {
     });
     await setDoc(doc(database, `${giveUpPath}/private/answer`), { id: 'ITA', country: 'Italy', lng: 12.5, lat: 42.8 });
   });
-  const giveUp = { status: 'lost', endedAt: serverTimestamp() };
+  const giveUp = { status: 'lost', endedAt: serverTimestamp(), lastGuessOutcome: 'gave-up' };
   await seedGiveUp({});
+  await assertFails(updateDoc(doc(seeker, giveUpPath), { status: 'lost', endedAt: serverTimestamp() }));
+  await assertFails(updateDoc(doc(seeker, giveUpPath), { ...giveUp, lastGuessOutcome: 'wrong' }));
+  await assertFails(updateDoc(doc(seeker, giveUpPath), { ...giveUp, lastGuessId: 'FRA' }));
   await assertFails(updateDoc(doc(hider, giveUpPath), giveUp));
   await assertFails(updateDoc(doc(stranger, giveUpPath), giveUp));
   await assertFails(updateDoc(doc(seeker, giveUpPath), { status: 'won', endedAt: serverTimestamp() }));
-  await assertFails(updateDoc(doc(seeker, giveUpPath), { status: 'lost', endedAt: Timestamp.fromMillis(Date.now() - 5_000) }));
+  await assertFails(updateDoc(doc(seeker, giveUpPath), { ...giveUp, endedAt: Timestamp.fromMillis(Date.now() - 5_000) }));
   await assertFails(updateDoc(doc(seeker, giveUpPath), { ...giveUp, costSeconds: 0, wrongGuesses: 3 }));
   await assertFails(updateDoc(doc(seeker, giveUpPath), { ...giveUp, revealed: true }));
   await assertSucceeds(updateDoc(doc(seeker, giveUpPath), giveUp));
   const givenUp = await assertSucceeds(getDoc(doc(seeker, giveUpPath)));
   assert.equal(givenUp.data().status, 'lost');
+  assert.equal(givenUp.data().lastGuessOutcome, 'gave-up');
   await assertSucceeds(getDoc(doc(seeker, `${giveUpPath}/private/answer`)));
   // Already over (a time-out or a find landed first): a give-up cannot write a second end.
   await assertFails(updateDoc(doc(seeker, giveUpPath), giveUp));
@@ -170,9 +175,12 @@ try {
   await seedGiveUp({ status: 'waiting', seekerUid: null, seekerName: null, startedAt: null });
   await assertFails(updateDoc(doc(seeker, giveUpPath), giveUp));
   await assertFails(updateDoc(doc(hider, giveUpPath), giveUp));
-  // Past the round's end, the seeker's lost update is also a time-out; either way it lands once.
+  // Past the round's end, a give-up still lands, and so does a plain time-out; whichever comes first ends it once.
   await seedGiveUp({ startedAt: Timestamp.fromMillis(Date.now() - 200_000) });
   await assertSucceeds(updateDoc(doc(seeker, giveUpPath), giveUp));
+  await seedGiveUp({ startedAt: Timestamp.fromMillis(Date.now() - 200_000) });
+  await assertSucceeds(updateDoc(doc(seeker, giveUpPath), { status: 'lost', endedAt: serverTimestamp() }));
+  await assertFails(updateDoc(doc(seeker, giveUpPath), giveUp));
 
   const hiderName = writeBatch(hider);
   hiderName.set(doc(hider, 'users/hider'), { termsAcceptedAt: serverTimestamp() }, { merge: true });

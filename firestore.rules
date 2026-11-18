@@ -188,6 +188,16 @@ service cloud.firestore {
           && request.resource.data.status == 'lost'
           && request.resource.data.endedAt == request.time;
       }
+      // The seeker gives up (the native app's End game): lost at any time while playing, so the hunt goes to the hider.
+      function validGiveUp() {
+        return request.auth != null
+          && request.auth.uid == resource.data.seekerUid
+          && request.auth.uid != resource.data.hiderUid
+          && resource.data.status == 'playing'
+          && changedOnly(['status', 'endedAt'])
+          && request.resource.data.status == 'lost'
+          && request.resource.data.endedAt == request.time;
+      }
 
       allow get: if request.auth != null &&
         (participant() || resource.data.status in ['won', 'lost'] || (resource.data.status == 'waiting' &&
@@ -195,7 +205,7 @@ service cloud.firestore {
       allow list: if participant();
       allow create: if validCreate();
       allow update: if validJoin() || validUnlock() || validReveal()
-        || validCorrectGuess() || validWrongGuess() || validTimeout();
+        || validCorrectGuess() || validWrongGuess() || validTimeout() || validGiveUp();
       allow delete: if false;
 
       match /private/{privateId} {

@@ -54,7 +54,8 @@ try {
   await assertFails(getDoc(doc(seeker, secretPath)));
   await assertFails(getDoc(doc(stranger, huntPath)));
   await assertFails(updateDoc(hunt, { clues: ['Changed', 'Changed', 'Changed'] }));
-  await assertFails(updateDoc(doc(seeker, huntPath), { status: 'lost', endedAt: serverTimestamp() }));
+  // Only the seeker may end the hunt before its round runs out (giving up, below); the hider may not.
+  await assertFails(updateDoc(hunt, { status: 'lost', endedAt: serverTimestamp() }));
   await assertFails(updateDoc(hunt, { status: 'won', endedAt: serverTimestamp(), lastGuessId: 'ITA', lastGuessOutcome: 'correct' }));
   await assertFails(updateDoc(doc(seeker, huntPath), {
     status: 'won', endedAt: serverTimestamp(), lastGuessId: 'FRA', lastGuessOutcome: 'correct',
@@ -132,6 +133,46 @@ try {
     await updateDoc(doc(context.firestore(), threeMinutePath), { startedAt: Timestamp.fromMillis(Date.now() - 190_000) });
   });
   await assertSucceeds(updateDoc(doc(hider, threeMinutePath), { status: 'lost', endedAt: serverTimestamp() }));
+
+  // Giving up (the native app's End game): the seeker ends a playing hunt as lost at any time; nobody else can, a
+  // finished hunt stays as it is, and nothing else may change with it.
+  const giveUpPath = 'friendHunts/WXYZ234567';
+  const seedGiveUp = overrides => environment.withSecurityRulesDisabled(async context => {
+    const database = context.firestore();
+    await setDoc(doc(database, giveUpPath), {
+      hiderUid: 'hider', hiderName: 'Hider', targetUid: null, targetUsername: null, seekerUid: 'seeker', seekerName: 'Seeker',
+      clues: ['First clue', 'Second clue', 'Third clue'], status: 'playing', roundSeconds: 180,
+      createdAt: Timestamp.fromMillis(Date.now() - 30_000),
+      startedAt: Timestamp.fromMillis(Date.now() - 10_000), endedAt: null,
+      cluesVisible: 1, costSeconds: 0, wrongGuesses: 0, triedIds: [],
+      lastGuessId: '', lastGuessOutcome: '', revealed: false,
+      ...overrides,
+    });
+    await setDoc(doc(database, `${giveUpPath}/private/answer`), { id: 'ITA', country: 'Italy', lng: 12.5, lat: 42.8 });
+  });
+  const giveUp = { status: 'lost', endedAt: serverTimestamp() };
+  await seedGiveUp({});
+  await assertFails(updateDoc(doc(hider, giveUpPath), giveUp));
+  await assertFails(updateDoc(doc(stranger, giveUpPath), giveUp));
+  await assertFails(updateDoc(doc(seeker, giveUpPath), { status: 'won', endedAt: serverTimestamp() }));
+  await assertFails(updateDoc(doc(seeker, giveUpPath), { status: 'lost', endedAt: Timestamp.fromMillis(Date.now() - 5_000) }));
+  await assertFails(updateDoc(doc(seeker, giveUpPath), { ...giveUp, costSeconds: 0, wrongGuesses: 3 }));
+  await assertFails(updateDoc(doc(seeker, giveUpPath), { ...giveUp, revealed: true }));
+  await assertSucceeds(updateDoc(doc(seeker, giveUpPath), giveUp));
+  const givenUp = await assertSucceeds(getDoc(doc(seeker, giveUpPath)));
+  assert.equal(givenUp.data().status, 'lost');
+  await assertSucceeds(getDoc(doc(seeker, `${giveUpPath}/private/answer`)));
+  // Already over (a time-out or a find landed first): a give-up cannot write a second end.
+  await assertFails(updateDoc(doc(seeker, giveUpPath), giveUp));
+  await seedGiveUp({ status: 'won', endedAt: Timestamp.now(), lastGuessId: 'ITA', lastGuessOutcome: 'correct' });
+  await assertFails(updateDoc(doc(seeker, giveUpPath), giveUp));
+  // Not yet joined: there is no seeker to give up.
+  await seedGiveUp({ status: 'waiting', seekerUid: null, seekerName: null, startedAt: null });
+  await assertFails(updateDoc(doc(seeker, giveUpPath), giveUp));
+  await assertFails(updateDoc(doc(hider, giveUpPath), giveUp));
+  // Past the round's end, the seeker's lost update is also a time-out; either way it lands once.
+  await seedGiveUp({ startedAt: Timestamp.fromMillis(Date.now() - 200_000) });
+  await assertSucceeds(updateDoc(doc(seeker, giveUpPath), giveUp));
 
   const hiderName = writeBatch(hider);
   hiderName.set(doc(hider, 'users/hider'), { termsAcceptedAt: serverTimestamp() }, { merge: true });
@@ -260,7 +301,7 @@ try {
   await testWhatsAppRules(environment);
   await testPushRules(environment);
   console.log('Daily quest rules: one attempt per day, monthly board and explorer maps passed.');
-  console.log('Friend hunt rules: username claims, direct challenges, private answer, join, time costs, guesses, reveal, and finish passed.');
+  console.log('Friend hunt rules: username claims, direct challenges, private answer, join, time costs, guesses, reveal, give-up, and finish passed.');
 } finally {
   await environment.cleanup();
 }

@@ -1,6 +1,6 @@
 # Multiplayer results and posters
 
-The result model in `src/friend-result.js` supplies live results, reopened historical results, log entries and PNG posters. Stored `won` means the seeker found the treasure; stored `lost` means the hider won on timeout. The viewer's personal outcome is calculated separately. Participants can export every completed challenge, including losses. Spectators retain the existing signed-in completed-hunt access and cannot load the private country or export a poster.
+The result model in `src/friend-result.js` supplies live results, reopened historical results, log entries and PNG posters. Stored `won` means the seeker found the treasure; stored `lost` means the hider won: the round ran out, or the seeker gave up (the native app's End game, `validGiveUp`). The viewer's personal outcome is calculated separately. Participants can export every completed challenge, including losses. Spectators retain the existing signed-in completed-hunt access and cannot load the private country or export a poster.
 
 The seeker's time used remains `friendRoundSeconds(match) - friendSecondsLeft(match)`: wall time plus clue, reveal and wrong-guess costs, clamped by the existing timer. Missing `roundSeconds` means the original 120-second hunt, not the current 180-second hunt. Names, country and statistics are rendered as text; none are baked into the illustrations.
 
